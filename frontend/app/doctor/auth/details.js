@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Activi
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-// import * as DocumentPicker from 'expo-document-picker'; // Import for file picking
+import * as DocumentPicker from 'expo-document-picker'; // Import for file picking
 import api from '../../../services/api'; // Ensure this path is correct
 
 const SPECIALIZATIONS = [
@@ -19,9 +19,8 @@ const DoctorDetailsScreen = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     dateOfBirth: { day: '', month: '', year: '' },
-    certificationsText: '', // Simple text field for now
-    specialization: '' // Added specialization state
-    // selectedFiles: [], // For actual file uploads
+    specialization: '', // Added specialization state
+    selectedFiles: [], // For actual file uploads
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,20 +44,20 @@ const DoctorDetailsScreen = () => {
     }));
   };
 
-  // const handleOpenFilePicker = async () => {
-  //   try {
-  //     const result = await DocumentPicker.getDocumentAsync({
-  //       type: '*/*', // Or specific types like 'application/pdf', 'image/*'
-  //       multiple: true,
-  //     });
-  //     if (!result.canceled) {
-  //       setFormData(prev => ({ ...prev, selectedFiles: [...prev.selectedFiles, ...result.assets] }));
-  //     }
-  //   } catch (err) {
-  //     console.warn(err);
-  //     setError('Failed to pick documents.');
-  //   }
-  // };
+  const handleOpenFilePicker = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'], // Allow PDF and images
+        multiple: true,
+      });
+      if (!result.canceled && result.assets) { // check for result.assets
+        setFormData(prev => ({ ...prev, selectedFiles: [...prev.selectedFiles, ...result.assets] }));
+      }
+    } catch (err) {
+      console.warn(err);
+      setError('Failed to pick documents.');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!formData.fullName || !formData.dateOfBirth.day || !formData.dateOfBirth.month || !formData.dateOfBirth.year || !formData.specialization) {
@@ -71,25 +70,24 @@ const DoctorDetailsScreen = () => {
     setIsLoading(true);
     setError('');
 
-    // const dataToSubmit = new FormData(); // Use FormData for file uploads
-    // dataToSubmit.append('fullName', formData.fullName);
-    // dataToSubmit.append('date_of_birth', dob);
-    // dataToSubmit.append('certifications', formData.certificationsText);
-    // formData.selectedFiles.forEach((file, index) => {
-    //   dataToSubmit.append(`certificationFile${index}`, {
-    //     uri: file.uri,
-    //     name: file.name,
-    //     type: file.mimeType || 'application/octet-stream',
-    //   });
-    // });
+    const dataToSubmit = new FormData(); // Use FormData for file uploads
+    dataToSubmit.append('fullName', formData.fullName);
+    dataToSubmit.append('date_of_birth', dob);
+    dataToSubmit.append('specialization', formData.specialization);
+    formData.selectedFiles.forEach((file, index) => {
+      dataToSubmit.append('certificationFiles', { // Use a consistent name, e.g., 'certificationFiles' for multiple files
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || 'application/octet-stream',
+      });
+    });
 
     try {
-      // For now, sending as JSON. For file uploads, use FormData and adjust backend controller
-      const response = await api.put('/doctors/profile', {
-        full_name: formData.fullName,
-        date_of_birth: dob,
-        certifications: formData.certificationsText, // Simple text for now
-        specialization: formData.specialization // Send selected specialization
+      // Sending as FormData
+      const response = await api.put('/doctors/profile', dataToSubmit, {
+        headers: {
+          'Content-Type': 'multipart/form-data', // Important for FormData
+        },
       });
 
       router.replace('/doctor/auth/login'); // Navigate to login after details submission
@@ -205,25 +203,24 @@ const DoctorDetailsScreen = () => {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Certifications (Lorem Ipsum...)</Text>
-          {/* <TouchableOpacity style={styles.openFilesButton} onPress={handleOpenFilePicker}>
-            <Text style={styles.openFilesButtonText}>Open Files</Text>
+          <Text style={styles.label}>Certifications</Text>
+          <TouchableOpacity style={styles.openFilesButton} onPress={handleOpenFilePicker}>
+            <Ionicons name="attach-outline" size={20} color="white" style={{marginRight: 5}} />
+            <Text style={styles.openFilesButtonText}>Upload Certifications (PDF/Image)</Text>
           </TouchableOpacity>
-          <View style={styles.fileDropzone}>
-            <Ionicons name="cloud-upload-outline" size={50} color="#ccc" />
-            <Text style={styles.fileDropzoneText}>Click to browse or drag and drop your files</Text>
-          </View>
-          {formData.selectedFiles.map((file, index) => (
-            <Text key={index} style={styles.fileName}>{file.name}</Text>
-          ))} */}
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Enter details about your certifications..."
-            value={formData.certificationsText}
-            onChangeText={(text) => updateFormField('certificationsText', text)}
-            multiline
-            numberOfLines={4}
-          />
+          
+          {formData.selectedFiles.length > 0 && (
+            <View style={styles.fileListContainer}>
+              <Text style={styles.label}>Selected Files:</Text>
+              {formData.selectedFiles.map((file, index) => (
+                <View key={index} style={styles.fileListItem}>
+                  <Ionicons name="document-text-outline" size={20} color="#0A1E42" />
+                  <Text style={styles.fileName}>{file.name} ({file.size ? (file.size / 1024).toFixed(2) + ' KB' : 'size unknown'})</Text>
+                  {/* Optional: Add a button to remove a selected file */}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -277,16 +274,25 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 12, paddingHorizontal: 15 }, // Increased padding for better touch
   dropdownItemText: { fontSize: 16, color: '#0A1E42' },
   openFilesButton: {
-    backgroundColor: '#7BAFD4', paddingVertical: 10, paddingHorizontal: 20,
-    borderRadius: 8, alignItems: 'center', marginBottom: 10, alignSelf: 'flex-start'
+    backgroundColor: '#7BAFD4', paddingVertical: 12, paddingHorizontal: 15, // Adjusted padding
+    borderRadius: 10, alignItems: 'center', marginBottom: 10, // alignSelf: 'flex-start' // Removed to make it full width by default or control with parent
+    flexDirection: 'row', // To align icon and text
+    justifyContent: 'center', // To center content
   },
-  openFilesButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold' },
-  fileDropzone: {
-    borderWidth: 2, borderColor: '#ccc', borderStyle: 'dashed', borderRadius: 10,
-    padding: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F9FA', marginBottom: 10, minHeight: 100
+  openFilesButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' }, // Adjusted fontSize
+  fileListContainer: { // Added style
+    marginTop: 10,
   },
-  fileDropzoneText: { color: '#aaa', textAlign: 'center' },
-  fileName: { fontSize: 14, color: '#333', marginTop: 5 },
+  fileListItem: { // Added style
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 5,
+    marginBottom: 5,
+  },
+  fileName: { fontSize: 14, color: '#0A1E42', marginLeft: 8 }, // Adjusted color and added margin
   errorText: { color: 'red', marginBottom: 20, textAlign: 'center' },
   nextButton: {
     backgroundColor: '#7BAFD4', paddingVertical: 15, borderRadius: 10,

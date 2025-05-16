@@ -72,7 +72,7 @@ exports.getDoctorProfile = async (req, res) => {
 // @access  Private (Doctor only)
 exports.updateDoctorProfile = async (req, res) => {
   try {
-    const { full_name, date_of_birth, specialization, bio, address, phone, consultation_fees, certifications } = req.body;
+    const { full_name, date_of_birth, specialization, bio, address, phone, consultation_fees } = req.body;
 
     const doctor = await Doctor.findOne({ user: req.user.id });
 
@@ -94,8 +94,15 @@ exports.updateDoctorProfile = async (req, res) => {
     if (address) doctor.address = address; // You might want a more structured address object
     if (phone) doctor.phone = phone;
     if (consultation_fees) doctor.consultation_fees = consultation_fees;
-    if (certifications) doctor.certifications = certifications; // Simple text for now
-    // TODO: Handle file uploads for certifications if needed
+
+    // Handle uploaded certification files
+    if (req.files && req.files.length > 0) {
+      const certificationFilePaths = req.files.map(file => `/uploads/${file.filename}`); // Store relative path
+      // If you want to add to existing certifications instead of replacing:
+      // doctor.certifications = [...(doctor.certifications || []), ...certificationFilePaths];
+      // For replacing existing certifications:
+      doctor.certifications = certificationFilePaths;
+    }
 
     const updatedDoctor = await doctor.save();
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -69,86 +69,92 @@ const DoctorSignupScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => router.back()}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingContainer}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <Ionicons name="arrow-back" size={24} color="#0A1E42" />
-      </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#0A1E42" />
+        </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Create Doctor Account</Text>
-        <Text style={styles.subtitle}>
-          Join our network of esteemed medical professionals.
-        </Text>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.title}>Create Doctor Account</Text>
+          <Text style={styles.subtitle}>
+            Join our network of esteemed medical professionals.
+          </Text>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Dr. Lorem Ipsum"
-            value={formData.fullName}
-            onChangeText={(text) => handleChange('fullName', text)}
-          />
-
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="doctor.email@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={formData.email}
-            onChangeText={(text) => handleChange('email', text)}
-          />
-
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordContainer}>
+          <View style={styles.form}>
+            <Text style={styles.label}>Full Name</Text>
             <TextInput
-              style={styles.passwordInput}
-              placeholder="Password"
-              secureTextEntry={!showPassword}
-              value={formData.password}
-              onChangeText={(text) => handleChange('password', text)}
+              style={styles.input}
+              placeholder="Dr. Lorem Ipsum"
+              value={formData.fullName}
+              onChangeText={(text) => handleChange('fullName', text)}
             />
-            <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={24} color="#7BAFD4" />
+
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="doctor.email@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={formData.email}
+              onChangeText={(text) => handleChange('email', text)}
+            />
+
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Password"
+                secureTextEntry={!showPassword}
+                value={formData.password}
+                onChangeText={(text) => handleChange('password', text)}
+              />
+              <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={24} color="#7BAFD4" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Confirm Password"
+                secureTextEntry={!showPassword}
+                value={formData.confirmPassword}
+                onChangeText={(text) => handleChange('confirmPassword', text)}
+              />
+            </View>
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <TouchableOpacity 
+              style={styles.createButton}
+              onPress={handleSignup}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.createButtonText}>CREATE ACCOUNT</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.loginLink}
+              onPress={() => router.push('/doctor/auth/login')}
+            >
+              <Ionicons name="chevron-back" size={18} color="#7BAFD4" />
+              <Text style={styles.loginText}>Already have an account? Login</Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.label}>Confirm Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Confirm Password"
-              secureTextEntry={!showPassword}
-              value={formData.confirmPassword}
-              onChangeText={(text) => handleChange('confirmPassword', text)}
-            />
-          </View>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <TouchableOpacity 
-            style={styles.createButton}
-            onPress={handleSignup}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.createButtonText}>CREATE ACCOUNT</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.loginLink}
-            onPress={() => router.push('/doctor/auth/login')}
-          >
-            <Ionicons name="chevron-back" size={18} color="#7BAFD4" />
-            <Text style={styles.loginText}>Already have an account? Login</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -158,6 +164,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'white',
+  },
+  keyboardAvoidingContainer: {
+    flex: 1,
   },
   backButton: {
     paddingHorizontal: 20,
