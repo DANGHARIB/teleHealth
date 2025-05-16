@@ -79,9 +79,9 @@ const VerifyScreen = () => {
         await AsyncStorage.setItem('userToken', response.data.token);
         await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
         
-        // Navigate to patient details form
+        // Navigate to patient verified screen
         router.push({
-          pathname: '/patient/auth/details',
+          pathname: '/patient/auth/verified',
           params: { email }
         });
       } else {

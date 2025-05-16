@@ -8,7 +8,7 @@ const VerifiedScreen = () => {
   const router = useRouter();
 
   const handleContinue = () => {
-    router.push('/patient/auth/login');
+    router.push('/patient/auth/details');
   };
 
   return (
@@ -18,9 +18,9 @@ const VerifiedScreen = () => {
           <Ionicons name="checkmark" size={64} color="white" />
         </View>
         
-        <Text style={styles.title}>Email Verified</Text>
+        <Text style={styles.title}>Account Verified</Text>
         <Text style={styles.message}>
-          Congratulations, your email has been verified. You can start using the app
+          Your account has been successfully verified.
         </Text>
         
         <TouchableOpacity 

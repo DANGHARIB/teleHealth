@@ -68,8 +68,8 @@ const PatientDetailsScreen = () => {
         date_of_birth: dateOfBirth
       });
 
-      // On success, navigate to verified screen
-      router.replace('/patient/auth/verified');
+      // On success, navigate to auth index screen
+      router.replace('/patient/auth/');
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to update profile');
     } finally {
