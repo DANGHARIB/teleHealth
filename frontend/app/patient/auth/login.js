@@ -40,13 +40,11 @@ const LoginScreen = () => {
         
         // Redirect to appropriate screen
         if (response.data.role === 'Patient') {
-          // Supposons que response.data.user (ou response.data directement si la structure est plate)
-          // contient maintenant hasCompletedAssessment
-          const userInfo = response.data.user || response.data; // S'adapter à la structure de votre réponse
-          if (userInfo.hasCompletedAssessment === false) { // Vérifier explicitement false
-            router.replace('/patient/assessment');
+          const userInfo = response.data.user || response.data; 
+          if (userInfo.hasCompletedAssessment === true) { 
+            router.replace('/(tabs)/profile');
           } else {
-            router.replace('/patient/dashboard'); // Ou la route vers (tabs)
+            router.replace('/patient/assessment'); 
           }
         } else {
           setError('Invalid account type');

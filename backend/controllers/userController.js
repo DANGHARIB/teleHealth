@@ -21,11 +21,16 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// @desc    Obtenir un utilisateur par ID
+// @desc    Obtenir un utilisateur par ID (et son profil patient/docteur si applicable)
 // @route   GET /api/users/:id
-// @access  Private/Admin
+// @access  Private/Admin (ou utilisateur concerné, à ajuster si besoin)
 exports.getUserById = async (req, res) => {
   try {
+    // TODO: Ajouter une vérification ici si l'utilisateur non-admin demande ses propres infos
+    // if (req.user.role !== 'Admin' && req.user._id.toString() !== req.params.id) {
+    //   return res.status(403).json({ message: 'Accès non autorisé' });
+    // }
+
     const user = await User.findById(req.params.id).select('-password');
     
     if (!user) {
@@ -41,15 +46,15 @@ exports.getUserById = async (req, res) => {
     }
     
     res.json({
-      ...user.toJSON(),
-      profile: profileData
+      ...user.toJSON(), // Utiliser toJSON() pour s'assurer que les virtuals sont inclus si définis
+      profile: profileData ? profileData.toJSON() : null
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Mettre à jour un utilisateur
+// @desc    Mettre à jour un utilisateur (par Admin)
 // @route   PUT /api/users/:id
 // @access  Private/Admin
 exports.updateUser = async (req, res) => {
@@ -60,6 +65,7 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
     
+    // Seuls les admins peuvent modifier ces champs directement
     const { fullName, email, role, profileStatus, verified } = req.body;
     
     if (fullName) user.fullName = fullName;
@@ -94,7 +100,7 @@ exports.deleteUser = async (req, res) => {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
     
-    await user.deleteOne();
+    await user.deleteOne(); // Remplacé user.remove() par user.deleteOne()
     
     res.json({ message: 'Utilisateur supprimé' });
   } catch (error) {

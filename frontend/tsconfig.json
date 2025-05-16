@@ -6,7 +6,9 @@
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "esModuleInterop": true,
+    "jsx": "react-jsx"
   },
   "include": [
     "**/*.ts",

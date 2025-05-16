@@ -223,12 +223,13 @@ const AssessmentScreen = () => {
             {currentQuestion.type === 'MultiChoice' && currentQuestion.options && (
               <View>
                 {currentQuestion.options.split(',').map(option => (
-                  <Button
-                    key={option}
-                    title={option}
-                    onPress={() => toggleMultiChoiceResponse(option)}
-                    color={currentMultiChoiceResponse.includes(option) ? '#007bff' : '#6c757d'}
-                  />
+                  <View key={option} style={{ marginTop: 5, marginBottom: 5 }}>
+                    <Button
+                      title={option}
+                      onPress={() => toggleMultiChoiceResponse(option)}
+                      color={currentMultiChoiceResponse.includes(option) ? '#007bff' : '#6c757d'}
+                    />
+                  </View>
                 ))}
               </View>
             )}
