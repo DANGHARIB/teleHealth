@@ -39,11 +39,9 @@ const doctorSchema = new mongoose.Schema({
   dob: {
     type: Date
   },
-  certification_path: {
-    type: String
-  },
-  certifications: { // Added for textual certification details
-    type: String
+  certifications: { // Changed to array of strings for file paths
+    type: [String],
+    default: []
   },
   specializations: [{
     type: mongoose.Schema.Types.ObjectId,

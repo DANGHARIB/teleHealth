@@ -21,7 +21,7 @@ router.get('/:id', getDoctorById);
 // Routes protégées pour les médecins
 router.route('/profile')
   .get(protect, doctor, getDoctorProfile)
-  .put(protect, doctor, updateDoctorProfile);
+  .put(protect, doctor, upload.array('certificationFiles', 5), updateDoctorProfile);
 
 router.put(
   '/upload-image', 
