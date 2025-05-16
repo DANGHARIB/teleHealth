@@ -35,11 +35,19 @@ const LoginScreen = () => {
       if (response.data && response.data.token) {
         // Store user info
         await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
+        // Stocker toutes les données utilisateur, y compris potentiellement hasCompletedAssessment
+        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data.user || response.data)); 
         
         // Redirect to appropriate screen
         if (response.data.role === 'Patient') {
-          router.replace('/patient/dashboard');
+          // Supposons que response.data.user (ou response.data directement si la structure est plate)
+          // contient maintenant hasCompletedAssessment
+          const userInfo = response.data.user || response.data; // S'adapter à la structure de votre réponse
+          if (userInfo.hasCompletedAssessment === false) { // Vérifier explicitement false
+            router.replace('/patient/assessment');
+          } else {
+            router.replace('/patient/dashboard'); // Ou la route vers (tabs)
+          }
         } else {
           setError('Invalid account type');
         }

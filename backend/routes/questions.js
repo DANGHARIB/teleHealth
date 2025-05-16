@@ -7,13 +7,17 @@ const {
   updateQuestion,
   deleteQuestion,
   submitResponses,
-  getUserResponses
+  getUserResponses,
+  getRandomQuestions
 } = require('../controllers/questionController');
 const { protect, admin, patient } = require('../middlewares/authMiddleware');
 
 // Routes publiques
 router.get('/', getQuestions);
 router.get('/:id', getQuestionById);
+
+// Route pour obtenir des questions aléatoires pour les patients (première connexion)
+router.get('/random/assessment', protect, patient, getRandomQuestions);
 
 // Routes protégées pour les patients
 router.post('/submit-responses', protect, patient, submitResponses);

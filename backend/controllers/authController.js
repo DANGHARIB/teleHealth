@@ -155,6 +155,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         verified: user.verified,
+        hasCompletedAssessment: user.hasCompletedAssessment,
         profileStatus: user.profileStatus,
         profile: profileData,
         token: generateToken(user._id)

@@ -1,5 +1,6 @@
 const Question = require('../models/Question');
 const PatientResponse = require('../models/PatientResponse');
+const User = require('../models/User');
 
 // @desc    Obtenir toutes les questions
 // @route   GET /api/questions
@@ -21,6 +22,41 @@ exports.getQuestions = async (req, res) => {
     const questions = await Question.find(query).populate('specialization', 'name');
     res.json(questions);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Obtenir 6 questions aléatoires
+// @route   GET /api/questions/random
+// @access  Private/Patient
+exports.getRandomQuestions = async (req, res) => {
+  try {
+    // Vérifier d'abord si l'utilisateur a déjà répondu à des questions
+    const existingResponses = await PatientResponse.find({ user: req.user._id });
+    
+    if (existingResponses.length > 0) {
+      // L'utilisateur a déjà répondu, on peut retourner un statut spécial
+      // ou simplement un tableau vide, ou rediriger.
+      // Pour l'instant, retournons un message indiquant qu'il a déjà répondu.
+      // Le frontend gérera la redirection vers le profil.
+      return res.json({ hasAnswered: true, questions: [] });
+    }
+
+    // Si aucune réponse, récupérer 6 questions aléatoires
+    // On pourrait vouloir filtrer par targetGroup si pertinent pour le patient,
+    // mais pour l'instant, prenons parmi toutes les questions.
+    const questions = await Question.aggregate([
+      { $sample: { size: 6 } }
+    ]);
+    
+    // On s'assure de peupler les informations de spécialisation si nécessaire
+    // L'agrégation ne peuple pas automatiquement, donc il faut le faire manuellement si besoin
+    // Pour cet exemple, $sample est suffisant, on peut ajouter $lookup si on veut les détails de la spécialisation
+    // await Question.populate(questions, { path: 'specialization', select: 'name' });
+
+    res.json({ hasAnswered: false, questions });
+  } catch (error) {
+    console.error('Error fetching random questions:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -146,6 +182,9 @@ exports.submitResponses = async (req, res) => {
       
       savedResponses.push(savedResponse);
     }
+
+    // Mettre à jour le statut de l'évaluation de l'utilisateur
+    await User.findByIdAndUpdate(req.user._id, { hasCompletedAssessment: true });
     
     res.status(201).json({
       message: 'Réponses soumises avec succès',
