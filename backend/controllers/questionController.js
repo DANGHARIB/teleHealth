@@ -174,10 +174,13 @@ exports.submitResponses = async (req, res) => {
     for (const item of responses) {
       const { questionId, response } = item;
       
+      // S'assurer que la réponse est une chaîne
+      const responseString = Array.isArray(response) ? response.join(', ') : response;
+      
       const savedResponse = await PatientResponse.create({
         user: req.user._id,
         question: questionId,
-        response
+        response: responseString // Utiliser la chaîne ici
       });
       
       savedResponses.push(savedResponse);
