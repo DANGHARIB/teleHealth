@@ -239,23 +239,13 @@ const AssessmentScreen = () => {
             {currentQuestion.type === 'MultiChoice' && currentQuestion.options && (
               <View style={styles.multiChoiceContainer}>
                 {currentQuestion.options.split(',').map(option => (
-<<<<<<< HEAD
-                  <View key={option} style={{ marginTop: 5, marginBottom: 5 }}>
-                    <Button
-                      title={option}
-                      onPress={() => toggleMultiChoiceResponse(option)}
-                      color={currentMultiChoiceResponse.includes(option) ? '#007bff' : '#6c757d'}
-                    />
-                  </View>
-=======
                   <TouchableOpacity
                     key={option}
                     style={[styles.choiceButton, currentMultiChoiceResponse.includes(option) && styles.choiceButtonSelected]}
-                    onPress={() => toggleMultiChoiceResponse(option)}
+                    onPress={() => toggleMultiChoiceResponse(option.trim())}
                   >
                     <Text style={[styles.choiceButtonText, currentMultiChoiceResponse.includes(option) && styles.choiceButtonTextSelected]}>{option.trim()}</Text>
                   </TouchableOpacity>
->>>>>>> 2046f736667140fac60a7467bc3c276e550e3ca0
                 ))}
               </View>
             )}
