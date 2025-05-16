@@ -14,7 +14,8 @@ const DoctorSignupScreen = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    password: ''
+    password: '',
+    confirmPassword: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,8 +29,13 @@ const DoctorSignupScreen = () => {
   };
 
   const handleSignup = async () => {
-    if (!formData.fullName || !formData.email || !formData.password) {
+    if (!formData.fullName || !formData.email || !formData.password || !formData.confirmPassword) {
       setError('Please fill all fields');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
@@ -104,9 +110,20 @@ const DoctorSignupScreen = () => {
               value={formData.password}
               onChangeText={(text) => handleChange('password', text)}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#7BAFD4" />
+            <TouchableOpacity style={styles.passwordToggle} onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={24} color="#7BAFD4" />
             </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Confirm Password</Text>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Confirm Password"
+              secureTextEntry={!showPassword}
+              value={formData.confirmPassword}
+              onChangeText={(text) => handleChange('confirmPassword', text)}
+            />
           </View>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -192,6 +209,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 10,
     color: '#0A1E42',
+  },
+  passwordToggle: {
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorText: {
     color: 'red',

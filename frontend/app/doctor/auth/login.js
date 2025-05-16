@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import axios from 'axios'; // Or use your global api instance from services
+import axios from 'axios';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
 
@@ -35,7 +35,7 @@ const DoctorLoginScreen = () => {
         await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
         
         if (response.data.role === 'Doctor') {
-          router.replace('/doctor/dashboard'); // Redirection vers le tableau de bord docteur
+          router.replace('/doctor/dashboard');
         } else {
           setError('Access denied. This login is for doctors only.');
           await AsyncStorage.removeItem('userToken');
@@ -53,83 +53,140 @@ const DoctorLoginScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => router.back()}
+      >
         <Ionicons name="arrow-back" size={24} color="#0A1E42" />
       </TouchableOpacity>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.headerContainer}>
-          {/* <Image source={require('../../assets/images/doctor-icon.png')} style={styles.logo} /> */}
-          <Text style={styles.title}>Doctor Login</Text>
-          <Text style={styles.subtitle}>Welcome back, Doctor!</Text>
-        </View>
+
+      <View style={styles.content}>
+        <Text style={styles.title}>Welcome Doctor!</Text>
 
         <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={22} color="#7BAFD4" style={styles.inputIcon} />
+          <Ionicons name="person-outline" size={24} color="#7BAFD4" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="doctor.email@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
+            placeholder="Email"
+            placeholderTextColor="#888"
             value={email}
             onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
         </View>
 
         <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={22} color="#7BAFD4" style={styles.inputIcon} />
+          <Ionicons name="lock-closed-outline" size={24} color="#7BAFD4" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
             placeholder="Password"
+            placeholderTextColor="#888"
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
           />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+          <TouchableOpacity 
+            style={styles.passwordToggle} 
+            onPress={() => setShowPassword(!showPassword)}
+          >
             <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={24} color="#7BAFD4" />
           </TouchableOpacity>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={isLoading}>
-          {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>LOGIN</Text>}
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={handleLogin}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.loginButtonText}>Login</Text>
+          )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.footerLink} onPress={() => router.push('/doctor/auth/signup')}>
-          <Text style={styles.footerLinkText}>Don&apos;t have an account? <Text style={styles.boldLink}>Sign Up</Text></Text>
+        <TouchableOpacity 
+          style={styles.signUpLink}
+          onPress={() => router.push('/doctor/auth/signup')}
+        >
+          <Ionicons name="chevron-back" size={18} color="#7BAFD4" />
+          <Text style={styles.signUpText}>Don&apos;t have an account? Sign Up</Text>
         </TouchableOpacity>
-         {/* <TouchableOpacity style={styles.footerLink} onPress={() => router.push('/auth/forgot-password')}> // Optional: Forgot Password
-          <Text style={styles.footerLinkText}><Text style={styles.boldLink}>Forgot Password?</Text></Text>
-        </TouchableOpacity> */}
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 30 },
-  backButton: { position: 'absolute', top: 50, left: 20, zIndex: 1 },
-  headerContainer: { alignItems: 'center', marginBottom: 40 },
-  logo: { width: 80, height: 80, marginBottom: 20 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#0A1E42', marginBottom: 10 },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  backButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 30,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#0A1E42',
+    marginVertical: 40,
+  },
   inputContainer: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA',
-    borderRadius: 10, paddingHorizontal: 15, marginBottom: 20, borderWidth: 1, borderColor: '#E0E0E0'
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    marginBottom: 25,
+    paddingBottom: 8,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: 50, fontSize: 16, color: '#0A1E42' },
-  eyeIcon: { padding: 5 },
-  errorText: { color: 'red', textAlign: 'center', marginBottom: 20 },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#0A1E42',
+  },
+  passwordToggle: {
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   loginButton: {
-    backgroundColor: '#7BAFD4', paddingVertical: 15, borderRadius: 10,
-    alignItems: 'center', marginTop: 10, marginBottom: 20
+    backgroundColor: '#7BAFD4',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginVertical: 20,
   },
-  loginButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  footerLink: { alignItems: 'center', marginTop: 15 },
-  footerLinkText: { fontSize: 14, color: '#666' },
-  boldLink: { fontWeight: 'bold', color: '#7BAFD4' },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  signUpLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  signUpText: {
+    color: '#7BAFD4',
+    fontSize: 16,
+  },
 });
 
 export default DoctorLoginScreen; 

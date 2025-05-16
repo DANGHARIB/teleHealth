@@ -69,17 +69,18 @@ const LoginScreen = () => {
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Welcome Back!</Text>
+        <Text style={styles.title}>Welcome Patient!</Text>
 
         <View style={styles.inputContainer}>
           <Ionicons name="person-outline" size={24} color="#7BAFD4" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Username"
+            placeholder="Email"
             placeholderTextColor="#888"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            keyboardType="email-address"
           />
         </View>
 
@@ -97,7 +98,7 @@ const LoginScreen = () => {
             style={styles.passwordToggle} 
             onPress={() => setShowPassword(!showPassword)}
           >
-            <Text style={styles.forgotText}>Forgot?</Text>
+            <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={24} color="#7BAFD4" />
           </TouchableOpacity>
         </View>
 
@@ -164,10 +165,8 @@ const styles = StyleSheet.create({
   },
   passwordToggle: {
     paddingHorizontal: 10,
-  },
-  forgotText: {
-    color: '#7BAFD4',
-    fontSize: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorText: {
     color: 'red',

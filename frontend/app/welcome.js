@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const PatientAuthScreen = () => {
+const WelcomeScreen = () => {
   const router = useRouter();
 
   return (
@@ -22,16 +22,16 @@ const PatientAuthScreen = () => {
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
           style={styles.button} 
-          onPress={() => router.push('/patient/auth/login')}
+          onPress={() => router.push('/patient/auth')}
         >
-          <Text style={styles.buttonText}>Login</Text>
+          <Text style={styles.buttonText}>I am a <Text style={styles.boldText}>Patient</Text></Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => router.push('/patient/auth/signup')}
+          onPress={() => router.push('/doctor/auth')}
         >
-          <Text style={styles.buttonText}>Sign Up</Text>
+          <Text style={styles.buttonText}>I am a <Text style={styles.boldText}>Doctor</Text></Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -83,8 +83,11 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontSize: 18,
+  },
+  boldText: {
     fontWeight: 'bold',
+    color: '#0A1E42',
   },
 });
 
-export default PatientAuthScreen; 
+export default WelcomeScreen; 
