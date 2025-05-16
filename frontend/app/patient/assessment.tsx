@@ -4,8 +4,11 @@ import {
   Keyboard, TouchableWithoutFeedback, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
-// Supposons que vous ayez un moyen de faire des appels API, par exemple un service api
-// import api from '../../services/api'; // À adapter selon votre structure
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import Constants from 'expo-constants';
+
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
 
 // Interfaces pour les types de données
 interface Question {
@@ -30,68 +33,76 @@ const AssessmentScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // TODO: Remplacer par votre véritable fonction d'appel API
   const fetchRandomQuestions = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Simule un appel API
-      // const response = await api.get('/questions/random/assessment');
-      // Pour l'instant, utilisons des données mockées basées sur la description et la capture d'écran
-      // IMPORTANT : Ceci est un placeholder. Remplacez par votre appel API réel.
-      console.log("Appel API simulé pour /api/questions/random/assessment");
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simule la latence réseau
-      
-      // Simuler une réponse où l'utilisateur n'a pas encore répondu
-      const mockApiResponse = {
-        hasAnswered: false,
-        questions: [
-          { _id: '1', questionText: 'How would you describe your child\'s behavior at school?', type: 'Text' },
-          { _id: '2', questionText: 'Do you experience prolonged periods of sadness?', type: 'YesNo' },
-          { _id: '3', questionText: 'Which of these symptoms do you experience often?', type: 'MultiChoice', options: 'Anxiety,Insomnia,Lack of Interest,Excessive Worry' },
-          { _id: '4', questionText: 'Do you have trouble remembering recent events?', type: 'YesNo' },
-          { _id: '5', questionText: 'What are your main coping strategies during emotional distress?', type: 'Text' },
-          { _id: '6', questionText: 'Are you currently dealing with stress related to your work or studies?', type: 'YesNo' },
-        ] as Question[]
-      };
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        setError("Utilisateur non authentifié. Veuillez vous reconnecter.");
+        // Optionnel: rediriger vers login si pas de token
+        // router.replace('/patient/auth/login'); 
+        setLoading(false);
+        return;
+      }
 
-      if (mockApiResponse.hasAnswered) {
-        router.replace('/(tabs)/profile'); // Rediriger si déjà répondu
+      // Remplacer par votre appel API réel pour fetchRandomQuestions
+      // Assurez-vous d'envoyer le token dans les headers
+      const response = await axios.get(`${API_URL}/questions/random/assessment`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (response.data.hasAnswered) {
+        router.replace('/(tabs)/profile');
         return;
       }
       
-      if (mockApiResponse.questions.length > 0) {
-        setQuestions(mockApiResponse.questions);
+      if (response.data.questions && response.data.questions.length > 0) {
+        setQuestions(response.data.questions);
       } else {
-        // Si aucune question n'est retournée et qu'il n'a pas répondu, c'est un cas à gérer.
-        // Peut-être rediriger vers le profil ou afficher un message.
         setError("Aucune question d'évaluation trouvée. Veuillez contacter le support.");
-        // router.replace('/(tabs)/profile');
       }
-    } catch (err) {
-      console.error(err);
-      setError("Erreur lors du chargement des questions. Veuillez réessayer.");
-      // Gérer l'erreur, peut-être offrir une option de réessayer
+    } catch (err: any) {
+      console.error("Erreur lors du chargement des questions:", err);
+      setError(err.response?.data?.message || "Erreur lors du chargement des questions. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }
   };
   
-  // TODO: Remplacer par votre véritable fonction d'appel API
   const submitResponsesApi = async (finalResponses: PatientResponseItem[]) => {
+    setLoading(true);
+    setError(null);
     try {
-      console.log("Soumission des réponses:", finalResponses);
-      // const response = await api.post('/questions/submit-responses', { responses: finalResponses });
-      // console.log("Réponses soumises avec succès:", response.data);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simule la latence réseau
-      return { success: true }; // Simule une réponse réussie
-    } catch (error) {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        setError("Utilisateur non authentifié. Impossible de soumettre les réponses.");
+        setLoading(false);
+        return { success: false, message: "Token manquant" };
+      }
+
+      console.log("Soumission des réponses réelles vers:", `${API_URL}/questions/submit-responses`);
+      const response = await axios.post(`${API_URL}/questions/submit-responses`, 
+        { responses: finalResponses },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      console.log("Réponses soumises avec succès:", response.data);
+      return { success: true };
+    } catch (error: any) {
       console.error("Erreur lors de la soumission des réponses:", error);
-      setError("Erreur lors de la soumission de vos réponses. Veuillez réessayer.");
-      return { success: false };
+      setError(error.response?.data?.message || "Erreur lors de la soumission de vos réponses. Veuillez réessayer.");
+      return { success: false, message: error.response?.data?.message || "Erreur inconnue" };
+    } finally {
+      setLoading(false);
     }
   };
-
 
   useEffect(() => {
     fetchRandomQuestions();
@@ -104,13 +115,11 @@ const AssessmentScreen = () => {
     if (currentQuestion.type === 'Text') {
       responseValue = currentTextResponse;
     } else if (currentQuestion.type === 'YesNo') {
-      // Pour YesNo, nous aurons besoin de boutons. Supposons que la réponse est stockée dans currentTextResponse pour l'instant.
-      // Il faudra adapter l'UI pour YesNo (ex: 'Oui', 'Non')
-      responseValue = currentTextResponse; // À changer
+      responseValue = currentTextResponse; 
     } else if (currentQuestion.type === 'MultiChoice') {
       responseValue = currentMultiChoiceResponse;
     } else {
-      responseValue = ''; // Ne devrait pas arriver
+      responseValue = '';
     }
 
     const newResponse: PatientResponseItem = {
@@ -120,14 +129,12 @@ const AssessmentScreen = () => {
     const updatedResponses = [...responses, newResponse];
     setResponses(updatedResponses);
 
-    // Réinitialiser les états de réponse pour la prochaine question
     setCurrentTextResponse('');
     setCurrentMultiChoiceResponse([]);
 
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {
-      // Fin du questionnaire
       handleSubmit(updatedResponses);
     }
   };
@@ -137,18 +144,16 @@ const AssessmentScreen = () => {
     const result = await submitResponsesApi(finalResponses);
     setLoading(false);
     if (result.success) {
-      // Implémenter la logique d'association des docteurs ici ou sur le backend
-      // Pour l'instant, rediriger vers le profil
       router.replace('/(tabs)/profile');
     } else {
-      // Gérer l'échec de la soumission (par exemple, afficher un message d'erreur)
+      // L'erreur est déjà gérée et affichée par setError dans submitResponsesApi
+      // On pourrait vouloir un feedback plus spécifique ici si nécessaire
+      console.error("Échec de la soumission des réponses, voir message d'erreur affiché.");
     }
   };
   
   const handleYesNoResponse = (response: 'Yes' | 'No') => {
-    setCurrentTextResponse(response); // Utiliser currentTextResponse pour la simplicité, puis appeler next.
-    // Pour une meilleure UX, on pourrait directement passer à la suivante après le clic.
-    // Ici, on attendra que l'utilisateur clique sur "Next"
+    setCurrentTextResponse(response); 
   };
 
   const toggleMultiChoiceResponse = (option: string) => {
@@ -157,8 +162,7 @@ const AssessmentScreen = () => {
     );
   };
 
-
-  if (loading && questions.length === 0) { // Afficher le chargement initial
+  if (loading && questions.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" />
@@ -177,11 +181,9 @@ const AssessmentScreen = () => {
   }
 
   if (questions.length === 0) {
-    // Ce cas peut se produire si fetchRandomQuestions a un problème non couvert par le chargement initial
-    // ou si l'API retourne hasAnswered:true et que la redirection n'a pas encore eu lieu
     return (
       <SafeAreaView style={styles.container}>
-        <Text>Aucune question à afficher pour le moment.</Text>
+        <Text>Aucune question à afficher pour le moment ou vous avez déjà répondu.</Text>
         <Button title="Aller au profil" onPress={() => router.replace('/(tabs)/profile')} />
       </SafeAreaView>
     );
@@ -214,7 +216,6 @@ const AssessmentScreen = () => {
               <View style={styles.yesNoContainer}>
                 <Button title="Oui" onPress={() => { handleYesNoResponse('Yes'); }} />
                 <Button title="Non" onPress={() => { handleYesNoResponse('No'); }} />
-                {/* Afficher la sélection pour confirmation avant de cliquer sur Next */}
                 {currentTextResponse && <Text style={styles.selectionText}>Sélection: {currentTextResponse}</Text>}
               </View>
             )}
@@ -237,7 +238,7 @@ const AssessmentScreen = () => {
             <Button
               title={currentQuestionIndex < questions.length - 1 ? 'Next' : 'Submit'}
               onPress={handleNextQuestion}
-              disabled={loading || (currentQuestion.type === 'Text' && !currentTextResponse && !currentMultiChoiceResponse.length) || (currentQuestion.type === 'YesNo' && !currentTextResponse) }
+              disabled={loading || (currentQuestion.type === 'Text' && !currentTextResponse && !currentMultiChoiceResponse.length && currentQuestionIndex < questions.length) || (currentQuestion.type === 'YesNo' && !currentTextResponse && currentQuestionIndex < questions.length) }
             />
           </View>
           {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
