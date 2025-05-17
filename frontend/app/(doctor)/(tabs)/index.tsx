@@ -1,11 +1,11 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-export default function AppointmentScreen() {
+export default function DoctorFinancialsScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Appointments</Text>
-      <Text>Appointment booking and management will be here.</Text>
+      <Text style={styles.title}>Financials</Text>
+      <Text>Doctor financials and earnings will be displayed here.</Text>
     </View>
   );
 }
@@ -15,10 +15,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 15,
   },
 }); 

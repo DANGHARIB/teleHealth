@@ -23,10 +23,10 @@ exports.createAppointment = async (req, res) => {
     }
     
     if (availability.isBooked) {
-      return res.status(400).json({ message: 'Cette plage horaire est déjà réservée' });
+      return res.status(400).json({ message: 'Ce créneau est déjà réservé' });
     }
-    
-    // Trouver le patient
+
+    // Rechercher le patient
     const patient = await Patient.findOne({ user: req.user._id });
     if (!patient) {
       return res.status(404).json({ message: 'Patient non trouvé' });
@@ -37,9 +37,10 @@ exports.createAppointment = async (req, res) => {
       doctor: doctorId,
       patient: patient._id,
       availability: availabilityId,
-      price,
-      duration,
-      caseDetails
+      price: price || 28, // Prix par défaut
+      duration: duration || 30, // Durée par défaut (minutes)
+      caseDetails: caseDetails || 'Consultation standard',
+      status: 'scheduled'
     });
     
     // Marquer la disponibilité comme réservée
@@ -51,7 +52,8 @@ exports.createAppointment = async (req, res) => {
     
     res.status(201).json(createdAppointment);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Erreur lors de la création du rendez-vous:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la création du rendez-vous' });
   }
 };
 
@@ -81,20 +83,45 @@ exports.getAppointments = async (req, res) => {
 // @access  Private/Patient
 exports.getPatientAppointments = async (req, res) => {
   try {
+    console.log('Tentative de récupération des rendez-vous pour l\'utilisateur:', req.user._id);
+    
+    // Récupérer l'ID du patient
     const patient = await Patient.findOne({ user: req.user._id });
+    console.log('Patient trouvé:', patient ? patient._id : 'Patient non trouvé');
     
     if (!patient) {
       return res.status(404).json({ message: 'Patient non trouvé' });
     }
+
+    const { status } = req.query;
+    console.log('Filtre par statut:', status || 'aucun filtre');
+
+    let query = { patient: patient._id };
     
-    const appointments = await Appointment.find({ patient: patient._id })
-      .populate('doctor', 'full_name doctor_image')
-      .populate('availability')
+    // Filtrer par statut si spécifié
+    if (status) {
+      query.status = status;
+    }
+    
+    console.log('Requête de recherche:', JSON.stringify(query));
+
+    const appointments = await Appointment.find(query)
+      .populate({
+        path: 'doctor',
+        select: 'first_name last_name full_name'
+      })
+      .populate({
+        path: 'availability',
+        select: 'date startTime endTime'
+      })
       .sort({ createdAt: -1 });
     
-    res.json(appointments);
+    console.log('Rendez-vous trouvés:', appointments.length);
+    
+    res.status(200).json(appointments);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Erreur lors de la récupération des rendez-vous:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des rendez-vous' });
   }
 };
 
@@ -103,24 +130,44 @@ exports.getPatientAppointments = async (req, res) => {
 // @access  Private/Doctor
 exports.getDoctorAppointments = async (req, res) => {
   try {
+    console.log('Tentative de récupération des rendez-vous pour le médecin:', req.user._id);
+    
     const doctor = await Doctor.findOne({ user: req.user._id });
+    console.log('Médecin trouvé:', doctor ? doctor._id : 'Médecin non trouvé');
     
     if (!doctor) {
       return res.status(404).json({ message: 'Médecin non trouvé' });
     }
     
-    const appointments = await Appointment.find({ doctor: doctor._id })
+    const { status } = req.query;
+    console.log('Filtre par statut:', status || 'aucun filtre');
+    
+    let query = { doctor: doctor._id };
+    
+    // Filtrer par statut si spécifié
+    if (status) {
+      query.status = status;
+    }
+    
+    console.log('Requête de recherche:', JSON.stringify(query));
+    
+    const appointments = await Appointment.find(query)
       .populate({
         path: 'patient',
-        select: 'first_name last_name',
-        populate: { path: 'user', select: 'fullName email' }
+        select: 'first_name last_name'
       })
-      .populate('availability')
+      .populate({
+        path: 'availability',
+        select: 'date startTime endTime'
+      })
       .sort({ createdAt: -1 });
     
-    res.json(appointments);
+    console.log('Rendez-vous trouvés:', appointments.length);
+    
+    res.status(200).json(appointments);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Erreur lors de la récupération des rendez-vous du médecin:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des rendez-vous' });
   }
 };
 
@@ -202,33 +249,42 @@ exports.updateAppointmentStatus = async (req, res) => {
 // @access  Private
 exports.cancelAppointment = async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.id);
-    
+    // Récupérer l'ID du patient
+    const patient = await Patient.findOne({ user: req.user._id });
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+
+    const appointmentId = req.params.id;
+
+    const appointment = await Appointment.findOne({
+      _id: appointmentId,
+      patient: patient._id
+    });
+
     if (!appointment) {
       return res.status(404).json({ message: 'Rendez-vous non trouvé' });
     }
+
+    // Vérifier si le rendez-vous peut être annulé (pas déjà passé)
+    const availability = await Availability.findById(appointment.availability);
+    const appointmentDate = new Date(`${availability.date}T${availability.startTime}`);
     
-    // Vérifier les autorisations
-    const doctor = await Doctor.findOne({ user: req.user._id });
-    const patient = await Patient.findOne({ user: req.user._id });
-    
-    if (
-      req.user.role !== 'Admin' && 
-      (!doctor || doctor._id.toString() !== appointment.doctor.toString()) &&
-      (!patient || patient._id.toString() !== appointment.patient.toString())
-    ) {
-      return res.status(403).json({ message: 'Non autorisé à annuler ce rendez-vous' });
+    if (appointmentDate < new Date()) {
+      return res.status(400).json({ message: 'Impossible d\'annuler un rendez-vous passé' });
     }
-    
+
     // Mettre à jour le statut du rendez-vous
     appointment.status = 'cancelled';
     await appointment.save();
-    
-    // Libérer la disponibilité
-    await Availability.findByIdAndUpdate(appointment.availability, { isBooked: false });
-    
-    res.json({ message: 'Rendez-vous annulé avec succès' });
+
+    // Libérer le créneau de disponibilité
+    availability.isBooked = false;
+    await availability.save();
+
+    res.status(200).json({ message: 'Rendez-vous annulé avec succès' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Erreur lors de l\'annulation du rendez-vous:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de l\'annulation du rendez-vous' });
   }
 }; 

@@ -6,7 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import Constants from 'expo-constants';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
+// Utiliser la variable d'environnement définie dans .env
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.105:5000/api';
+console.log('URL API utilisée pour inscription:', API_URL);
 
 const SignupScreen = () => {
   const router = useRouter();
@@ -42,12 +44,16 @@ const SignupScreen = () => {
     setIsLoading(true);
     
     try {
+      console.log(`Tentative d'inscription avec email: ${formData.email}`);
+      
       const response = await axios.post(`${API_URL}/auth/register`, {
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
         role: 'Patient'
       });
+      
+      console.log('Réponse d\'inscription:', JSON.stringify(response.data));
       
       if (response.data) {
         // Navigate to OTP verification screen
@@ -57,6 +63,10 @@ const SignupScreen = () => {
         });
       }
     } catch (error) {
+      console.error('Erreur d\'inscription:', error.message);
+      if (error.response) {
+        console.error('Détails de l\'erreur:', JSON.stringify(error.response.data));
+      }
       setError(error.response?.data?.message || 'Registration failed');
     } finally {
       setIsLoading(false);

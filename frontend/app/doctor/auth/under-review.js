@@ -9,7 +9,7 @@ const AccountUnderReviewScreen = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace('/doctor/auth/welcome'); // Use replace to prevent going back to this screen
+      router.replace('/doctor/auth/welcome'); // Correction du chemin
     }, 5000); // 5 seconds delay
 
     return () => clearTimeout(timer); // Cleanup the timer
@@ -31,6 +31,8 @@ const AccountUnderReviewScreen = () => {
   );
 };
 
+// ... existing code ...
+// Les styles restent les mêmes
 const styles = StyleSheet.create({
   container: {
     flex: 1,

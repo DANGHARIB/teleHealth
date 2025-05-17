@@ -22,7 +22,11 @@ const patientSchema = new mongoose.Schema({
   has_taken_assessment: {
     type: Boolean,
     default: false
-  }
+  },
+  savedDoctors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Doctor'
+  }]
 }, {
   timestamps: true
 });

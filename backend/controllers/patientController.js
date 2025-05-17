@@ -1,5 +1,6 @@
 const Patient = require('../models/Patient');
 const User = require('../models/User');
+const Doctor = require('../models/Doctor');
 
 // @desc    Obtenir tous les patients
 // @route   GET /api/patients
@@ -145,5 +146,137 @@ exports.markAssessment = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Ajouter un médecin à la liste des médecins sauvegardés
+// @route   POST /api/patients/save-doctor/:doctorId
+// @access  Private (Patient only)
+exports.saveDoctor = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    
+    // Vérifier que le doctorId est valide
+    if (!doctorId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'ID de médecin invalide' });
+    }
+    
+    // Trouver le patient
+    const patient = await Patient.findOne({ user: req.user.id });
+    
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+    
+    // Vérifier si le médecin existe
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Médecin non trouvé' });
+    }
+    
+    // Vérifier si le médecin est déjà dans la liste des médecins sauvegardés
+    if (patient.savedDoctors && patient.savedDoctors.includes(doctorId)) {
+      return res.status(400).json({ message: 'Ce médecin est déjà dans vos favoris' });
+    }
+    
+    // Ajouter le médecin à la liste des médecins sauvegardés
+    patient.savedDoctors = patient.savedDoctors || [];
+    patient.savedDoctors.push(doctorId);
+    await patient.save();
+    
+    res.status(200).json({ 
+      message: 'Médecin ajouté aux favoris avec succès',
+      savedDoctors: patient.savedDoctors
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout du médecin aux favoris:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// @desc    Supprimer un médecin de la liste des médecins sauvegardés
+// @route   DELETE /api/patients/save-doctor/:doctorId
+// @access  Private (Patient only)
+exports.removeSavedDoctor = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    
+    // Vérifier que le doctorId est valide
+    if (!doctorId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'ID de médecin invalide' });
+    }
+    
+    // Trouver le patient
+    const patient = await Patient.findOne({ user: req.user.id });
+    
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+    
+    // Vérifier si le médecin est dans la liste des médecins sauvegardés
+    if (!patient.savedDoctors || !patient.savedDoctors.includes(doctorId)) {
+      return res.status(400).json({ message: 'Ce médecin n\'est pas dans vos favoris' });
+    }
+    
+    // Supprimer le médecin de la liste des médecins sauvegardés
+    patient.savedDoctors = patient.savedDoctors.filter(id => id.toString() !== doctorId);
+    await patient.save();
+    
+    res.status(200).json({ 
+      message: 'Médecin supprimé des favoris avec succès',
+      savedDoctors: patient.savedDoctors
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la suppression du médecin des favoris:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// @desc    Récupérer la liste des médecins sauvegardés
+// @route   GET /api/patients/saved-doctors
+// @access  Private (Patient only)
+exports.getSavedDoctors = async (req, res) => {
+  try {
+    // Trouver le patient
+    const patient = await Patient.findOne({ user: req.user.id }).populate({
+      path: 'savedDoctors',
+      select: '_id full_name first_name last_name doctor_image experience specialization price'
+    });
+    
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+    
+    res.status(200).json(patient.savedDoctors || []);
+    
+  } catch (error) {
+    console.error('Erreur lors de la récupération des médecins sauvegardés:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// @desc    Supprimer un patient
+// @route   DELETE /api/patients/:id
+// @access  Private/Admin
+exports.deletePatient = async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id);
+    
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
+    
+    // Supprimer le document Patient
+    await Patient.deleteOne({ _id: req.params.id });
+    
+    // Optionnel: supprimer également l'utilisateur associé
+    // await User.findByIdAndDelete(patient.user);
+    
+    res.json({ message: 'Patient supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du patient:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 }; 

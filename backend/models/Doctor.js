@@ -10,6 +10,12 @@ const doctorSchema = new mongoose.Schema({
     type: String,
     // required: true // full_name will be taken from User model during registration, can be updated later
   },
+  first_name: {
+    type: String,
+  },
+  last_name: {
+    type: String,
+  },
   specialization: {
     type: String, // Changé en String pour simplifier pour l'instant
     // ref: 'Specialization', // Commenté car type String maintenant

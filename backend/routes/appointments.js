@@ -26,4 +26,7 @@ router.get('/patient/me', protect, patient, getPatientAppointments);
 router.get('/doctor/me', protect, doctor, getDoctorAppointments);
 router.put('/:id/status', protect, doctor, updateAppointmentStatus);
 
+// Route d'annulation pour les patients
+router.put('/:id/cancel', protect, patient, cancelAppointment);
+
 module.exports = router; 

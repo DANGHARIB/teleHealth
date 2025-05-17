@@ -24,3 +24,16 @@ export const Colors = {
     tabIconSelected: tintColorDark,
   },
 };
+
+export const BUTTON_COLOR = '#CF5C36';
+export const BUTTON_TEXT_COLOR = '#FFFFFF';
+export const BACKGROUND_COLOR = '#F5F5F5';
+export const TEXT_COLOR = '#333333';
+export const PRIMARY_COLOR = '#007BFF';
+export const SECONDARY_COLOR = '#6C757D';
+export const SUCCESS_COLOR = '#28A745';
+export const DANGER_COLOR = '#DC3545';
+export const WARNING_COLOR = '#FFC107';
+export const INFO_COLOR = '#17A2B8';
+export const WHITE_COLOR = '#FFFFFF';
+export const BLACK_COLOR = '#000000';

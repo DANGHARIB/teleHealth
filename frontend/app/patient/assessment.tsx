@@ -144,7 +144,7 @@ const AssessmentScreen = () => {
     const result = await submitResponsesApi(finalResponses);
     setLoading(false);
     if (result.success) {
-      router.replace('/(tabs)/profile');
+      router.replace('/(patient)/(tabs)');
     } else {
       // L'erreur est déjà gérée et affichée par setError dans submitResponsesApi
       // On pourrait vouloir un feedback plus spécifique ici si nécessaire
@@ -191,7 +191,7 @@ const AssessmentScreen = () => {
       <SafeAreaView style={styles.wrapper}>
         <View style={styles.centeredContainer}>
           <Text style={styles.infoText}>No questions to display at the moment, or you have already answered.</Text>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.replace('/(tabs)/profile')}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => router.replace('/(patient)/(tabs)')}>
             <Text style={styles.actionButtonText}>Go to Profile</Text>
           </TouchableOpacity>
         </View>
@@ -211,6 +211,8 @@ const AssessmentScreen = () => {
           
           <View style={styles.questionWrapper}>
             <Text style={styles.questionLabel}>Question {currentQuestionIndex + 1}</Text>
+            <Text style={styles.questionText}>{currentQuestion.questionText}</Text>
+            
             {currentQuestion.type === 'Text' && (
               <TextInput
                 style={styles.textInput}
@@ -308,6 +310,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0A1E42',
     marginBottom: 15,
+  },
+  questionText: {
+    fontSize: 16,
+    color: '#4A5568',
+    marginBottom: 20,
+    lineHeight: 22,
+    width: '100%',
   },
   textInput: {
     borderWidth: 1,

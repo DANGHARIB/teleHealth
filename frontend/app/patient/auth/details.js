@@ -4,15 +4,15 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import api from '../../../services/api';
+import api from '../../../services/api'; // Chemin relatif corrigé
 
 const PatientDetailsScreen = () => {
   const router = useRouter();
-  const { email } = useLocalSearchParams();
+  // const { email } = useLocalSearchParams(); // email n'est pas utilisé ici, peut être retiré si non nécessaire
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    gender: 'Male', // Default value
+    gender: 'Male', 
     date: {
       day: '',
       month: '',
@@ -43,46 +43,46 @@ const PatientDetailsScreen = () => {
   };
 
   const handleSubmit = async () => {
-    // Validate inputs
     if (!formData.first_name || !formData.last_name) {
       setError('Please enter both first and last name');
       return;
     }
-
-    // Validate date
     if (!formData.date.day || !formData.date.month || !formData.date.year) {
       setError('Please select your date of birth');
       return;
     }
 
-    const dateOfBirth = `${formData.date.year}-${formData.date.month}-${formData.date.day}`;
+    const dateOfBirth = `${formData.date.year}-${String(formData.date.month).padStart(2, '0')}-${String(formData.date.day).padStart(2, '0')}`;
 
     setIsLoading(true);
     setError('');
 
     try {
-      const response = await api.put('/patients/profile', {
+      // L'API /patients/profile est un PUT qui nécessite d'être authentifié
+      // S'assurer que api (axios instance) a bien l'intercepteur pour le token
+      await api.put('/patients/profile', {
         first_name: formData.first_name,
         last_name: formData.last_name,
         gender: formData.gender,
         date_of_birth: dateOfBirth
       });
 
-      // On success, navigate to auth index screen
-      router.replace('/patient/auth/');
-    } catch (error) {
-      setError(error.response?.data?.message || 'Failed to update profile');
+      // Rediriger vers l'écran de connexion pour que l'utilisateur puisse se connecter
+      router.replace('/patient/auth/login');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Generate arrays for day, month, and year dropdowns
-  const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+  const days = Array.from({ length: 31 }, (_, i) => String(i + 1));
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ].map((month, index) => ({ label: month, value: String(index + 1).padStart(2, '0') }));
+    { label: 'January', value: '01' }, { label: 'February', value: '02' }, { label: 'March', value: '03' },
+    { label: 'April', value: '04' }, { label: 'May', value: '05' }, { label: 'June', value: '06' },
+    { label: 'July', value: '07' }, { label: 'August', value: '08' }, { label: 'September', value: '09' },
+    { label: 'October', value: '10' }, { label: 'November', value: '11' }, { label: 'December', value: '12' },
+  ];
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 100 }, (_, i) => String(currentYear - i));
 
@@ -114,30 +114,19 @@ const PatientDetailsScreen = () => {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Date of Birth</Text>
           <View style={styles.dateContainer}>
-            {/* Day dropdown */}
             <View style={styles.dateDropdown}>
               <TouchableOpacity 
                 style={styles.dateButton}
                 onPress={() => setShowDayDropdown(!showDayDropdown)}
               >
-                <Text style={styles.dateButtonText}>
-                  {formData.date.day || 'Day'}
-                </Text>
+                <Text style={styles.dateButtonText}>{formData.date.day || 'Day'}</Text>
                 <Ionicons name="chevron-down" size={18} color="#0A1E42" />
               </TouchableOpacity>
-              
               {showDayDropdown && (
                 <View style={styles.dropdownMenu}>
-                  <ScrollView style={{ maxHeight: 200 }}>
+                  <ScrollView style={{ maxHeight: 150 }}>
                     {days.map((day) => (
-                      <TouchableOpacity
-                        key={day}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          updateDateField('day', day);
-                          setShowDayDropdown(false);
-                        }}
-                      >
+                      <TouchableOpacity key={day} style={styles.dropdownItem} onPress={() => { updateDateField('day', day); setShowDayDropdown(false); }}>
                         <Text style={styles.dropdownItemText}>{day}</Text>
                       </TouchableOpacity>
                     ))}
@@ -145,33 +134,16 @@ const PatientDetailsScreen = () => {
                 </View>
               )}
             </View>
-            
-            {/* Month dropdown */}
             <View style={styles.dateDropdown}>
-              <TouchableOpacity 
-                style={styles.dateButton}
-                onPress={() => setShowMonthDropdown(!showMonthDropdown)}
-              >
-                <Text style={styles.dateButtonText}>
-                  {formData.date.month ? 
-                    months.find(m => m.value === formData.date.month)?.label || 'Month' 
-                    : 'Month'}
-                </Text>
+              <TouchableOpacity style={styles.dateButton} onPress={() => setShowMonthDropdown(!showMonthDropdown)}>
+                <Text style={styles.dateButtonText}>{months.find(m => m.value === formData.date.month)?.label || 'Month'}</Text>
                 <Ionicons name="chevron-down" size={18} color="#0A1E42" />
               </TouchableOpacity>
-              
               {showMonthDropdown && (
                 <View style={styles.dropdownMenu}>
-                  <ScrollView style={{ maxHeight: 200 }}>
+                  <ScrollView style={{ maxHeight: 150 }}>
                     {months.map((month) => (
-                      <TouchableOpacity
-                        key={month.value}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          updateDateField('month', month.value);
-                          setShowMonthDropdown(false);
-                        }}
-                      >
+                      <TouchableOpacity key={month.value} style={styles.dropdownItem} onPress={() => { updateDateField('month', month.value); setShowMonthDropdown(false); }}>
                         <Text style={styles.dropdownItemText}>{month.label}</Text>
                       </TouchableOpacity>
                     ))}
@@ -179,31 +151,16 @@ const PatientDetailsScreen = () => {
                 </View>
               )}
             </View>
-            
-            {/* Year dropdown */}
             <View style={styles.dateDropdown}>
-              <TouchableOpacity 
-                style={styles.dateButton}
-                onPress={() => setShowYearDropdown(!showYearDropdown)}
-              >
-                <Text style={styles.dateButtonText}>
-                  {formData.date.year || 'Year'}
-                </Text>
+              <TouchableOpacity style={styles.dateButton} onPress={() => setShowYearDropdown(!showYearDropdown)}>
+                <Text style={styles.dateButtonText}>{formData.date.year || 'Year'}</Text>
                 <Ionicons name="chevron-down" size={18} color="#0A1E42" />
               </TouchableOpacity>
-              
               {showYearDropdown && (
                 <View style={styles.dropdownMenu}>
-                  <ScrollView style={{ maxHeight: 200 }}>
+                  <ScrollView style={{ maxHeight: 150 }}>
                     {years.map((year) => (
-                      <TouchableOpacity
-                        key={year}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          updateDateField('year', year);
-                          setShowYearDropdown(false);
-                        }}
-                      >
+                      <TouchableOpacity key={year} style={styles.dropdownItem} onPress={() => { updateDateField('year', year); setShowYearDropdown(false); }}>
                         <Text style={styles.dropdownItemText}>{year}</Text>
                       </TouchableOpacity>
                     ))}
@@ -217,43 +174,23 @@ const PatientDetailsScreen = () => {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Gender</Text>
           <View style={styles.radioGroup}>
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => updateFormField('gender', 'Male')}
-            >
-              <View style={[
-                styles.radioCircle,
-                formData.gender === 'Male' && styles.radioCircleSelected
-              ]}>
+            <TouchableOpacity style={styles.radioOption} onPress={() => updateFormField('gender', 'Male')}>
+              <View style={[styles.radioCircle, formData.gender === 'Male' && styles.radioCircleSelected]}>
                 {formData.gender === 'Male' && <View style={styles.radioCircleFill} />}
               </View>
               <Text style={styles.radioText}>Male</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => updateFormField('gender', 'Female')}
-            >
-              <View style={[
-                styles.radioCircle,
-                formData.gender === 'Female' && styles.radioCircleSelected
-              ]}>
+            <TouchableOpacity style={styles.radioOption} onPress={() => updateFormField('gender', 'Female')}>
+              <View style={[styles.radioCircle, formData.gender === 'Female' && styles.radioCircleSelected]}>
                 {formData.gender === 'Female' && <View style={styles.radioCircleFill} />}
               </View>
               <Text style={styles.radioText}>Female</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => updateFormField('gender', 'Other')}
-            >
-              <View style={[
-                styles.radioCircle,
-                formData.gender === 'Other' && styles.radioCircleSelected
-              ]}>
+            <TouchableOpacity style={styles.radioOption} onPress={() => updateFormField('gender', 'Other')}>
+              <View style={[styles.radioCircle, formData.gender === 'Other' && styles.radioCircleSelected]}>
                 {formData.gender === 'Other' && <View style={styles.radioCircleFill} />}
               </View>
-              <Text style={styles.radioText}>Others</Text>
+              <Text style={styles.radioText}>Other</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -261,15 +198,11 @@ const PatientDetailsScreen = () => {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TouchableOpacity 
-          style={styles.nextButton}
+          style={styles.submitButton}
           onPress={handleSubmit}
           disabled={isLoading}
         >
-          {isLoading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.nextButtonText}>Next</Text>
-          )}
+          {isLoading ? <ActivityIndicator color="white" /> : <Text style={styles.submitButtonText}>SAVE DETAILS</Text>}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -277,127 +210,28 @@ const PatientDetailsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 30,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#0A1E42',
-    marginBottom: 30,
-  },
-  formGroup: {
-    marginBottom: 30,
-  },
-  label: {
-    fontSize: 18,
-    color: '#0A1E42',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    fontSize: 16,
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dateDropdown: {
-    width: '30%',
-    position: 'relative',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    color: '#0A1E42',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    marginTop: 5,
-    zIndex: 1000,
-    maxHeight: 200,
-  },
-  dropdownItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: '#0A1E42',
-  },
-  radioGroup: {
-    flexDirection: 'row',
-  },
-  radioOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 30,
-  },
-  radioCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#7BAFD4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  radioCircleSelected: {
-    borderColor: '#0A1E42',
-  },
-  radioCircleFill: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#0A1E42',
-  },
-  radioText: {
-    fontSize: 16,
-    color: '#0A1E42',
-  },
-  errorText: {
-    color: 'red',
-    marginBottom: 20,
-  },
-  nextButton: {
-    backgroundColor: '#7BAFD4',
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  nextButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: 'white' },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 30, paddingBottom: 40 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#0A1E42', marginTop: 40, marginBottom: 30, textAlign: 'center' },
+  formGroup: { marginBottom: 20 },
+  label: { fontSize: 16, color: '#666', marginBottom: 10 },
+  input: { borderBottomWidth: 1, borderBottomColor: '#E0E0E0', fontSize: 16, paddingVertical: 10, color: '#0A1E42' },
+  dateContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  dateDropdown: { flex: 1, marginRight: 10 }, // Added marginRight for spacing
+  dateButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E0E0E0', paddingVertical: 10 },
+  dateButtonText: { fontSize: 16, color: '#0A1E42' },
+  dropdownMenu: { position: 'absolute', top: 40, left: 0, right: 0, backgroundColor: 'white', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 5, zIndex: 1, maxHeight: 150 }, // Reduced maxHeight
+  dropdownItem: { padding: 10 },
+  dropdownItemText: { fontSize: 16 }, 
+  radioGroup: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 },
+  radioOption: { flexDirection: 'row', alignItems: 'center' },
+  radioCircle: { height: 20, width: 20, borderRadius: 10, borderWidth: 2, borderColor: '#7BAFD4', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  radioCircleSelected: { borderColor: '#0A1E42' },
+  radioCircleFill: { height: 10, width: 10, borderRadius: 5, backgroundColor: '#0A1E42' },
+  radioText: { fontSize: 16, color: '#0A1E42' }, 
+  errorText: { color: 'red', marginBottom: 20, textAlign: 'center' },
+  submitButton: { backgroundColor: '#7BAFD4', paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginTop: 30 },
+  submitButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default PatientDetailsScreen; 

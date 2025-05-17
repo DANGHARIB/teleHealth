@@ -6,7 +6,9 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
+// Utiliser la variable d'environnement définie dans .env
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.105:5000/api';
+console.log('URL API utilisée pour vérification OTP:', API_URL);
 
 const VerifyScreen = () => {
   const router = useRouter();
@@ -18,12 +20,9 @@ const VerifyScreen = () => {
   const inputRefs = useRef([]);
 
   useEffect(() => {
-    // Auto-focus the first input on mount
     if (inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
-
-    // Initialize the countdown timer
     const interval = setInterval(() => {
       setTimer(prevTimer => {
         if (prevTimer <= 0) {
@@ -33,26 +32,20 @@ const VerifyScreen = () => {
         return prevTimer - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, []);
 
   const handleOtpChange = (index, value) => {
-    // Only accept digits
     if (value && !/^\d+$/.test(value)) return;
-    
     const newOtp = [...otpCode];
     newOtp[index] = value;
     setOtpCode(newOtp);
-    
-    // Auto-focus next input
     if (value && index < 3 && inputRefs.current[index + 1]) {
       inputRefs.current[index + 1].focus();
     }
   };
 
   const handleKeyPress = (index, e) => {
-    // Move to previous input on backspace when empty
     if (e.nativeEvent.key === 'Backspace' && !otpCode[index] && index > 0) {
       inputRefs.current[index - 1].focus();
     }
@@ -64,31 +57,51 @@ const VerifyScreen = () => {
       setError('Please enter the 4-digit code');
       return;
     }
-
     setError('');
     setIsLoading(true);
-    
     try {
+      console.log(`Tentative de vérification OTP: ${code} pour l'email: ${email}`);
+      
       const response = await axios.post(`${API_URL}/auth/verify-otp`, {
         email,
-        otp: code
+        otp: code,
+        role: 'Patient'
       });
       
+      console.log('Réponse de vérification OTP:', JSON.stringify(response.data));
+      
       if (response.data && response.data.token) {
-        // Store user info and token
         await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
         
-        // Navigate to patient verified screen
+        // S'assurer que userInfo inclut le rôle et autres infos nécessaires
+        let userInfoToStore = {};
+        
+        if (response.data.user) {
+          userInfoToStore = { ...response.data.user, role: response.data.user.role || 'Patient' };
+        } else {
+          // Si user n'existe pas dans la réponse, créons une structure minimale
+          userInfoToStore = { 
+            email: email,
+            role: 'Patient',
+            ...response.data // Inclure toutes les autres données
+          };
+        }
+        
+        await AsyncStorage.setItem('userInfo', JSON.stringify(userInfoToStore));
+        
         router.push({
           pathname: '/patient/auth/verified',
           params: { email }
         });
       } else {
-        // Handle cases where token might be missing in response, though backend should always send it on success
+        console.log('Token manquant dans la réponse OTP:', response.data);
         setError(response.data?.message || 'Verification failed, token not received.');
       }
     } catch (error) {
+      console.error('Erreur de vérification OTP:', error.message);
+      if (error.response) {
+        console.error('Détails de l\'erreur OTP:', JSON.stringify(error.response.data));
+      }
       setError(error.response?.data?.message || 'Invalid verification code');
     } finally {
       setIsLoading(false);
@@ -97,15 +110,14 @@ const VerifyScreen = () => {
 
   const handleResendCode = async () => {
     setIsLoading(true);
-    
     try {
-      // Implement your resend code logic here
-      await axios.post(`${API_URL}/auth/resend-otp`, { email });
-      
-      // Reset the timer
+      console.log(`Tentative de renvoi de code OTP pour l'email: ${email}`);
+      await axios.post(`${API_URL}/auth/resend-otp`, { email, role: 'Patient' });
       setTimer(59);
       setError('');
+      console.log('Code OTP renvoyé avec succès');
     } catch (error) {
+      console.error('Erreur lors du renvoi du code:', error.message);
       setError(error.response?.data?.message || 'Failed to resend code');
     } finally {
       setIsLoading(false);
@@ -116,7 +128,7 @@ const VerifyScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Enter the verify code</Text>
-        <Text style={styles.subtitle}>We just send you a verification code via email</Text>
+        <Text style={styles.subtitle}>We just send you a verification code via email {typeof email === 'string' ? email : ''}</Text>
         
         <View style={styles.otpContainer}>
           {[0, 1, 2, 3].map((index) => (

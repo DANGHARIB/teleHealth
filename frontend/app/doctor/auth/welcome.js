@@ -17,7 +17,7 @@ const WelcomeDoctorScreen = () => {
         </Text>
         <TouchableOpacity 
           style={styles.continueButton}
-          onPress={() => router.push('/doctor/auth/details')} // Navigate to Doctor Details
+          onPress={() => router.push('/doctor/auth/details')}
         >
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   title: {
-    fontSize: 26, // Slightly larger title
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#0A1E42',
     textAlign: 'center',
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: '#7BAFD4',
     paddingVertical: 15,
-    paddingHorizontal: 60, // Wider button
+    paddingHorizontal: 60,
     borderRadius: 10,
     alignItems: 'center',
   },

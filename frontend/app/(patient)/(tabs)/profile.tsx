@@ -53,16 +53,18 @@ export default function ProfileScreen() {
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userInfo');
       console.log("User token and info removed, logging out.");
-      router.replace('/patient/auth/Login');
+      // Redirection vers le layout d'authentification patient
+      router.replace('/patient/auth/login'); // Correction du chemin sans parenthèses
     } catch (error) {
       console.error("Failed to logout", error);
-      router.replace('/patient/auth/Login');
+      router.replace('/patient/auth/login'); // Correction du chemin sans parenthèses
     }
   };
 
   const goToEditProfile = () => {
     console.log("Navigate to Edit Profile");
-    router.push('/patient/profile/edit');
+    // Navigation vers l'écran d'édition dans le groupe patient
+    router.push('/patient/profile/edit'); // Correction du chemin sans parenthèses
   };
 
   return (

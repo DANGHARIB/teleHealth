@@ -5,16 +5,16 @@ import { Platform } from 'react-native';
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
+import { Colors, PRIMARY_COLOR } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-export default function TabLayout() {
+export default function PatientTabLayout() { // Renommé pour clarté
   const colorScheme = useColorScheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: PRIMARY_COLOR,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -27,33 +27,33 @@ export default function TabLayout() {
         }),
       }}>
       <Tabs.Screen
-        name="index"
+        name="index" // Correspondra à (patient)/(tabs)/index.tsx
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => <IconSymbol size={28} name="house.fill" color={focused ? PRIMARY_COLOR : color} />,
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="search" // Correspondra à (patient)/(tabs)/search.tsx
         options={{
           title: 'Search',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
+          tabBarIcon: ({ color, focused }) => <IconSymbol size={28} name="magnifyingglass" color={focused ? PRIMARY_COLOR : color} />,
         }}
       />
       <Tabs.Screen
-        name="appointment"
+        name="appointment" // Correspondra à (patient)/(tabs)/appointment.tsx
         options={{
           title: 'Appointment',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
+          tabBarIcon: ({ color, focused }) => <IconSymbol size={28} name="calendar" color={focused ? PRIMARY_COLOR : color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="profile" // Correspondra à (patient)/(tabs)/profile.tsx
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => <IconSymbol size={28} name="person.fill" color={focused ? PRIMARY_COLOR : color} />,
         }}
       />
     </Tabs>
   );
-}
+} 

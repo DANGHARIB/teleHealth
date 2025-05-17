@@ -4,10 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import axios from 'axios';
-
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
+import api from '../../../services/api'; // Utilisation de l'instance api globale
 
 const DoctorLoginScreen = () => {
   const router = useRouter();
@@ -25,17 +22,22 @@ const DoctorLoginScreen = () => {
     setError('');
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await api.post('/auth/login', { // Utilisation de api au lieu de axios.post avec URL complète
         email,
-        password
+        password,
+        role: 'Doctor' // Ajout du rôle
       });
       
       if (response.data && response.data.token) {
+        // La réponse inclut déjà userInfo, donc nous pouvons le stocker directement
+        // et le rôle est également dans response.data.role
         await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
+        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data)); // Stocker l'objet utilisateur complet
         
+        // Vérification du rôle déjà effectuée dans le backend et retournée, mais une double vérification ici est acceptable
         if (response.data.role === 'Doctor') {
-          router.replace('/doctor/dashboard');
+          // Rediriger vers la racine du groupe (doctor) après connexion réussie
+          router.replace('/(doctor)/(tabs)'); 
         } else {
           setError('Access denied. This login is for doctors only.');
           await AsyncStorage.removeItem('userToken');
@@ -45,7 +47,14 @@ const DoctorLoginScreen = () => {
         setError(response.data?.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      // S'assurer que err.response et err.response.data existent avant d'y accéder
+      let errorMessage = 'Login failed. Please try again.';
+      if (err.response && err.response.data && err.response.data.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -55,7 +64,7 @@ const DoctorLoginScreen = () => {
     <SafeAreaView style={styles.container}>
       <TouchableOpacity 
         style={styles.backButton}
-        onPress={() => router.back()}
+        onPress={() => router.back()} // router.back() est généralement géré par la navigation Stack
       >
         <Ionicons name="arrow-back" size={24} color="#0A1E42" />
       </TouchableOpacity>
@@ -110,7 +119,7 @@ const DoctorLoginScreen = () => {
 
         <TouchableOpacity 
           style={styles.signUpLink}
-          onPress={() => router.push('/doctor/auth/signup')}
+          onPress={() => router.push('./signup')} // Chemin relatif
         >
           <Ionicons name="chevron-back" size={18} color="#7BAFD4" />
           <Text style={styles.signUpText}>Don&apos;t have an account? Sign Up</Text>
@@ -128,16 +137,22 @@ const styles = StyleSheet.create({
   backButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
+    // position: 'absolute', // Pourrait être nécessaire si le contenu scrolle en dessous
+    // top: 10, 
+    // left: 10,
+    // zIndex: 1, 
   },
   content: {
     flex: 1,
+    // paddingTop: 60, // Ajuster si le backButton est absolute
     paddingHorizontal: 30,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#0A1E42',
-    marginVertical: 40,
+    marginVertical: 40, // Peut nécessiter ajustement si backButton est absolute
+    // textAlign: 'center', // Optionnel, pour centrer
   },
   inputContainer: {
     flexDirection: 'row',

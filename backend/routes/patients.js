@@ -2,24 +2,32 @@ const express = require('express');
 const router = express.Router();
 const { 
   getPatients, 
-  getPatientById, 
-  updatePatientProfile,
-  markAssessment,
-  getPatientProfile
+  getPatientById,
+  getPatientProfile,
+  updatePatientProfile, 
+  deletePatient,
+  saveDoctor,
+  removeSavedDoctor,
+  getSavedDoctors
 } = require('../controllers/patientController');
 const { protect, admin, patient } = require('../middlewares/authMiddleware');
-
-// Routes protégées pour les admins
-router.get('/', protect, admin, getPatients);
-
-// Route pour le patient connecté pour récupérer son profil complet
-router.get('/profile', protect, patient, getPatientProfile);
-
-// Routes protégées pour les patients ou admins
-router.get('/:id', protect, getPatientById);
+const upload = require('../middlewares/uploadMiddleware');
 
 // Routes protégées pour les patients
-router.put('/profile', protect, patient, updatePatientProfile);
-router.put('/mark-assessment', protect, patient, markAssessment);
+router.route('/profile')
+  .get(protect, patient, getPatientProfile)
+  .put(protect, patient, updatePatientProfile);
+
+// Routes pour les médecins sauvegardés
+router.route('/save-doctor/:doctorId')
+  .post(protect, patient, saveDoctor)
+  .delete(protect, patient, removeSavedDoctor);
+
+router.get('/saved-doctors', protect, patient, getSavedDoctors);
+
+// Routes admin
+router.get('/', protect, admin, getPatients);
+router.get('/:id', protect, admin, getPatientById);
+router.delete('/:id', protect, admin, deletePatient);
 
 module.exports = router; 

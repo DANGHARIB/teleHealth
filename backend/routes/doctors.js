@@ -9,19 +9,26 @@ const {
   uploadProfileImage,
   uploadCertificate,
   deleteDoctor,
-  getDoctorAppointments
+  getDoctorAppointments,
+  getSavedPatients,
+  searchSavedPatients
 } = require('../controllers/doctorController');
 const { protect, admin, doctor } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
 
 // Routes publiques
 router.get('/', getDoctors);
-router.get('/:id', getDoctorById);
 
 // Routes protégées pour les médecins
 router.route('/profile')
   .get(protect, doctor, getDoctorProfile)
   .put(protect, doctor, upload.array('certificationFiles', 5), updateDoctorProfile);
+
+// Routes pour les patients qui ont sauvegardé le médecin
+router.get('/saved-patients', protect, doctor, getSavedPatients);
+router.get('/search-patients', protect, doctor, searchSavedPatients);
+
+router.get('/:id', getDoctorById);
 
 router.put(
   '/upload-image', 

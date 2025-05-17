@@ -3,11 +3,8 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator,
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
-import axios from 'axios'; // Using axios directly for signup for now, can be refactored to use service if preferred
+import api from '../../../services/api'; // Utilisation de l'instance api globale
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
 
 const DoctorSignupScreen = () => {
   const router = useRouter();
@@ -43,20 +40,17 @@ const DoctorSignupScreen = () => {
     setIsLoading(true);
     
     try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
+      const response = await api.post('/auth/register', { // Utilisation de api
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
-        role: 'Doctor' // Key change: role is Doctor
+        role: 'Doctor'
       });
       
       if (response.data && response.data.token) {
-        // Store token and user info immediately after registration for doctors
         await AsyncStorage.setItem('userToken', response.data.token);
         await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
-
-        // Navigate to under-review screen
-        router.push('/doctor/auth/under-review');
+        router.push('/doctor/auth/under-review'); // Correction du chemin de redirection
       } else {
         setError(response.data?.message || 'Registration failed, token not received.');
       }
@@ -147,7 +141,7 @@ const DoctorSignupScreen = () => {
 
             <TouchableOpacity 
               style={styles.loginLink}
-              onPress={() => router.push('/doctor/auth/login')}
+              onPress={() => router.push('./login')}
             >
               <Ionicons name="chevron-back" size={18} color="#7BAFD4" />
               <Text style={styles.loginText}>Already have an account? Login</Text>
@@ -159,7 +153,6 @@ const DoctorSignupScreen = () => {
   );
 };
 
-// Styles are similar to PatientSignupScreen, can be refactored into a common component or style sheet if desired
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -250,7 +243,9 @@ const styles = StyleSheet.create({
   loginText: {
     color: '#7BAFD4',
     fontSize: 16,
+    marginLeft: 5, // Added some margin for better spacing
   },
+  // ... any other styles if present
 });
 
 export default DoctorSignupScreen; 

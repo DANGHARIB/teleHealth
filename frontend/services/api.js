@@ -58,6 +58,226 @@ export const authAPI = {
   },
 };
 
+// API pour les médecins
+export const doctorAPI = {
+  // Récupérer tous les médecins
+  getDoctors: async () => {
+    try {
+      const response = await api.get('/doctors');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Rechercher des médecins par nom
+  searchDoctors: async (query) => {
+    try {
+      const response = await api.get(`/doctors?search=${query}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Obtenir un médecin par ID
+  getDoctorById: async (id) => {
+    try {
+      const response = await api.get(`/doctors/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer le profil du médecin
+  getProfile: async () => {
+    try {
+      const response = await api.get('/doctors/profile');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les patients qui ont sauvegardé le médecin
+  getSavedPatients: async () => {
+    try {
+      const response = await api.get('/doctors/saved-patients');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Rechercher parmi les patients qui ont sauvegardé le médecin
+  searchSavedPatients: async (query) => {
+    try {
+      const response = await api.get(`/doctors/search-patients?search=${query}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les disponibilités du médecin connecté
+  getMyAvailability: async (date) => {
+    try {
+      const queryParams = date ? `?date=${date}` : '';
+      const response = await api.get(`/availability/my-availability${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les rendez-vous du médecin
+  getAppointments: async (status) => {
+    try {
+      const queryParams = status ? `?status=${status}` : '';
+      const response = await api.get(`/appointments/doctor/me${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Mettre à jour le statut d'un rendez-vous
+  updateAppointmentStatus: async (appointmentId, statusData) => {
+    try {
+      const response = await api.put(`/appointments/${appointmentId}/status`, statusData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Créer une disponibilité
+  createAvailability: async (availabilityData) => {
+    try {
+      const response = await api.post('/availability', availabilityData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Créer plusieurs disponibilités à la fois
+  createBatchAvailability: async (availabilities) => {
+    try {
+      const response = await api.post('/availability/batch', { availabilities });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Mettre à jour une disponibilité
+  updateAvailability: async (id, availabilityData) => {
+    try {
+      const response = await api.put(`/availability/${id}`, availabilityData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Supprimer une disponibilité
+  deleteAvailability: async (id) => {
+    try {
+      const response = await api.delete(`/availability/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  }
+};
+
+// API pour les patients
+export const patientAPI = {
+  // Récupérer le profil du patient
+  getProfile: async () => {
+    try {
+      const response = await api.get('/patients/profile');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Mettre à jour le profil du patient
+  updateProfile: async (profileData) => {
+    try {
+      const response = await api.put('/patients/profile', profileData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Récupérer les médecins sauvegardés
+  getSavedDoctors: async () => {
+    try {
+      const response = await api.get('/patients/saved-doctors');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Sauvegarder un médecin
+  saveDoctor: async (doctorId) => {
+    try {
+      const response = await api.post(`/patients/save-doctor/${doctorId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Supprimer un médecin sauvegardé
+  removeSavedDoctor: async (doctorId) => {
+    try {
+      const response = await api.delete(`/patients/save-doctor/${doctorId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les disponibilités d'un médecin
+  getDoctorAvailability: async (doctorId, date) => {
+    try {
+      const queryParams = date ? `?date=${date}&isBooked=false` : '?isBooked=false';
+      const response = await api.get(`/availability/doctor/${doctorId}${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Créer un rendez-vous
+  createAppointment: async (appointmentData) => {
+    try {
+      const response = await api.post('/appointments', appointmentData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les rendez-vous du patient
+  getAppointments: async (status) => {
+    try {
+      const queryParams = status ? `?status=${status}` : '';
+      const response = await api.get(`/appointments/patient/me${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+};
+
 // Test de connexion API
 export const testAPI = {
   ping: async () => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
+// Utiliser la variable d'environnement définie dans .env
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.105:5000/api';
+console.log('URL API utilisée:', API_URL);
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -27,31 +29,55 @@ const LoginScreen = () => {
     setIsLoading(true);
     
     try {
+      console.log('Tentative de connexion avec:', email);
+      
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
-        password
+        password,
+        role: 'Patient'
       });
       
+      console.log('Réponse du serveur:', JSON.stringify(response.data));
+      
       if (response.data && response.data.token) {
-        // Store user info
         await AsyncStorage.setItem('userToken', response.data.token);
-        // Stocker toutes les données utilisateur, y compris potentiellement hasCompletedAssessment
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data.user || response.data)); 
         
-        // Redirect to appropriate screen
-        if (response.data.role === 'Patient') {
-          const userInfo = response.data.user || response.data; 
-          if (userInfo.hasCompletedAssessment === true) { 
-            router.replace('/(tabs)/profile');
-          } else {
-            router.replace('/patient/assessment'); 
-          }
+        // Vérifier la structure des données renvoyées
+        let userInfoToStore = {};
+        
+        if (response.data.user) {
+          userInfoToStore = { ...response.data.user, role: response.data.user.role || 'Patient' };
         } else {
-          setError('Invalid account type');
+          // Si user n'existe pas dans la réponse, créons une structure minimale
+          userInfoToStore = { 
+            email: email,
+            role: 'Patient',
+            ...response.data // Inclure toutes les autres données
+          };
         }
+        
+        await AsyncStorage.setItem('userInfo', JSON.stringify(userInfoToStore));
+        
+        // Vérifier si l'utilisateur a complété son évaluation (hasCompletedAssessment est défini par le serveur)
+        const hasCompletedAssessment = userInfoToStore.hasCompletedAssessment === true;
+        
+        if (hasCompletedAssessment) {
+          // Si l'évaluation est complétée, aller directement aux onglets
+          router.replace('/(patient)/(tabs)');
+        } else {
+          // Si l'évaluation n'est pas complétée, rediriger vers l'écran d'évaluation
+          router.replace('/patient/assessment');
+        }
+      } else {
+        console.log('Token manquant dans la réponse:', response.data);
+        setError(response.data?.message || 'Login failed, please try again.');
       }
-    } catch (error) {
-      setError(error.response?.data?.message || 'Invalid credentials');
+    } catch (err) {
+      console.error('Erreur de connexion:', err.message);
+      if (err.response) {
+        console.error('Détails de l\'erreur:', JSON.stringify(err.response.data));
+      }
+      setError(err.response?.data?.message || 'Invalid credentials or server error');
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +87,7 @@ const LoginScreen = () => {
     <SafeAreaView style={styles.container}>
       <TouchableOpacity 
         style={styles.backButton}
-        onPress={() => router.back()}
+        onPress={() => router.back()} // Ou router.replace('/') pour aller à la racine
       >
         <Ionicons name="arrow-back" size={24} color="#0A1E42" />
       </TouchableOpacity>
