@@ -615,9 +615,8 @@ export default function AppointmentScreen() {
                 </TouchableOpacity>
               )}
               
-              {/* Option de reprogrammation pour les rendez-vous où l'annulation n'est plus possible (J-2 à J-1) */}
-              {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && 
-                !canCancelAppointment(appointment.availability.date) && 
+              {/* Option de reprogrammation (possible jusqu'à J-1) */}
+              {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'scheduled') && 
                 canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}

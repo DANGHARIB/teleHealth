@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Text, Dimensions } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Text, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -28,11 +28,38 @@ type Payment = {
   transactionId: string;
   paymentDate: string;
   createdAt: string;
-  // Ajout d'un champ pour indiquer si c'est un remboursement
+  // Field to indicate if this is a refund
   isRefund?: boolean;
+  // Original payment ID for refunds
+  originalPaymentId?: string;
 };
 
-const { width } = Dimensions.get('window');
+// Color palette
+const COLORS = {
+  primary: '#0F2057',
+  primaryLight: '#5586CC',
+  secondary: '#4CAF50',
+  background: '#F8F9FF',
+  surface: '#FFFFFF',
+  error: '#DC3545',
+  text: {
+    primary: '#0F2057',
+    secondary: '#6C757D',
+    light: '#A0A0A0',
+    white: '#FFFFFF'
+  },
+  border: '#E5E9F2',
+  warning: '#FFA500',
+  status: {
+    completed: '#5586CC',
+    refund: '#4CAF50',
+    pending: '#FFA500',
+    failed: '#DC3545'
+  }
+};
+
+const { width, height } = Dimensions.get('window');
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 export default function PaymentsScreen() {
   const router = useRouter();
@@ -41,30 +68,33 @@ export default function PaymentsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  // Charger les paiements
+  // Load payments
   useEffect(() => {
     const fetchPayments = async () => {
       try {
         setLoading(true);
         const data = await patientAPI.getPayments();
         
-        // Organiser les données pour identifier les remboursements
+        // Process data to identify refunds and link them to original payments
         const processedPayments = data.map((payment: Payment) => {
-          // Détecter un remboursement par le montant négatif
+          // Detect refund by negative amount
           const isRefund = payment.amount < 0;
           return {
             ...payment,
             isRefund,
-            // Utiliser la valeur absolue pour l'affichage
+            // Use absolute value for display
             displayAmount: Math.abs(payment.amount)
           };
         });
         
-        setPayments(processedPayments);
+        // Group refunds with their original payments to avoid showing duplicates
+        const groupedPayments = groupRefundsWithOriginals(processedPayments);
+        
+        setPayments(groupedPayments);
         setLoading(false);
       } catch (err) {
-        console.error('Erreur lors du chargement des paiements:', err);
-        setError('Impossible de charger votre historique de paiements');
+        console.error('Error loading payments:', err);
+        setError('Unable to load your payment history');
         setLoading(false);
       }
     };
@@ -72,7 +102,43 @@ export default function PaymentsScreen() {
     fetchPayments();
   }, []);
 
-  // Filtrer les paiements
+  // Group refunds with original payments to avoid showing two separate cards
+  const groupRefundsWithOriginals = (payments: Payment[]) => {
+    // Create a map to track refunds by appointment ID
+    const refundMap: Record<string, Payment> = {};
+    const refundIds: Set<string> = new Set();
+    
+    // First pass: identify all refunds
+    payments.forEach(payment => {
+      if (payment.isRefund && payment.appointment?._id) {
+        refundMap[payment.appointment._id] = payment;
+        refundIds.add(payment._id);
+      }
+    });
+    
+    // Second pass: combine refunds with original payments and filter out standalone refunds
+    const combinedPayments = payments
+      .filter(payment => !refundIds.has(payment._id)) // Filter out refunds that were combined
+      .map(payment => {
+        if (!payment.isRefund && payment.status === 'refunded' && payment.appointment?._id) {
+          // If this is an original payment that has been refunded
+          const refund = refundMap[payment.appointment._id];
+          if (refund) {
+            return {
+              ...payment,
+              refundDetails: refund,
+              // Mark as a combined payment
+              isCombined: true
+            };
+          }
+        }
+        return payment;
+      });
+    
+    return combinedPayments;
+  };
+
+  // Filter payments
   const getFilteredPayments = () => {
     if (!activeFilter) return payments;
     
@@ -83,74 +149,167 @@ export default function PaymentsScreen() {
       if (activeFilter === 'payments') {
         return !payment.isRefund && payment.status !== 'refunded';
       }
+      if (activeFilter === 'monthly') {
+        // Filter by current month (May 2025)
+        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+        const currentDate = new Date();
+        return paymentDate.getMonth() === currentDate.getMonth() && 
+               paymentDate.getFullYear() === currentDate.getFullYear();
+      }
       return true;
     });
   };
 
-  // Formater la date
+  // Calculate monthly summary
+  const getMonthlyTotal = () => {
+    const currentDate = new Date();
+    let totalSpent = 0;
+    let totalRefunded = 0;
+    let totalPenalties = 0;
+    let paymentCount = 0;
+    let refundCount = 0;
+
+    // Pour déboguer, créons une copie des paiements du mois en cours
+    const currentMonthPayments = payments.filter(payment => {
+      const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+      return paymentDate.getMonth() === currentDate.getMonth() && 
+             paymentDate.getFullYear() === currentDate.getFullYear();
+    });
+    
+    console.log('Paiements du mois en cours:', currentMonthPayments);
+
+    payments.forEach(payment => {
+      const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+      if (paymentDate.getMonth() === currentDate.getMonth() && 
+          paymentDate.getFullYear() === currentDate.getFullYear()) {
+        
+        // Si c'est un paiement qui a un refundDetails (paiement original remboursé)
+        if (payment.refundDetails) {
+          console.log('Paiement avec remboursement détecté:', payment);
+          
+          // Le paiement original est toujours compté comme une dépense
+          totalSpent += payment.amount;
+          paymentCount++;
+          
+          // Le remboursement est traité séparément
+          const refundAmount = Math.abs(payment.refundDetails.amount);
+          totalRefunded += refundAmount;
+          
+          // Calculer la pénalité (différence entre le montant original et le remboursement)
+          const penaltyAmount = payment.amount - refundAmount;
+          totalPenalties += penaltyAmount;
+          
+          refundCount++;
+        }
+        // Si c'est un remboursement direct (pas un paiement original)
+        else if (payment.isRefund || payment.amount < 0) {
+          console.log('Remboursement direct détecté:', payment);
+          // Pour les remboursements directs, nous les ignorons car ils sont déjà
+          // comptabilisés via les refundDetails du paiement original
+        } 
+        // Si c'est un paiement normal
+        else if (payment.status === 'completed') {
+          console.log('Paiement complété détecté:', payment);
+          totalSpent += payment.amount;
+          paymentCount++;
+        } else {
+          console.log('Paiement ignoré (statut ni completed ni refunded):', payment);
+        }
+      }
+    });
+
+    // Le montant net est ce que le patient a effectivement payé au total
+    // (total dépensé moins les remboursements reçus)
+    const netAmount = totalSpent - totalRefunded;
+
+    console.log('Calcul mensuel corrigé:', {
+      totalSpent,
+      totalRefunded,
+      totalPenalties,
+      netAmount,
+      paymentCount,
+      refundCount
+    });
+
+    return {
+      totalSpent,
+      totalRefunded,
+      totalPenalties,
+      netAmount,
+      paymentCount,
+      refundCount,
+      monthName: format(currentDate, 'MMMM yyyy', { locale: enUS })
+    };
+  };
+
+  // Format date
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return format(date, 'dd MMM yyyy', { locale: fr });
+      return format(date, 'MMM dd, yyyy', { locale: enUS });
     } catch (error) {
       return dateString;
     }
   };
 
-  // Rendu pour un moyen de paiement
+  // Render payment method
   const renderPaymentMethod = (method: string) => {
     let icon: any = 'card-outline';
-    let label = 'Carte bancaire';
+    let label = 'Credit Card';
+    let color = COLORS.text.secondary;
 
     switch (method) {
       case 'paypal':
         icon = 'logo-paypal';
         label = 'PayPal';
+        color = '#0070BA';
         break;
       case 'apple_pay':
         icon = 'logo-apple';
         label = 'Apple Pay';
+        color = '#000000';
         break;
       case 'google_pay':
         icon = 'logo-google';
         label = 'Google Pay';
+        color = '#4285F4';
         break;
     }
 
     return (
       <View style={styles.methodContainer}>
-        <Ionicons name={icon} size={16} color="#6C757D" />
-        <ThemedText style={styles.methodText}>{label}</ThemedText>
+        <Ionicons name={icon} size={16} color={color} />
+        <ThemedText style={[styles.methodText, { color }]}>{label}</ThemedText>
       </View>
     );
   };
 
-  // Rendu pour le statut de paiement
+  // Render payment status
   const renderPaymentStatus = (status: string, isRefund: boolean) => {
-    let color = '#5586CC';
+    let color = COLORS.status.completed;
     let icon: any = 'checkmark-circle';
-    let label = 'Complété';
+    let label = 'Completed';
 
     if (isRefund) {
-      color = '#4CAF50';
+      color = COLORS.status.refund;
       icon = 'arrow-undo-outline';
-      label = 'Remboursement';
+      label = 'Refund';
     } else {
       switch (status) {
         case 'pending':
-          color = '#FFA500';
+          color = COLORS.status.pending;
           icon = 'time-outline';
-          label = 'En attente';
+          label = 'Pending';
           break;
         case 'refunded':
-          color = '#4CAF50';
+          color = COLORS.status.refund;
           icon = 'return-down-back-outline';
-          label = 'Remboursé';
+          label = 'Refunded';
           break;
         case 'failed':
-          color = '#DC3545';
+          color = COLORS.status.failed;
           icon = 'close-circle-outline';
-          label = 'Échoué';
+          label = 'Failed';
           break;
       }
     }
@@ -163,7 +322,7 @@ export default function PaymentsScreen() {
     );
   };
 
-  // Rendu des filtres 
+  // Render filters
   const renderFilters = () => {
     return (
       <View style={styles.filtersContainer}>
@@ -172,8 +331,9 @@ export default function PaymentsScreen() {
           onPress={() => setActiveFilter(null)}
         >
           <ThemedText style={[styles.filterText, activeFilter === null ? styles.activeFilterText : null]}>
-            Tous
+            All
           </ThemedText>
+          {activeFilter === null && <View style={styles.filterActiveIndicator} />}
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -181,8 +341,9 @@ export default function PaymentsScreen() {
           onPress={() => setActiveFilter('payments')}
         >
           <ThemedText style={[styles.filterText, activeFilter === 'payments' ? styles.activeFilterText : null]}>
-            Paiements
+            Payments
           </ThemedText>
+          {activeFilter === 'payments' && <View style={styles.filterActiveIndicator} />}
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -190,131 +351,234 @@ export default function PaymentsScreen() {
           onPress={() => setActiveFilter('refunds')}
         >
           <ThemedText style={[styles.filterText, activeFilter === 'refunds' ? styles.activeFilterText : null]}>
-            Remboursements
+            Refunds
           </ThemedText>
+          {activeFilter === 'refunds' && <View style={styles.filterActiveIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.filterButton, activeFilter === 'monthly' ? styles.activeFilter : null]}
+          onPress={() => setActiveFilter('monthly')}
+        >
+          <ThemedText style={[styles.filterText, activeFilter === 'monthly' ? styles.activeFilterText : null]}>
+            Monthly
+          </ThemedText>
+          {activeFilter === 'monthly' && <View style={styles.filterActiveIndicator} />}
         </TouchableOpacity>
       </View>
     );
   };
 
-  // Rendu pour un paiement normal
-  const renderPayment = (payment: any) => {
+  // Render a standard payment
+  const renderPayment = (payment: any, index: number) => {
     return (
-      <TouchableOpacity 
-        key={payment._id} 
-        style={styles.paymentCard}
-        onPress={() => router.push({
-          pathname: '/patient/payment/details',
-          params: { paymentId: payment._id }
-        })}
-      >
-        <View style={styles.paymentHeader}>
-          <ThemedText style={styles.paymentDoctor}>
-            {payment.appointment?.doctor?.full_name || 'Docteur'}
-          </ThemedText>
-          {renderPaymentStatus(payment.status, payment.isRefund)}
-        </View>
-
-        <View style={styles.paymentDetails}>
-          <ThemedText style={styles.paymentDate}>
-            {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
-          </ThemedText>
-          {renderPaymentMethod(payment.paymentMethod)}
-        </View>
-
-        <View style={styles.paymentFooter}>
-          <ThemedText style={styles.transactionId}>
-            ID: {payment.transactionId.substring(0, 8)}...
-          </ThemedText>
-          <ThemedText style={[
-            styles.paymentAmount, 
-            payment.isRefund ? styles.refundAmount : null
-          ]}>
-            {payment.isRefund ? '- ' : ''}{payment.displayAmount || Math.abs(payment.amount)} €
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  // Rendu pour un remboursement partiel (avec pénalité)
-  const renderPartialRefund = (payment: any) => {
-    // Calculer les montants pour le remboursement partiel
-    const originalAmount = Math.abs(payment.amount) * 1.25; // 100% = 80% * 1.25
-    const penaltyAmount = originalAmount * 0.2; // 20% du montant original
-    const refundAmount = Math.abs(payment.amount); // 80% du montant original
-
-    return (
-      <TouchableOpacity 
-        key={payment._id} 
-        style={styles.refundCard}
-        onPress={() => router.push({
-          pathname: '/patient/payment/details',
-          params: { paymentId: payment._id }
-        })}
-      >
-        <View style={styles.refundHeader}>
-          <View style={styles.refundHeaderLeft}>
-            <Ionicons name="arrow-undo-outline" size={16} color="#4CAF50" />
-            <ThemedText style={styles.refundTitle}>Remboursement</ThemedText>
-          </View>
-          {renderPaymentStatus('refunded', true)}
-        </View>
-
-        <View style={styles.paymentDetails}>
-          <View>
+      <View key={payment._id} style={[styles.paymentCard, { marginTop: index * 8 }]}>
+        <TouchableOpacity  
+          style={styles.paymentCardInner}
+          activeOpacity={0.7}
+          onPress={() => router.push({
+            pathname: '/patient/payment/details',
+            params: { paymentId: payment._id }
+          })}
+        >
+          <View style={styles.paymentHeader}>
             <ThemedText style={styles.paymentDoctor}>
-              {payment.appointment?.doctor?.full_name || 'Docteur'}
+              {payment.appointment?.doctor?.full_name || 'Doctor'}
             </ThemedText>
-            <ThemedText style={styles.paymentDate}>
-              {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
-            </ThemedText>
+            {renderPaymentStatus(payment.status, payment.isRefund)}
           </View>
-          {renderPaymentMethod(payment.paymentMethod)}
-        </View>
 
-        <View style={styles.refundDetailsContainer}>
-          <View style={styles.refundDetailRow}>
-            <ThemedText style={styles.refundDetailLabel}>Montant initial</ThemedText>
-            <ThemedText style={styles.refundDetailValue}>{originalAmount.toFixed(2)} €</ThemedText>
-          </View>
-          
-          <View style={styles.refundDetailRow}>
-            <View style={styles.penaltyLabelContainer}>
-              <ThemedText style={styles.refundDetailLabel}>Pénalité (20%)</ThemedText>
-              <TouchableOpacity>
-                <Ionicons name="information-circle-outline" size={16} color="#6C757D" />
-              </TouchableOpacity>
+          <View style={styles.paymentDetails}>
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={14} color={COLORS.text.secondary} />
+              <ThemedText style={styles.paymentDate}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
             </View>
-            <ThemedText style={styles.penaltyValue}>- {penaltyAmount.toFixed(2)} €</ThemedText>
+            {renderPaymentMethod(payment.paymentMethod)}
           </View>
-          
-          <View style={[styles.refundDetailRow, styles.refundTotalRow]}>
-            <ThemedText style={styles.refundTotalLabel}>Remboursement (80%)</ThemedText>
-            <ThemedText style={styles.refundTotalValue}>{refundAmount.toFixed(2)} €</ThemedText>
-          </View>
-        </View>
 
-        <View style={styles.paymentFooter}>
-          <ThemedText style={styles.transactionId}>
-            ID: {payment.transactionId.substring(0, 8)}...
-          </ThemedText>
-          <ThemedText style={styles.refundAmount}>
-            {refundAmount.toFixed(2)} €
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
+          <View style={styles.paymentFooter}>
+            <View style={styles.transactionIdContainer}>
+              <Ionicons name="key-outline" size={12} color={COLORS.text.light} />
+              <ThemedText style={styles.transactionId}>
+                {payment.transactionId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+            <ThemedText style={[
+              styles.paymentAmount, 
+              payment.isRefund ? styles.refundAmount : null
+            ]}>
+              {payment.isRefund ? '- ' : ''}{payment.displayAmount || Math.abs(payment.amount)} €
+            </ThemedText>
+          </View>
+        </TouchableOpacity>
+      </View>
     );
   };
 
-  // Rendu pour la liste des paiements
+  // Render monthly summary
+  const renderMonthlySummary = () => {
+    const monthlyData = getMonthlyTotal();
+    
+    return (
+      <View style={styles.monthlySummaryContainer}>
+        <View style={styles.monthlyHeader}>
+          <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
+          <ThemedText style={styles.monthlyTitle}>{monthlyData.monthName}</ThemedText>
+        </View>
+        
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <ThemedText style={styles.summaryLabel}>Total Spent</ThemedText>
+              <ThemedText style={styles.summaryAmount}>{monthlyData.totalSpent.toFixed(2)} €</ThemedText>
+              <ThemedText style={styles.summaryCount}>{monthlyData.paymentCount} payments</ThemedText>
+            </View>
+          </View>
+          
+          {monthlyData.totalRefunded > 0 && (
+            <>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={styles.summaryLabel}>Total Refunded (80%)</ThemedText>
+                  <ThemedText style={styles.refundSummaryAmount}>- {monthlyData.totalRefunded.toFixed(2)} €</ThemedText>
+                  <ThemedText style={styles.summaryCount}>{monthlyData.refundCount} refunds</ThemedText>
+                </View>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={styles.summaryLabel}>Penalties (20%)</ThemedText>
+                  <ThemedText style={styles.penaltySummaryAmount}>{monthlyData.totalPenalties.toFixed(2)} €</ThemedText>
+                  <ThemedText style={styles.summaryCount}>{monthlyData.refundCount} cancellations</ThemedText>
+                </View>
+              </View>
+            </>
+          )}
+          
+          <View style={[styles.summaryRow, styles.totalRow]}>
+            <View style={styles.summaryItem}>
+              <ThemedText style={styles.totalLabel}>Net Amount</ThemedText>
+              <ThemedText style={styles.totalAmount}>{monthlyData.netAmount.toFixed(2)} €</ThemedText>
+            </View>
+          </View>
+        </View>
+        
+        {monthlyData.paymentCount === 0 && (
+          <View style={styles.emptyMonthly}>
+            <Ionicons name="calendar-clear-outline" size={40} color={COLORS.text.light} />
+            <ThemedText style={styles.emptyMonthlyText}>No transactions this month</ThemedText>
+          </View>
+        )}
+      </View>
+    );
+  };
+  const renderCombinedRefundPayment = (payment: any, index: number) => {
+    // Calculate amounts for the partial refund
+    const originalAmount = payment.amount;
+    const penaltyAmount = originalAmount * 0.2; // 20% penalty
+    const refundAmount = originalAmount * 0.8; // 80% refunded
+
+    return (
+      <View key={payment._id} style={[styles.refundCard, { marginTop: index * 8 }]}>
+        <TouchableOpacity 
+          style={styles.paymentCardInner}
+          activeOpacity={0.7}
+          onPress={() => router.push({
+            pathname: '/patient/payment/details',
+            params: { paymentId: payment._id }
+          })}
+        >
+          <View style={styles.refundHeader}>
+            <View style={styles.refundHeaderLeft}>
+              <ThemedText style={styles.paymentDoctor}>
+                {payment.appointment?.doctor?.full_name || 'Doctor'}
+              </ThemedText>
+            </View>
+            {renderPaymentStatus('refunded', false)}
+          </View>
+
+          <View style={styles.paymentDetails}>
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={14} color={COLORS.text.secondary} />
+              <ThemedText style={styles.paymentDate}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
+            </View>
+            {renderPaymentMethod(payment.paymentMethod)}
+          </View>
+
+          <View style={styles.refundDetailsContainer}>
+            <View style={styles.refundDetailRow}>
+              <ThemedText style={styles.refundDetailLabel}>Initial amount</ThemedText>
+              <ThemedText style={styles.refundDetailValue}>{originalAmount.toFixed(2)} €</ThemedText>
+            </View>
+            
+            <View style={styles.refundDetailRow}>
+              <View style={styles.penaltyLabelContainer}>
+                <ThemedText style={styles.refundDetailLabel}>Penalty (20%)</ThemedText>
+                <TouchableOpacity style={styles.infoButton}>
+                  <Ionicons name="information-circle-outline" size={14} color={COLORS.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              <ThemedText style={styles.penaltyValue}>- {penaltyAmount.toFixed(2)} €</ThemedText>
+            </View>
+            
+            <View style={[styles.refundDetailRow, styles.refundTotalRow]}>
+              <ThemedText style={styles.refundTotalLabel}>Refund (80%)</ThemedText>
+              <ThemedText style={styles.refundTotalValue}>{refundAmount.toFixed(2)} €</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.paymentFooter}>
+            <View style={styles.transactionIdContainer}>
+              <Ionicons name="key-outline" size={12} color={COLORS.text.light} />
+              <ThemedText style={styles.transactionId}>
+                {payment.transactionId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.refundAmount}>
+              {refundAmount.toFixed(2)} €
+            </ThemedText>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render the payment list
   const renderPayments = () => {
     if (loading) {
-      return <ActivityIndicator size="large" color="#5586cc" style={styles.loader} />;
+      return (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={COLORS.primaryLight} style={styles.loader} />
+          <ThemedText style={styles.loaderText}>Loading your transactions...</ThemedText>
+        </View>
+      );
     }
 
     if (error) {
-      return <ThemedText style={styles.errorText}>{error}</ThemedText>;
+      return (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={50} color={COLORS.error} />
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+        </View>
+      );
+    }
+
+    // Show monthly summary if monthly filter is active
+    if (activeFilter === 'monthly') {
+      // Log les détails des paiements pour débogage
+      console.log('Tous les paiements:', payments.map(p => ({
+        id: p._id,
+        amount: p.amount,
+        status: p.status,
+        isRefund: p.isRefund,
+        date: p.paymentDate || p.createdAt
+      })));
+      
+      return renderMonthlySummary();
     }
 
     const filteredPayments = getFilteredPayments();
@@ -322,63 +586,54 @@ export default function PaymentsScreen() {
     if (!filteredPayments.length) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="wallet-outline" size={50} color="#B5CDEC" />
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="wallet-outline" size={50} color={COLORS.primaryLight} />
+          </View>
           <ThemedText style={styles.emptyText}>
             {activeFilter === 'refunds' 
-              ? 'Aucun remboursement trouvé' 
-              : 'Aucun paiement effectué'}
+              ? 'No refunds found' 
+              : 'No payments made yet'}
           </ThemedText>
         </View>
       );
     }
 
-    return filteredPayments.map((payment) => {
-      // Déterminer s'il s'agit d'un remboursement partiel
-      if (payment.isRefund && payment.status === 'refunded') {
-        return renderPartialRefund(payment);
+    return filteredPayments.map((payment, index) => {
+      // Check if this is a payment that has been refunded
+      if (payment.status === 'refunded') {
+        return renderCombinedRefundPayment(payment, index);
       } else {
-        return renderPayment(payment);
+        return renderPayment(payment, index);
       }
     });
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
-      <View style={styles.header}>
-        <ThemedText style={styles.title}>Finances</ThemedText>
-        <ThemedText style={styles.subtitle}>Historique de vos transactions</ThemedText>
-      </View>
-      
-      {renderFilters()}
-      
-      <ScrollView style={styles.paymentsContainer} showsVerticalScrollIndicator={false}>
-        {renderPayments()}
-      </ScrollView>
-      
-      <View style={styles.navbar}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/finances')}>
-          <Ionicons name="wallet-outline" size={24} color="#0F2057" />
-          <ThemedText style={[styles.navText, styles.activeNavText]}>Finances</ThemedText>
-        </TouchableOpacity>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <ThemedView style={styles.container}>
+        <Stack.Screen options={{ 
+          headerShown: false,
+          contentStyle: { backgroundColor: COLORS.background }
+        }} />
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)')}>
-          <Ionicons name="search-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Recherche</ThemedText>
-        </TouchableOpacity>
+        <View style={styles.header}>
+          <ThemedText style={styles.title}>Finances</ThemedText>
+          <ThemedText style={styles.subtitle}>Your transaction history</ThemedText>
+        </View>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/appointment')}>
-          <Ionicons name="calendar-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Rendez-vous</ThemedText>
-        </TouchableOpacity>
+        {renderFilters()}
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/profile')}>
-          <Ionicons name="person-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Profil</ThemedText>
-        </TouchableOpacity>
-      </View>
-    </ThemedView>
+        <ScrollView 
+          style={styles.paymentsContainer} 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {renderPayments()}
+        </ScrollView>
+        
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
@@ -386,88 +641,135 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'ios' ? 8 : 16,
+  },
+  headerBackButton: {
+    marginBottom: 8,
+  },
+  backButton: {
+    padding: 4,
   },
   header: {
     marginBottom: 20,
+    paddingHorizontal: 4,
+    marginTop: 8,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#0F2057',
-    marginBottom: 10,
+    fontSize: width < 375 ? 28 : 32, // Responsive font size - réduit de 36 à 28-32
+    fontWeight: '800',
+    color: COLORS.primary,
+    marginBottom: 6,
+    letterSpacing: -0.5,
+    lineHeight: width < 375 ? 34 : 38, // Add line height for better text display
   },
   subtitle: {
-    fontSize: 18,
-    color: '#6C757D',
-    marginBottom: 5,
+    fontSize: 16,
+    color: COLORS.text.secondary,
+    marginBottom: 4,
+    fontWeight: '400',
+    lineHeight: 22,
   },
   filtersContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
-    backgroundColor: '#F6F9FF',
-    borderRadius: 12,
-    padding: 6,
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
+    position: 'relative',
   },
   activeFilter: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: 'rgba(85, 134, 204, 0.1)',
   },
   filterText: {
-    fontSize: 14,
-    color: '#6C757D',
+    fontSize: 15,
+    color: COLORS.text.secondary,
+    fontWeight: '500',
   },
   activeFilterText: {
-    color: '#0F2057',
-    fontWeight: 'bold',
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  filterActiveIndicator: {
+    position: 'absolute',
+    bottom: 6,
+    width: 20,
+    height: 3,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 2,
   },
   paymentsContainer: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 20,
+  },
   paymentCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  paymentCardInner: {
+    padding: 18,
+    borderRadius: 16,
   },
   refundCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
     borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: COLORS.secondary,
   },
   paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   refundHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   refundHeaderLeft: {
     flexDirection: 'row',
@@ -476,151 +778,261 @@ const styles = StyleSheet.create({
   refundTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: COLORS.secondary,
     marginLeft: 6,
   },
   paymentDoctor: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.primary,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
   statusIcon: {
-    marginRight: 4,
+    marginRight: 5,
   },
   statusText: {
-    color: 'white',
+    color: COLORS.text.white,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   paymentDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   paymentDate: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.text.secondary,
+    marginLeft: 4,
   },
   methodContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(245, 247, 252, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
   methodText: {
-    fontSize: 14,
-    color: '#6C757D',
-    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 5,
   },
   refundDetailsContainer: {
     backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 14,
   },
   refundDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   refundDetailLabel: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.text.secondary,
   },
   refundDetailValue: {
     fontSize: 14,
-    color: '#0F2057',
+    color: COLORS.primary,
+    fontWeight: '500',
   },
   penaltyLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  infoButton: {
+    marginLeft: 5,
+  },
   penaltyValue: {
     fontSize: 14,
-    color: '#DC3545',
+    color: COLORS.error,
+    fontWeight: '500',
   },
   refundTotalRow: {
-    marginTop: 4,
-    paddingTop: 8,
+    marginTop: 6,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: COLORS.border,
     marginBottom: 0,
   },
   refundTotalLabel: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#0F2057',
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   refundTotalValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.secondary,
   },
   paymentFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 5,
-    paddingTop: 10,
+    marginTop: 6,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: COLORS.border,
+  },
+  transactionIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   transactionId: {
     fontSize: 12,
-    color: '#6C757D',
+    color: COLORS.text.light,
+    marginLeft: 4,
   },
   paymentAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.primary,
   },
   refundAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: COLORS.secondary,
+  },
+  loaderContainer: {
+    flex: 1,
+    marginTop: 60,
+    alignItems: 'center',
   },
   loader: {
+    marginBottom: 10,
+  },
+  loaderText: {
+    fontSize: 16,
+    color: COLORS.text.secondary,
+  },
+  errorContainer: {
     marginTop: 50,
+    alignItems: 'center',
   },
   errorText: {
-    marginTop: 30,
+    marginTop: 10,
     fontSize: 16,
-    color: '#DC3545',
+    color: COLORS.error,
     textAlign: 'center',
   },
   emptyContainer: {
-    marginTop: 50,
+    marginTop: 60,
     alignItems: 'center',
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(85, 134, 204, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyText: {
     fontSize: 16,
-    color: '#6C757D',
-    marginTop: 10,
+    color: COLORS.text.secondary,
   },
-  navbar: {
+  monthlySummaryContainer: {
+    paddingTop: 20,
+  },
+  monthlyHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  monthlyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginLeft: 8,
+  },
+  summaryCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  summaryRow: {
+    marginBottom: 16,
+  },
+  summaryItem: {
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+    marginBottom: 4,
+  },
+  summaryAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 2,
+  },
+  refundSummaryAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+    marginBottom: 2,
+  },
+  summaryCount: {
+    fontSize: 12,
+    color: COLORS.text.light,
+  },
+  totalRow: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-    paddingTop: 10,
+    borderTopColor: COLORS.border,
+    paddingTop: 16,
+    marginBottom: 0,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: 6,
+  },
+  totalAmount: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  emptyMonthly: {
+    alignItems: 'center',
+    marginTop: 30,
+  },
+  emptyMonthlyText: {
+    fontSize: 16,
+    color: COLORS.text.light,
     marginTop: 10,
   },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navText: {
-    fontSize: 12,
-    marginTop: 5,
-    color: '#6C757D',
-  },
-  activeNavText: {
-    color: '#0F2057',
+  penaltySummaryAmount: {
+    fontSize: 24,
     fontWeight: 'bold',
+    color: COLORS.warning,
+    marginBottom: 2,
   },
-}); 
+});
