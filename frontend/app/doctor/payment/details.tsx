@@ -3,13 +3,28 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Aler
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { doctorAPI } from '@/services/api';
 
-// Type pour le paiement
+// App theme colors
+const COLORS = {
+  darkNavy: '#090F47',  // Dark navy for headings and important information
+  babyBlue: '#7AA7CC',  // Baby blue for secondary text and accents
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  border: '#E5E7EB',
+  error: '#EF4444',
+  pending: '#FFA500',
+  refunded: '#FF9999',  // Light pastel red for refunds
+  failed: '#DC3545',
+  completed: '#7AA7CC',
+  textLight: '#8F9BB3',
+};
+
+// Payment type
 type Payment = {
   _id: string;
   appointment: {
@@ -49,24 +64,24 @@ export default function PaymentDetailsScreen() {
   const [payment, setPayment] = useState<Payment | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // Charger les détails du paiement
+  // Load payment details
   useEffect(() => {
     const fetchPaymentDetails = async () => {
       try {
         setLoading(true);
         
         if (!paymentId) {
-          Alert.alert('Erreur', 'ID de paiement manquant');
+          Alert.alert('Error', 'Missing payment ID');
           router.back();
           return;
         }
         
-        // Récupérer d'abord tous les paiements du médecin
+        // First get all doctor's payments
         const payments = await doctorAPI.getPayments();
         const foundPayment = payments.find((p: Payment) => p._id === paymentId);
         
         if (!foundPayment) {
-          setError('Paiement non trouvé');
+          setError('Payment not found');
           setLoading(false);
           return;
         }
@@ -74,8 +89,8 @@ export default function PaymentDetailsScreen() {
         setPayment(foundPayment);
         setLoading(false);
       } catch (error) {
-        console.error('Erreur lors du chargement du paiement:', error);
-        setError('Impossible de charger les détails du paiement');
+        console.error('Error loading payment:', error);
+        setError('Unable to load payment details');
         setLoading(false);
       }
     };
@@ -83,27 +98,27 @@ export default function PaymentDetailsScreen() {
     fetchPaymentDetails();
   }, [paymentId]);
   
-  // Formater la date
+  // Format date
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return format(date, 'dd MMMM yyyy à HH:mm', { locale: fr });
+      return format(date, 'MMMM dd, yyyy • h:mm a', { locale: enUS });
     } catch (error) {
       return dateString;
     }
   };
   
-  // Obtenir le nom complet du patient
+  // Get patient's full name
   const getPatientName = (patient: any) => {
-    if (!patient) return 'Patient inconnu';
+    if (!patient) return 'Unknown patient';
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
   };
   
-  // Rendu du moyen de paiement
+  // Render payment method
   const getPaymentMethodInfo = (method: string) => {
     switch (method) {
       case 'card':
-        return { icon: 'card-outline', label: 'Carte bancaire' };
+        return { icon: 'card-outline', label: 'Credit Card' };
       case 'paypal':
         return { icon: 'logo-paypal', label: 'PayPal' };
       case 'apple_pay':
@@ -111,31 +126,31 @@ export default function PaymentDetailsScreen() {
       case 'google_pay':
         return { icon: 'logo-google', label: 'Google Pay' };
       default:
-        return { icon: 'card-outline', label: 'Moyen inconnu' };
+        return { icon: 'card-outline', label: 'Unknown method' };
     }
   };
   
-  // Rendu du statut de paiement
+  // Render payment status
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'pending':
-        return { color: '#FFA500', label: 'En attente' };
+        return { color: COLORS.pending, label: 'Pending' };
       case 'completed':
-        return { color: '#5586CC', label: 'Complété' };
+        return { color: COLORS.completed, label: 'Completed' };
       case 'refunded':
-        return { color: '#4CAF50', label: 'Remboursé' };
+        return { color: COLORS.refunded, label: 'Refunded' };
       case 'failed':
-        return { color: '#DC3545', label: 'Échoué' };
+        return { color: COLORS.failed, label: 'Failed' };
       default:
-        return { color: '#6C757D', label: 'Inconnu' };
+        return { color: COLORS.textLight, label: 'Unknown' };
     }
   };
   
   if (loading) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#5586CC" />
-        <ThemedText style={styles.loadingText}>Chargement des détails...</ThemedText>
+        <ActivityIndicator size="large" color={COLORS.babyBlue} />
+        <ThemedText style={styles.loadingText}>Loading payment details...</ThemedText>
       </ThemedView>
     );
   }
@@ -143,10 +158,10 @@ export default function PaymentDetailsScreen() {
   if (error || !payment) {
     return (
       <ThemedView style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={50} color="#DC3545" />
-        <ThemedText style={styles.errorText}>{error || 'Paiement non trouvé'}</ThemedText>
+        <Ionicons name="alert-circle-outline" size={60} color={COLORS.error} />
+        <ThemedText style={styles.errorText}>{error || 'Payment not found'}</ThemedText>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ThemedText style={styles.backButtonText}>Retour</ThemedText>
+          <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
         </TouchableOpacity>
       </ThemedView>
     );
@@ -159,23 +174,24 @@ export default function PaymentDetailsScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: 'Détails du paiement',
+          title: 'Payment Details',
+          headerTitleStyle: {
+            color: COLORS.darkNavy,
+            fontWeight: 'bold',
+          },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#0F2057" />
+            <TouchableOpacity onPress={() => router.back()} style={styles.backIcon}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.babyBlue} />
             </TouchableOpacity>
           )
         }} 
       />
       
-      <ScrollView style={styles.content}>
-        <View style={styles.card}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.card, styles.amountCard]}>
           <View style={styles.amountContainer}>
-            <ThemedText style={styles.amountLabel}>Montant</ThemedText>
-            <ThemedText style={styles.amountValue}>{payment.amount} €</ThemedText>
-          </View>
-          
-          <View style={styles.statusContainer}>
+            <ThemedText style={styles.amountLabel}>Amount</ThemedText>
+            <ThemedText style={styles.amountValue}>${payment.amount.toFixed(2)}</ThemedText>
             <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
               <ThemedText style={styles.statusText}>{statusInfo.label}</ThemedText>
             </View>
@@ -183,53 +199,82 @@ export default function PaymentDetailsScreen() {
         </View>
         
         <View style={styles.card}>
-          <ThemedText style={styles.sectionTitle}>Détails du rendez-vous</ThemedText>
+          <ThemedText style={styles.sectionTitle}>Appointment Details</ThemedText>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Patient</ThemedText>
-            <ThemedText style={styles.detailValue}>
-              {getPatientName(payment.patient || payment.appointment?.patient)}
-            </ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name="person" size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Patient</ThemedText>
+              <ThemedText style={styles.detailValue}>
+                {getPatientName(payment.patient || payment.appointment?.patient)}
+              </ThemedText>
+            </View>
           </View>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Date</ThemedText>
-            <ThemedText style={styles.detailValue}>
-              {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
-            </ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name="calendar" size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Date</ThemedText>
+              <ThemedText style={styles.detailValue}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
+            </View>
           </View>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Type</ThemedText>
-            <ThemedText style={styles.detailValue}>
-              {payment.appointment?.caseDetails || 'Consultation standard'}
-            </ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name="medical" size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Service Type</ThemedText>
+              <ThemedText style={styles.detailValue}>
+                {payment.appointment?.caseDetails || 'Standard Consultation'}
+              </ThemedText>
+            </View>
           </View>
         </View>
         
         <View style={styles.card}>
-          <ThemedText style={styles.sectionTitle}>Informations de paiement</ThemedText>
+          <ThemedText style={styles.sectionTitle}>Payment Information</ThemedText>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Méthode</ThemedText>
-            <View style={styles.methodContainer}>
-              <Ionicons name={methodInfo.icon as any} size={16} color="#6C757D" />
-              <ThemedText style={styles.methodText}>{methodInfo.label}</ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name={methodInfo.icon as any} size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Payment Method</ThemedText>
+              <ThemedText style={styles.detailValue}>{methodInfo.label}</ThemedText>
             </View>
           </View>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>ID Transaction</ThemedText>
-            <ThemedText style={styles.detailValue}>{payment.transactionId}</ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name="key" size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Transaction ID</ThemedText>
+              <ThemedText style={styles.detailValue}>{payment.transactionId}</ThemedText>
+            </View>
           </View>
           
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Date de paiement</ThemedText>
-            <ThemedText style={styles.detailValue}>
-              {formatDate(payment.paymentDate || payment.createdAt)}
-            </ThemedText>
+          <View style={styles.detailItem}>
+            <View style={styles.detailIconContainer}>
+              <Ionicons name="time" size={18} color={COLORS.babyBlue} />
+            </View>
+            <View style={styles.detailContent}>
+              <ThemedText style={styles.detailLabel}>Payment Date</ThemedText>
+              <ThemedText style={styles.detailValue}>
+                {formatDate(payment.paymentDate || payment.createdAt)}
+              </ThemedText>
+            </View>
           </View>
         </View>
+        
+        <View style={styles.scrollPadding} />
       </ScrollView>
     </ThemedView>
   );
@@ -238,7 +283,10 @@ export default function PaymentDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.background,
+  },
+  backIcon: {
+    paddingHorizontal: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -248,7 +296,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#6C757D',
+    color: COLORS.textLight,
   },
   errorContainer: {
     flex: 1,
@@ -257,53 +305,57 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
-    color: '#DC3545',
+    color: COLORS.error,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#5586CC',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    backgroundColor: COLORS.babyBlue,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
   },
   backButtonText: {
     color: 'white',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 16,
   },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
+    padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: COLORS.darkNavy,
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 2,
+  },
+  amountCard: {
+    padding: 14,
   },
   amountContainer: {
     alignItems: 'center',
-    marginBottom: 16,
   },
   amountLabel: {
-    fontSize: 16,
-    color: '#6C757D',
-    marginBottom: 8,
+    fontSize: 14,
+    color: COLORS.babyBlue,
+    marginBottom: 4,
   },
   amountValue: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#0F2057',
-  },
-  statusContainer: {
-    alignItems: 'center',
+    color: COLORS.darkNavy,
+    marginBottom: 8,
+    lineHeight: 28,
   },
   statusBadge: {
     paddingHorizontal: 16,
@@ -312,38 +364,42 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.darkNavy,
     marginBottom: 16,
   },
-  detailRow: {
+  detailItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  detailIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(122, 167, 204, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  detailContent: {
+    flex: 1,
+    justifyContent: 'center',
   },
   detailLabel: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.textLight,
+    marginBottom: 4,
   },
   detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#0F2057',
-    flex: 1,
-    textAlign: 'right',
+    fontSize: 16,
+    color: COLORS.darkNavy,
   },
-  methodContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  methodText: {
-    fontSize: 14,
-    color: '#0F2057',
-    marginLeft: 4,
-    fontWeight: '500',
+  scrollPadding: {
+    height: 80, // Add extra padding at the bottom
   },
 }); 
