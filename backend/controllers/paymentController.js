@@ -80,10 +80,16 @@ exports.getPatientPayments = async (req, res) => {
     const payments = await Payment.find({ patient: patient._id })
       .populate({
         path: 'appointment',
-        populate: {
-          path: 'doctor',
-          select: 'first_name last_name full_name'
-        }
+        populate: [
+          {
+            path: 'doctor',
+            select: 'first_name last_name full_name'
+          },
+          {
+            path: 'availability',
+            select: 'date startTime endTime'
+          }
+        ]
       })
       .sort({ createdAt: -1 });
     
@@ -113,10 +119,16 @@ exports.getDoctorPayments = async (req, res) => {
     const payments = await Payment.find({ appointment: { $in: appointmentIds } })
       .populate({
         path: 'appointment',
-        populate: {
-          path: 'patient',
-          select: 'first_name last_name'
-        }
+        populate: [
+          {
+            path: 'patient',
+            select: 'first_name last_name'
+          },
+          {
+            path: 'availability',
+            select: 'date startTime endTime'
+          }
+        ]
       })
       .populate('patient', 'first_name last_name')
       .sort({ createdAt: -1 });
@@ -136,10 +148,16 @@ exports.getPaymentById = async (req, res) => {
     const payment = await Payment.findById(req.params.id)
       .populate({
         path: 'appointment',
-        populate: {
-          path: 'doctor',
-          select: 'first_name last_name full_name'
-        }
+        populate: [
+          {
+            path: 'doctor',
+            select: 'first_name last_name full_name'
+          },
+          {
+            path: 'availability',
+            select: 'date startTime endTime'
+          }
+        ]
       })
       .populate('patient', 'first_name last_name');
     

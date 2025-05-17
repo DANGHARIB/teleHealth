@@ -102,9 +102,47 @@ export default function PaymentDetailsScreen() {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
+      // Vérifier si la date est valide
+      if (isNaN(date.getTime())) {
+        return 'Date invalide';
+      }
+      // Format US: Month Day, Year • Hour:Minute AM/PM
       return format(date, 'MMMM dd, yyyy • h:mm a', { locale: enUS });
     } catch (error) {
-      return dateString;
+      console.log('Error formatting date:', error);
+      return 'Date invalide';
+    }
+  };
+  
+  // Fonction pour créer une date à partir de date + time séparément
+  const combineDateTime = (dateStr?: string, timeStr?: string): string => {
+    if (!dateStr) return '';
+    
+    // Si pas d'heure fournie, retourner juste la date
+    if (!timeStr) return dateStr;
+    
+    try {
+      // Nettoyer le format de la date
+      // Supprimer le 'T' et tout ce qui suit s'il existe déjà dans la date
+      let cleanDate = dateStr;
+      if (dateStr.includes('T')) {
+        cleanDate = dateStr.split('T')[0];
+      }
+      
+      // Nettoyer le format de l'heure, supprimer le 'Z' et tout ce qui suit
+      let cleanTime = timeStr;
+      if (timeStr.includes('Z')) {
+        cleanTime = timeStr.split('Z')[0];
+      }
+      if (timeStr.includes('.')) {
+        cleanTime = timeStr.split('.')[0];
+      }
+      
+      // Construire une date ISO standard
+      return `${cleanDate}T${cleanTime}`;
+    } catch (e) {
+      console.error('Error combining date and time:', e);
+      return dateStr;
     }
   };
   
@@ -220,7 +258,9 @@ export default function PaymentDetailsScreen() {
             <View style={styles.detailContent}>
               <ThemedText style={styles.detailLabel}>Date</ThemedText>
               <ThemedText style={styles.detailValue}>
-                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+                {payment.appointment?.availability ? 
+                  formatDate(combineDateTime(payment.appointment.availability.date, payment.appointment.availability.startTime)) : 
+                  formatDate(payment.createdAt)}
               </ThemedText>
             </View>
           </View>
