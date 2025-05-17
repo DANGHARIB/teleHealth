@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -17,23 +17,32 @@ const VerifyScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [timer, setTimer] = useState(59);
+  const [timerActive, setTimerActive] = useState(true);
   const inputRefs = useRef([]);
 
   useEffect(() => {
     if (inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
-    const interval = setInterval(() => {
-      setTimer(prevTimer => {
-        if (prevTimer <= 0) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prevTimer - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    let interval;
+    if (timerActive && timer > 0) {
+      interval = setInterval(() => {
+        setTimer(prevTimer => {
+          if (prevTimer <= 1) {
+            setTimerActive(false);
+            clearInterval(interval);
+            return 0;
+          }
+          return prevTimer - 1;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timer, timerActive]);
 
   const handleOtpChange = (index, value) => {
     if (value && !/^\d+$/.test(value)) return;
@@ -110,15 +119,36 @@ const VerifyScreen = () => {
 
   const handleResendCode = async () => {
     setIsLoading(true);
+    setError('');
+    
     try {
-      console.log(`Tentative de renvoi de code OTP pour l'email: ${email}`);
-      await axios.post(`${API_URL}/auth/resend-otp`, { email, role: 'Patient' });
+      console.log(`Attempting to resend OTP code for email: ${email}`);
+      const response = await axios.post(`${API_URL}/auth/resend-otp`, { 
+        email, 
+        role: 'Patient' 
+      });
+      
+      console.log('OTP resend response:', JSON.stringify(response.data));
+      
+      // Reset timer and activate it
       setTimer(59);
-      setError('');
-      console.log('Code OTP renvoyé avec succès');
+      setTimerActive(true);
+      
+      // Clear OTP fields
+      setOtpCode(['', '', '', '']);
+      
+      // Focus on first input
+      if (inputRefs.current[0]) {
+        inputRefs.current[0].focus();
+      }
+      
+      Alert.alert("Success", "A new verification code has been sent to your email address.");
     } catch (error) {
-      console.error('Erreur lors du renvoi du code:', error.message);
-      setError(error.response?.data?.message || 'Failed to resend code');
+      console.error('Error resending code:', error.message);
+      if (error.response) {
+        console.error('Error details:', JSON.stringify(error.response.data));
+      }
+      setError(error.response?.data?.message || 'Failed to resend code. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -166,11 +196,11 @@ const VerifyScreen = () => {
         <TouchableOpacity 
           style={styles.resendButton}
           onPress={handleResendCode}
-          disabled={timer > 0 || isLoading}
+          disabled={timerActive || isLoading}
         >
           <Text style={[
             styles.resendText,
-            (timer > 0 || isLoading) && styles.disabledText
+            (timerActive || isLoading) && styles.disabledText
           ]}>
             Resend Code
           </Text>

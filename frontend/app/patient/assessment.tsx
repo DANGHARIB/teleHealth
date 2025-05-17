@@ -40,32 +40,42 @@ const AssessmentScreen = () => {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         setError("User not authenticated. Please log in again.");
-        // Optionnel: rediriger vers login si pas de token
-        // router.replace('/patient/auth/login'); 
         setLoading(false);
         return;
       }
 
-      // Remplacer par votre appel API réel pour fetchRandomQuestions
-      // Assurez-vous d'envoyer le token dans les headers
+      console.log("Fetching random assessment questions...");
       const response = await axios.get(`${API_URL}/questions/random/assessment`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
 
+      console.log("Assessment API response:", JSON.stringify(response.data, null, 2));
+
       if (response.data.hasAnswered) {
+        console.log("User has already answered assessment questions");
         router.replace('/(tabs)/profile');
         return;
       }
       
       if (response.data.questions && response.data.questions.length > 0) {
+        console.log(`Received ${response.data.questions.length} questions`);
+        console.log("First question sample:", JSON.stringify(response.data.questions[0], null, 2));
+        
+        // Log all question IDs to verify they're formatted correctly
+        const questionIds = response.data.questions.map((q: Question) => q._id);
+        console.log("Question IDs:", questionIds);
+        
         setQuestions(response.data.questions);
       } else {
         setError("No assessment questions found. Please contact support.");
       }
     } catch (err: any) {
       console.error("Error loading questions:", err);
+      if (err.response) {
+        console.error("API Error response:", JSON.stringify(err.response.data, null, 2));
+      }
       setError(err.response?.data?.message || "Error loading questions. Please try again.");
     } finally {
       setLoading(false);
@@ -83,20 +93,68 @@ const AssessmentScreen = () => {
         return { success: false, message: "Missing token" };
       }
 
-      console.log("Submitting actual responses to:", `${API_URL}/questions/submit-responses`);
-      const response = await axios.post(`${API_URL}/questions/submit-responses`, 
-        { responses: finalResponses },
+      // Debug - Log the exact responses being sent
+      console.log("---------------------------");
+      console.log("ASSESSMENT SUBMISSION DEBUG");
+      console.log("Endpoint:", `${API_URL}/questions/submit-responses`);
+      console.log("Authorization token available:", !!token);
+      console.log("Number of responses:", finalResponses.length);
+      
+      // Validate responses format before sending
+      const validResponses = finalResponses.filter(resp => {
+        const isValid = resp.questionId && (typeof resp.response === 'string' || Array.isArray(resp.response));
+        if (!isValid) {
+          console.error("Invalid response item:", resp);
+        }
+        return isValid;
+      });
+      
+      console.log("Valid responses count:", validResponses.length);
+      console.log("Response data:", JSON.stringify({ responses: validResponses }, null, 2));
+      
+      // Make sure we're sending the right structure
+      // The backend expects: { responses: [{ questionId, response }] }
+      const response = await axios.post(
+        `${API_URL}/questions/submit-responses`, 
+        { responses: validResponses },
         {
           headers: {
-            Authorization: `Bearer ${token}`
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           }
         }
       );
       
-      console.log("Responses submitted successfully:", response.data);
+      console.log("Response status:", response.status);
+      console.log("Response data:", JSON.stringify(response.data, null, 2));
+      console.log("---------------------------");
+      
+      // Fetch the updated profile 
+      try {
+        const profileResponse = await axios.get(`${API_URL}/patients/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        console.log("Updated profile after assessment:", profileResponse.data);
+        
+        // Update the user info in AsyncStorage
+        if (profileResponse.data) {
+          await AsyncStorage.setItem('userInfo', JSON.stringify(profileResponse.data));
+        }
+      } catch (err) {
+        console.error("Error fetching updated profile:", err);
+      }
+      
       return { success: true };
     } catch (error: any) {
-      console.error("Error submitting responses:", error);
+      console.error("ERROR SUBMITTING RESPONSES:");
+      console.error("Error object:", error);
+      if (error.response) {
+        console.error("Status:", error.response.status);
+        console.error("Response data:", JSON.stringify(error.response.data, null, 2));
+      }
       setError(error.response?.data?.message || "Error submitting your responses. Please try again.");
       return { success: false, message: error.response?.data?.message || "Unknown error" };
     } finally {
@@ -122,10 +180,14 @@ const AssessmentScreen = () => {
       responseValue = '';
     }
 
+    // Ensure we're using the correct property for the question ID
     const newResponse: PatientResponseItem = {
       questionId: currentQuestion._id,
       response: responseValue,
     };
+    
+    console.log(`Adding response for question ${currentQuestion._id}: ${JSON.stringify(responseValue)}`);
+    
     const updatedResponses = [...responses, newResponse];
     setResponses(updatedResponses);
 

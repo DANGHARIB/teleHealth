@@ -346,6 +346,16 @@ export const patientAPI = {
       throw error.response?.data || error.message;
     }
   },
+
+  // Récupérer les médecins recommandés
+  getRecommendedDoctors: async () => {
+    try {
+      const response = await api.get('/patients/recommended-doctors');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 };
 
 // Test de connexion API

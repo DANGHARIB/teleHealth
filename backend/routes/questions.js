@@ -12,18 +12,21 @@ const {
 } = require('../controllers/questionController');
 const { protect, admin, patient } = require('../middlewares/authMiddleware');
 
-// Routes publiques
+// Public routes
 router.get('/', getQuestions);
-router.get('/:id', getQuestionById);
 
-// Route pour obtenir des questions aléatoires pour les patients (première connexion)
+// Route to get random questions for patients (first-time login)
+// IMPORTANT: This specific route needs to be placed BEFORE the /:id route
 router.get('/random/assessment', protect, patient, getRandomQuestions);
 
-// Routes protégées pour les patients
+// Other public routes
+router.get('/:id', getQuestionById);
+
+// Protected routes for patients
 router.post('/submit-responses', protect, patient, submitResponses);
 router.get('/user-responses', protect, getUserResponses);
 
-// Routes protégées pour les admins
+// Admin routes
 router.post('/', protect, admin, createQuestion);
 router.put('/:id', protect, admin, updateQuestion);
 router.delete('/:id', protect, admin, deleteQuestion);

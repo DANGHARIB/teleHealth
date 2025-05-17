@@ -1,6 +1,7 @@
 const Question = require('../models/Question');
 const PatientResponse = require('../models/PatientResponse');
 const User = require('../models/User');
+const Patient = require('../models/Patient');
 
 // @desc    Obtenir toutes les questions
 // @route   GET /api/questions
@@ -26,34 +27,35 @@ exports.getQuestions = async (req, res) => {
   }
 };
 
-// @desc    Obtenir 6 questions aléatoires
-// @route   GET /api/questions/random
+// @desc    Get 6 random questions for patient assessment
+// @route   GET /api/questions/random/assessment
 // @access  Private/Patient
 exports.getRandomQuestions = async (req, res) => {
   try {
-    // Vérifier d'abord si l'utilisateur a déjà répondu à des questions
+    // First check if the user has already completed the assessment
+    // Check both PatientResponse and Patient.has_taken_assessment
     const existingResponses = await PatientResponse.find({ user: req.user._id });
+    const patient = await Patient.findOne({ user: req.user._id });
     
-    if (existingResponses.length > 0) {
-      // L'utilisateur a déjà répondu, on peut retourner un statut spécial
-      // ou simplement un tableau vide, ou rediriger.
-      // Pour l'instant, retournons un message indiquant qu'il a déjà répondu.
-      // Le frontend gérera la redirection vers le profil.
+    const hasCompletedAssessment = 
+      (existingResponses.length > 0) || 
+      (patient && patient.has_taken_assessment) ||
+      (req.user.hasCompletedAssessment);
+    
+    if (hasCompletedAssessment) {
+      console.log(`User ${req.user._id} has already completed assessment`);
       return res.json({ hasAnswered: true, questions: [] });
     }
 
-    // Si aucune réponse, récupérer 6 questions aléatoires
-    // On pourrait vouloir filtrer par targetGroup si pertinent pour le patient,
-    // mais pour l'instant, prenons parmi toutes les questions.
+    // Get 6 random questions if no responses
+    console.log(`Fetching random questions for user ${req.user._id}`);
     const questions = await Question.aggregate([
       { $sample: { size: 6 } }
     ]);
     
-    // On s'assure de peupler les informations de spécialisation si nécessaire
-    // L'agrégation ne peuple pas automatiquement, donc il faut le faire manuellement si besoin
-    // Pour cet exemple, $sample est suffisant, on peut ajouter $lookup si on veut les détails de la spécialisation
-    // await Question.populate(questions, { path: 'specialization', select: 'name' });
-
+    // Log the number of questions returned
+    console.log(`Returning ${questions.length} random questions`);
+    
     res.json({ hasAnswered: false, questions });
   } catch (error) {
     console.error('Error fetching random questions:', error);
@@ -163,37 +165,88 @@ exports.deleteQuestion = async (req, res) => {
 // @access  Private/Patient
 exports.submitResponses = async (req, res) => {
   try {
+    console.log('=== SUBMIT RESPONSES START ===');
+    console.log('User ID:', req.user._id);
+    console.log('Request body:', JSON.stringify(req.body));
+    
     const { responses } = req.body;
     
     if (!responses || !Array.isArray(responses) || responses.length === 0) {
-      return res.status(400).json({ message: 'Veuillez fournir des réponses valides' });
+      console.error('Invalid responses format:', responses);
+      return res.status(400).json({ message: 'Please provide valid responses' });
     }
     
+    console.log(`Processing ${responses.length} responses...`);
     const savedResponses = [];
     
     for (const item of responses) {
       const { questionId, response } = item;
       
-      // S'assurer que la réponse est une chaîne
-      const responseString = Array.isArray(response) ? response.join(', ') : response;
+      if (!questionId) {
+        console.error('Missing questionId in response item:', item);
+        continue; // Skip this invalid item
+      }
       
-      const savedResponse = await PatientResponse.create({
-        user: req.user._id,
-        question: questionId,
-        response: responseString // Utiliser la chaîne ici
-      });
+      console.log(`Processing response for question ${questionId}: ${JSON.stringify(response)}`);
       
-      savedResponses.push(savedResponse);
+      // Ensure the response is a string
+      const responseString = Array.isArray(response) ? response.join(', ') : response.toString();
+      
+      try {
+        // Create a new PatientResponse document
+        const patientResponseData = {
+          user: req.user._id,
+          question: questionId,
+          response: responseString
+        };
+        
+        console.log("Creating PatientResponse with data:", patientResponseData);
+        
+        const savedResponse = await PatientResponse.create(patientResponseData);
+        
+        console.log(`Saved response ID: ${savedResponse._id}`);
+        savedResponses.push(savedResponse);
+      } catch (error) {
+        console.error(`Error saving response for question ${questionId}:`, error.message);
+        
+        // Try to provide more detailed error information
+        if (error.name === 'ValidationError') {
+          for (const field in error.errors) {
+            console.error(`Validation error in field '${field}':`, error.errors[field].message);
+          }
+        } else if (error.name === 'CastError') {
+          console.error(`Cast error: Could not cast ${error.path}=${error.value} to type ${error.kind}`);
+        }
+        
+        // Continue processing other responses even if one fails
+      }
     }
+    
+    console.log(`Successfully saved ${savedResponses.length} out of ${responses.length} responses`);
 
-    // Mettre à jour le statut de l'évaluation de l'utilisateur
+    // Update assessment status in User model
     await User.findByIdAndUpdate(req.user._id, { hasCompletedAssessment: true });
+    console.log('User hasCompletedAssessment updated to true');
+    
+    // Update has_taken_assessment in Patient model
+    const patient = await Patient.findOne({ user: req.user._id });
+    if (patient) {
+      patient.has_taken_assessment = true;
+      await patient.save();
+      console.log('Patient has_taken_assessment updated to true');
+    } else {
+      console.log('Patient not found for user ID:', req.user._id);
+    }
+    
+    console.log('=== SUBMIT RESPONSES END ===');
     
     res.status(201).json({
-      message: 'Réponses soumises avec succès',
+      message: 'Responses submitted successfully',
+      count: savedResponses.length,
       responses: savedResponses
     });
   } catch (error) {
+    console.error('Error in submitResponses:', error);
     res.status(500).json({ message: error.message });
   }
 };

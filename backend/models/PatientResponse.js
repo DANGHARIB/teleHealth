@@ -23,6 +23,12 @@ const patientResponseSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Add a debug hook to log when a new PatientResponse is being created
+patientResponseSchema.pre('save', function(next) {
+  console.log(`Saving PatientResponse - User: ${this.user}, Question: ${this.question}, Response: ${this.response}`);
+  next();
+});
+
 const PatientResponse = mongoose.model('PatientResponse', patientResponseSchema);
 
 module.exports = PatientResponse; 

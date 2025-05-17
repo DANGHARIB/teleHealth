@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet, ActivityIndicator, TouchableOpacity, FlatList } from 'react-native';
+import { Platform, StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { HelloWave } from '@/components/HelloWave';
@@ -22,8 +22,11 @@ type Doctor = {
 
 export default function PatientHomeScreen() {
   const [savedDoctors, setSavedDoctors] = useState<Doctor[]>([]);
+  const [recommendedDoctors, setRecommendedDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recommendedLoading, setRecommendedLoading] = useState(true);
   const [error, setError] = useState('');
+  const [recommendedError, setRecommendedError] = useState('');
 
   const fetchSavedDoctors = useCallback(async () => {
     try {
@@ -38,19 +41,34 @@ export default function PatientHomeScreen() {
     }
   }, []);
 
+  const fetchRecommendedDoctors = useCallback(async () => {
+    try {
+      setRecommendedLoading(true);
+      const data = await patientAPI.getRecommendedDoctors();
+      setRecommendedDoctors(data);
+      setRecommendedLoading(false);
+    } catch (err) {
+      console.error('Erreur lors du chargement des médecins recommandés:', err);
+      setRecommendedError('Impossible de charger les recommandations');
+      setRecommendedLoading(false);
+    }
+  }, []);
+
   // Charger les données initiales
   useEffect(() => {
     fetchSavedDoctors();
-  }, [fetchSavedDoctors]);
+    fetchRecommendedDoctors();
+  }, [fetchSavedDoctors, fetchRecommendedDoctors]);
 
   // Rafraîchir les données à chaque fois que l'onglet redevient actif
   useFocusEffect(
     useCallback(() => {
       fetchSavedDoctors();
+      fetchRecommendedDoctors();
       return () => {
         // Nettoyage optionnel
       };
-    }, [fetchSavedDoctors])
+    }, [fetchSavedDoctors, fetchRecommendedDoctors])
   );
 
   const getDoctorName = (doctor: Doctor) => {
@@ -109,8 +127,35 @@ export default function PatientHomeScreen() {
         <HelloWave />
       </ThemedView>
 
-      <ThemedView style={styles.savedDoctorsContainer}>
-        <ThemedText type="subtitle" style={styles.savedDoctorsTitle}>
+      {/* Médecins recommandés */}
+      <ThemedView style={styles.sectionContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Recommandés pour vous
+        </ThemedText>
+        
+        {recommendedLoading ? (
+          <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
+        ) : recommendedError ? (
+          <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
+        ) : recommendedDoctors.length === 0 ? (
+          <ThemedText style={styles.noResultsText}>
+            Complétez votre évaluation pour obtenir des recommandations personnalisées.
+          </ThemedText>
+        ) : (
+          <FlatList
+            data={recommendedDoctors}
+            renderItem={renderDoctorItem}
+            keyExtractor={(item) => `recommended-${item._id}`}
+            horizontal={false}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+          />
+        )}
+      </ThemedView>
+
+      {/* Médecins favoris */}
+      <ThemedView style={styles.sectionContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
           Vos médecins favoris
         </ThemedText>
         
@@ -119,14 +164,14 @@ export default function PatientHomeScreen() {
         ) : error ? (
           <ThemedText style={styles.errorText}>{error}</ThemedText>
         ) : savedDoctors.length === 0 ? (
-          <ThemedText style={styles.noSavedDoctors}>
+          <ThemedText style={styles.noResultsText}>
             Vous n&apos;avez aucun médecin favori. Explorez la section &quot;Search&quot; pour trouver des médecins.
           </ThemedText>
         ) : (
           <FlatList
             data={savedDoctors}
             renderItem={renderDoctorItem}
-            keyExtractor={(item) => item._id}
+            keyExtractor={(item) => `saved-${item._id}`}
             horizontal={false}
             showsVerticalScrollIndicator={false}
             scrollEnabled={false}
@@ -166,10 +211,10 @@ const styles = StyleSheet.create({
     left: 0,
     position: 'absolute',
   },
-  savedDoctorsContainer: {
+  sectionContainer: {
     marginBottom: 20,
   },
-  savedDoctorsTitle: {
+  sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
@@ -231,7 +276,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 10,
   },
-  noSavedDoctors: {
+  noResultsText: {
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 20,

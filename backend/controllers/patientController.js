@@ -1,6 +1,7 @@
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
+const PatientResponse = require('../models/PatientResponse');
 
 // @desc    Obtenir tous les patients
 // @route   GET /api/patients
@@ -278,5 +279,95 @@ exports.deletePatient = async (req, res) => {
   } catch (error) {
     console.error('Erreur lors de la suppression du patient:', error);
     res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// @desc    Obtenir les médecins recommandés basés sur les réponses d'évaluation
+// @route   GET /api/patients/recommended-doctors
+// @access  Private (Patient only)
+exports.getRecommendedDoctors = async (req, res) => {
+  try {
+    console.log('=== RECOMMENDED DOCTORS START ===');
+    // 1. Get the patient's assessment responses
+    const patientResponses = await PatientResponse.find({ user: req.user._id })
+      .populate('question');
+    
+    console.log(`Found ${patientResponses.length} patient responses`);
+    
+    if (patientResponses.length === 0) {
+      console.log('No responses found for this patient');
+      return res.status(200).json([]);
+    }
+    
+    // 2. Count specializations from the responses
+    const specializationScores = {};
+    
+    // Track the questions that have specializations
+    let questionsWithSpecialization = 0;
+    
+    for (const response of patientResponses) {
+      console.log(`Processing response: ${response._id}, question: ${response.question?._id}`);
+      
+      if (response.question && response.question.specialization) {
+        questionsWithSpecialization++;
+        const specId = response.question.specialization.toString();
+        console.log(`Found specialization: ${specId} for question ${response.question._id}`);
+        
+        // Increase score based on response type
+        let score = 1;
+        if (response.question.type === 'YesNo' && response.response === 'Yes') {
+          score = 3;
+        }
+        
+        if (specializationScores[specId]) {
+          specializationScores[specId] += score;
+        } else {
+          specializationScores[specId] = score;
+        }
+      } else {
+        console.log(`No specialization for question ${response.question?._id || 'unknown'}`);
+      }
+    }
+    
+    console.log(`Found ${questionsWithSpecialization} questions with specializations`);
+    console.log('Specialization scores:', specializationScores);
+    
+    // 3. Get top 2-3 specializations
+    const sortedSpecializations = Object.entries(specializationScores)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(entry => entry[0]);
+    
+    console.log('Top specializations:', sortedSpecializations);
+    
+    let doctors = [];
+    
+    // If we have specializations, try to find doctors with those specializations
+    if (sortedSpecializations.length > 0) {
+      doctors = await Doctor.find({
+        'specializations': { $in: sortedSpecializations }
+      })
+      .limit(5)
+      .select('_id full_name first_name last_name doctor_image experience specialization price');
+      
+      console.log(`Found ${doctors.length} doctors with matching specializations`);
+    }
+    
+    // If no doctors found by specialization, return some random doctors
+    if (doctors.length === 0) {
+      console.log('No doctors found with matching specializations, returning random doctors');
+      doctors = await Doctor.find({})
+        .limit(3)
+        .select('_id full_name first_name last_name doctor_image experience specialization price');
+      
+      console.log(`Found ${doctors.length} random doctors`);
+    }
+    
+    console.log('=== RECOMMENDED DOCTORS END ===');
+    res.status(200).json(doctors);
+    
+  } catch (error) {
+    console.error('Error getting recommended doctors:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 }; 
