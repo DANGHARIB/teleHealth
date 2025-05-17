@@ -12,9 +12,9 @@ import { doctorAPI, patientAPI } from '@/services/api';
 const COLORS = {
   primary: '#7AA7CC',
   primaryDark: '#6A97BC',
-  navyBlue: '#090F47',  // Navy blue for headings and important text
-  babyBlue: '#7AA7CC',  // Baby blue for secondary text and accents
-  darkNavy: '#090F47',  // Dark navy/blue for doctor information
+  navyBlue: '#090F47',  
+  babyBlue: '#7AA7CC',  
+  darkNavy: '#090F47',  
   background: '#F8FAFC',
   cardBackground: '#FFFFFF',
   text: '#333333',

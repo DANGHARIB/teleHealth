@@ -54,18 +54,18 @@ export default function ProfileScreen() {
             const userInfo = JSON.parse(userInfoString);
             
             let displayName = 'Patient';
-            if (userInfo.fullName) {
+            // Always prioritize first_name and last_name from profile
+            const firstName = userInfo.profile?.first_name || '';
+            const lastName = userInfo.profile?.last_name || '';
+            if (firstName && lastName) {
+              displayName = `${firstName.trim()} ${lastName.trim()}`;
+            } else if (firstName) {
+              displayName = firstName.trim();
+            } else if (lastName) {
+              displayName = lastName.trim();
+            } else if (userInfo.fullName) {
+              // Fall back to fullName only if no first/last name available
               displayName = userInfo.fullName.trim();
-            } else {
-              const firstName = userInfo.profile?.first_name || '';
-              const lastName = userInfo.profile?.last_name || '';
-              if (firstName && lastName) {
-                displayName = `${firstName.trim()} ${lastName.trim()}`;
-              } else if (firstName) {
-                displayName = firstName.trim();
-              } else if (lastName) {
-                displayName = lastName.trim();
-              }
             }
             setUserName(displayName);
 

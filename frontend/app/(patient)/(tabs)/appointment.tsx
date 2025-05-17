@@ -50,11 +50,11 @@ const DATE_OPTION_MARGIN = 12;
 const DATE_SELECTOR_PADDING = 16;
 
 const COLORS = {
-  primary: '#2563EB',
-  primaryLight: '#3B82F6',
-  primaryDark: '#1D4ED8',
+  primary: '#7AA7CC',
+  primaryLight: '#8FB5D5',
+  primaryDark: '#6999BE',
   secondary: '#F8FAFC',
-  accent: '#10B981',
+  accent: '#7AA7CC',
   warning: '#F59E0B',
   danger: '#EF4444',
   success: '#22C55E',
@@ -67,7 +67,7 @@ const COLORS = {
   gray600: '#475569',
   gray700: '#334155',
   gray800: '#1E293B',
-  gray900: '#0F172A',
+  gray900: '#090F47',
   white: '#FFFFFF',
   background: '#FAFBFE',
 };
@@ -456,6 +456,7 @@ export default function AppointmentScreen() {
   const renderWeekNavigation = () => {
     const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+    // Include the year in the format
     const weekRange = `${format(weekStart, 'MMM dd')} - ${format(weekEnd, 'MMM dd, yyyy')}`;
 
     return (
@@ -803,7 +804,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: COLORS.white,
     marginHorizontal: 24,
@@ -825,8 +826,10 @@ const styles = StyleSheet.create({
   },
   weekInfo: {
     flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: 8,
   },
   weekRangeButton: {
     flexDirection: 'row',
@@ -836,12 +839,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: `${COLORS.primary}05`,
     position: 'relative',
+    flexShrink: 1,
+    width: '100%',
   },
   weekRangeText: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.gray800,
+    color: COLORS.gray900,
     marginLeft: 8,
+    flexShrink: 1,
+    flexWrap: 'nowrap',
   },
   currentWeekIndicator: {
     position: 'absolute',
@@ -1085,13 +1092,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.gray700,
+    color: COLORS.gray900,
     marginTop: 16,
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 15,
-    color: COLORS.gray500,
+    color: COLORS.gray900,
     textAlign: 'center',
     lineHeight: 22,
   },
