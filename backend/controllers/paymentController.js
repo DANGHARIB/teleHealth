@@ -4,7 +4,7 @@ const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
 const notificationService = require('../services/notificationService');
 
-// @desc    Créer un nouveau paiement
+// @desc    Créer un nouveau paiement (automatiquement complété)
 // @route   POST /api/payments
 // @access  Private/Patient
 exports.createPayment = async (req, res) => {
@@ -27,31 +27,16 @@ exports.createPayment = async (req, res) => {
       return res.status(403).json({ message: 'Vous n\'êtes pas autorisé à payer pour ce rendez-vous' });
     }
     
-    // Vérifier si le rendez-vous a déjà été payé
-    if (appointment.paymentStatus === 'completed') {
-      return res.status(400).json({ message: 'Ce rendez-vous a déjà été payé' });
-    }
-    
-    // Simuler une validation de paiement (toujours réussie pour la simulation)
-    const isPaymentSuccessful = true;
-    
-    if (!isPaymentSuccessful) {
-      // Dans un système réel, on gérerait ici l'échec du paiement
-      return res.status(400).json({ message: 'Le paiement a échoué. Veuillez réessayer.' });
-    }
-    
-    // Créer le paiement
+    // Créer le paiement (déjà complété)
     const payment = new Payment({
       appointment: appointmentId,
       patient: patient._id,
-      amount: amount || appointment.price, // Utiliser le montant fourni ou le prix du rendez-vous
+      amount: amount || appointment.price,
       paymentMethod,
       status: 'completed'
     });
     
-    // Mettre à jour le statut de paiement du rendez-vous
-    appointment.paymentStatus = 'completed';
-    await appointment.save();
+    // Le rendez-vous est déjà marqué comme payé par défaut
     
     // Sauvegarder le paiement
     const createdPayment = await payment.save();
@@ -182,7 +167,7 @@ exports.getPaymentById = async (req, res) => {
   }
 };
 
-// @desc    Simuler un remboursement
+// @desc    Effectuer un remboursement
 // @route   POST /api/payments/:id/refund
 // @access  Private/Admin
 exports.refundPayment = async (req, res) => {
@@ -201,7 +186,7 @@ exports.refundPayment = async (req, res) => {
       return res.status(400).json({ message: 'Ce paiement a déjà été remboursé' });
     }
     
-    // Simuler un remboursement (toujours réussi pour la simulation)
+    // Effectuer le remboursement
     payment.status = 'refunded';
     await payment.save();
     

@@ -180,22 +180,43 @@ export default function DoctorAppointmentScreen() {
   // Navigation functions for weeks
   const goToPreviousWeek = () => {
     const newWeek = subWeeks(currentWeek, 1);
-    const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
-    setCurrentWeek(newWeek);
-    setSelectedDate(mondayOfNewWeek);
+    const today = new Date();
+    
+    // Vérifier si la nouvelle semaine est la semaine courante
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // Pour la semaine courante, sélectionner le jour actuel
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // Pour les autres semaines, sélectionner le lundi
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
   };
 
   const goToNextWeek = () => {
     const newWeek = addWeeks(currentWeek, 1);
-    const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
-    setCurrentWeek(newWeek);
-    setSelectedDate(mondayOfNewWeek);
+    const today = new Date();
+    
+    // Vérifier si la nouvelle semaine est la semaine courante
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // Pour la semaine courante, sélectionner le jour actuel
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // Pour les autres semaines, sélectionner le lundi
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
   };
 
   const goToCurrentWeek = () => {
-    const now = new Date();
-    setCurrentWeek(now);
-    setSelectedDate(now);
+    // Pour la semaine courante, toujours sélectionner le jour actuel
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
   };
 
   // Handle date selection with auto-scroll
@@ -252,6 +273,26 @@ export default function DoctorAppointmentScreen() {
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Patient';
   };
 
+  // Vérification si un rendez-vous peut être reprogrammé (jusqu'à J-1)
+  const canRescheduleAppointment = (appointmentDate: string) => {
+    try {
+      // Convertir la date du rendez-vous en objet Date
+      const appDate = new Date(appointmentDate);
+      // Date limite de reprogrammation = date du rendez-vous - 1 jour
+      const rescheduleDeadline = new Date(appDate);
+      rescheduleDeadline.setDate(appDate.getDate() - 1);
+      
+      // Comparer avec la date actuelle
+      const now = new Date();
+      
+      // On peut reprogrammer si la date actuelle est avant la deadline de reprogrammation
+      return now <= rescheduleDeadline;
+    } catch (error) {
+      console.error('Erreur lors de la vérification de la date de reprogrammation:', error);
+      return false;
+    }
+  };
+
   // Update appointment status (utilisé uniquement pour reprogrammation et autres changements de statut)
   const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'cancelled') => {
     try {
@@ -271,6 +312,15 @@ export default function DoctorAppointmentScreen() {
 
   // Open reschedule modal
   const openRescheduleModal = async (appointment: Appointment) => {
+    // Vérifier si le rendez-vous peut encore être reprogrammé (J-1)
+    if (!canRescheduleAppointment(appointment.availability.date)) {
+      Alert.alert(
+        "Cannot Reschedule",
+        "This appointment can no longer be rescheduled as it is less than 24 hours away."
+      );
+      return;
+    }
+    
     setSelectedAppointment(appointment);
     setLoadingAvailabilities(true);
     
@@ -301,48 +351,52 @@ export default function DoctorAppointmentScreen() {
     setLoading(true);
     
     try {
-      await doctorAPI.rescheduleAppointment(selectedAppointment._id, selectedAvailability);
+      const response = await doctorAPI.rescheduleAppointment(selectedAppointment._id, selectedAvailability);
       
       setRescheduleModalVisible(false);
       setSelectedAppointment(null);
       setSelectedAvailability('');
       
-      const selectedSlot = availabilities.find(a => a._id === selectedAvailability);
+      // Mise à jour locale des rendez-vous
+      const updatedAppointment = response;
       
-      if (selectedSlot) {
+      if (updatedAppointment) {
         setAppointments(prevAppointments => 
           prevAppointments.map(app => 
-            app._id === selectedAppointment._id 
-              ? { 
-                  ...app, 
-                  status: 'rescheduled',
-                  availability: {
-                    ...app.availability,
-                    date: selectedSlot.date,
-                    startTime: selectedSlot.startTime,
-                    endTime: selectedSlot.endTime
-                  }
-                } 
-              : app
+            app._id === selectedAppointment._id ? updatedAppointment : app
           )
         );
+        
+        Alert.alert(
+          "Success",
+          "The appointment has been successfully rescheduled."
+        );
       } else {
+        // Rafraîchir la liste des rendez-vous depuis le serveur
         const data = await doctorAPI.getAppointments();
         setAppointments(data);
+        
+        Alert.alert(
+          "Success",
+          "The appointment has been rescheduled. The list has been refreshed."
+        );
+      }
+      
+      setLoading(false);
+    } catch (error: any) {
+      console.error('Error rescheduling:', error);
+      setLoading(false);
+      
+      // Obtenir le message d'erreur
+      let errorMessage = 'Unable to reschedule the appointment. Please try again.';
+      
+      if (error.response && error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message;
       }
       
       Alert.alert(
-        "Appointment Rescheduled",
-        "The appointment has been successfully rescheduled."
-      );
-      
-      setLoading(false);
-    } catch (err) {
-      console.error('Error rescheduling:', err);
-      setLoading(false);
-      Alert.alert(
         "Error",
-        "Unable to reschedule the appointment. Please try again."
+        errorMessage
       );
     }
   };
@@ -548,7 +602,7 @@ export default function DoctorAppointmentScreen() {
       case 'cancelled':
         return {
           color: COLORS.danger,
-          text: 'Cancelled',
+          text: 'Canceled',
           icon: 'close-circle-outline'
         };
       case 'rescheduled':
@@ -574,12 +628,12 @@ export default function DoctorAppointmentScreen() {
         text: 'Paid',
         icon: 'checkmark-circle'
       },
-      pending: {
-        color: COLORS.danger,
-        text: 'Unpaid',
-        icon: 'alert-circle'
+      refunded: {
+        color: COLORS.warning,
+        text: 'Refunded',
+        icon: 'refresh-circle'
       }
-    }[paymentStatus] || { color: COLORS.danger, text: 'Unpaid', icon: 'alert-circle' };
+    }[paymentStatus] || { color: COLORS.success, text: 'Paid', icon: 'checkmark-circle' };
 
     return (
       <View style={[styles.paymentBadge, { backgroundColor: config.color }]}>
@@ -655,7 +709,7 @@ export default function DoctorAppointmentScreen() {
             </View>
             
             <View style={styles.actionButtons}>
-              {appointment.sessionLink && (
+              {appointment.sessionLink && appointment.status !== 'cancelled' && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.primaryButton]}
                   onPress={() => openZoomLink(appointment.sessionLink)}
@@ -665,7 +719,9 @@ export default function DoctorAppointmentScreen() {
                 </TouchableOpacity>
               )}
               
-              {['confirmed', 'scheduled'].includes(appointment.status) && (
+              {/* Option de reprogrammation disponible jusqu'à J-1 */}
+              {['confirmed', 'scheduled'].includes(appointment.status) && 
+               canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}
                   onPress={() => openRescheduleModal(appointment)}
@@ -674,8 +730,6 @@ export default function DoctorAppointmentScreen() {
                   <ThemedText style={styles.buttonText}>Reschedule</ThemedText>
                 </TouchableOpacity>
               )}
-              
-
             </View>
           </View>
         </View>
@@ -709,6 +763,13 @@ export default function DoctorAppointmentScreen() {
     }
   };
 
+  // Initialisation: sélectionner la date actuelle au chargement
+  useEffect(() => {
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -721,12 +782,6 @@ export default function DoctorAppointmentScreen() {
             <ThemedText style={styles.statLabel}>Today&apos;s appointments</ThemedText>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <ThemedText style={styles.statNumber}>
-              {getTodayAppointments().filter(app => ['scheduled', 'confirmed'].includes(app.status)).length}
-            </ThemedText>
-            <ThemedText style={styles.statLabel}>Confirmed appointments</ThemedText>
-          </View>
         </View>
       </View>
       

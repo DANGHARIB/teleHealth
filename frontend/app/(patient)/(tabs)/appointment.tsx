@@ -40,7 +40,7 @@ type Appointment = {
   status: 'pending' | 'confirmed' | 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
   caseDetails: string;
   sessionLink?: string;
-  paymentStatus: 'pending' | 'completed' | 'refunded';
+  paymentStatus: 'completed' | 'refunded';
   price: number;
 };
 
@@ -136,22 +136,43 @@ export default function AppointmentScreen() {
   // Navigation functions for weeks
   const goToPreviousWeek = () => {
     const newWeek = subWeeks(currentWeek, 1);
-    const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
-    setCurrentWeek(newWeek);
-    setSelectedDate(mondayOfNewWeek);
+    const today = new Date();
+    
+    // Vérifier si la nouvelle semaine est la semaine courante
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // Pour la semaine courante, sélectionner le jour actuel
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // Pour les autres semaines, sélectionner le lundi
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
   };
 
   const goToNextWeek = () => {
     const newWeek = addWeeks(currentWeek, 1);
-    const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
-    setCurrentWeek(newWeek);
-    setSelectedDate(mondayOfNewWeek);
+    const today = new Date();
+    
+    // Vérifier si la nouvelle semaine est la semaine courante
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // Pour la semaine courante, sélectionner le jour actuel
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // Pour les autres semaines, sélectionner le lundi
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
   };
 
   const goToCurrentWeek = () => {
-    const now = new Date();
-    setCurrentWeek(now);
-    setSelectedDate(now);
+    // Pour la semaine courante, toujours sélectionner le jour actuel
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
   };
 
   // Handle date selection with auto-scroll
@@ -169,12 +190,55 @@ export default function AppointmentScreen() {
       }, 100);
     }
   }, [dateOptions, selectedDate]);
+  
+  // Initialisation: sélectionner la date actuelle au chargement
+  useEffect(() => {
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
+  }, []);
 
   // Check if current week is this week
   const isCurrentWeek = isSameWeek(currentWeek, new Date(), { weekStartsOn: 1 });
 
   // Afficher le modal de confirmation d'annulation
-  const showCancelConfirmation = (appointmentId: string, price: number) => {
+  const showCancelConfirmation = (appointmentId: string, price: number, appointmentDate: string) => {
+    // Vérifier si l'annulation est encore possible (J-2)
+    if (!canCancelAppointment(appointmentDate)) {
+      // Proposer la reprogrammation si possible (entre J-2 et J-1)
+      if (canRescheduleAppointment(appointmentDate)) {
+        Alert.alert(
+          "Cannot Cancel",
+          "This appointment can no longer be cancelled as it is less than 48 hours away. Would you like to reschedule instead?",
+          [
+            {
+              text: "No",
+              style: "cancel"
+            },
+            {
+              text: "Reschedule",
+              onPress: () => {
+                // Rediriger vers la page de reprogrammation
+                const appointment = appointments.find(app => app._id === appointmentId);
+                if (appointment) {
+                  router.push({
+                    pathname: '/patient/doctor',
+                    params: { doctorId: appointment.doctor._id }
+                  });
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Cannot Cancel or Reschedule",
+          "This appointment can no longer be cancelled or rescheduled as it is less than 24 hours away."
+        );
+      }
+      return;
+    }
+    
     setAppointmentToCancel(appointmentId);
     setAppointmentPrice(price);
     setCancelModalVisible(true);
@@ -240,6 +304,46 @@ export default function AppointmentScreen() {
   const getTodayAppointments = () => {
     return getAppointmentsForDate();
   };
+  
+  // Vérification si un rendez-vous peut être annulé (jusqu'à J-2)
+  const canCancelAppointment = (appointmentDate: string) => {
+    try {
+      // Convertir la date du rendez-vous en objet Date
+      const appDate = new Date(appointmentDate);
+      // Date limite d'annulation = date du rendez-vous - 2 jours
+      const cancelDeadline = new Date(appDate);
+      cancelDeadline.setDate(appDate.getDate() - 2);
+      
+      // Comparer avec la date actuelle
+      const now = new Date();
+      
+      // On peut annuler si la date actuelle est avant la deadline d'annulation
+      return now <= cancelDeadline;
+    } catch (error) {
+      console.error('Erreur lors de la vérification de la date d\'annulation:', error);
+      return false;
+    }
+  };
+  
+  // Vérification si un rendez-vous peut être reprogrammé (jusqu'à J-1)
+  const canRescheduleAppointment = (appointmentDate: string) => {
+    try {
+      // Convertir la date du rendez-vous en objet Date
+      const appDate = new Date(appointmentDate);
+      // Date limite de reprogrammation = date du rendez-vous - 1 jour
+      const rescheduleDeadline = new Date(appDate);
+      rescheduleDeadline.setDate(appDate.getDate() - 1);
+      
+      // Comparer avec la date actuelle
+      const now = new Date();
+      
+      // On peut reprogrammer si la date actuelle est avant la deadline de reprogrammation
+      return now <= rescheduleDeadline;
+    } catch (error) {
+      console.error('Erreur lors de la vérification de la date de reprogrammation:', error);
+      return false;
+    }
+  };
 
   // Formater l'heure
   const formatTime = (time: string) => {
@@ -299,23 +403,20 @@ export default function AppointmentScreen() {
 
   // Render payment badge
   const renderPaymentBadge = (paymentStatus: string) => {
+    // Les paiements sont automatiquement complétés lors de la sélection du rendez-vous
+    // Seuls les états "Paid" et "Refunded" sont pertinents
     const config = {
       completed: {
         color: COLORS.success,
         text: 'Paid',
         icon: 'checkmark-circle'
       },
-      pending: {
-        color: COLORS.danger,
-        text: 'Unpaid',
-        icon: 'alert-circle'
-      },
       refunded: {
         color: COLORS.warning,
         text: 'Refunded',
         icon: 'return-down-back'
       }
-    }[paymentStatus] || { color: COLORS.danger, text: 'Unpaid', icon: 'alert-circle' };
+    }[paymentStatus] || { color: COLORS.success, text: 'Paid', icon: 'checkmark-circle' };
 
     return (
       <View style={[styles.paymentBadge, { backgroundColor: config.color }]}>
@@ -369,7 +470,7 @@ export default function AppointmentScreen() {
             <ThemedText style={styles.weekRangeText}>{weekRange}</ThemedText>
             {!isCurrentWeek && (
               <View style={styles.currentWeekIndicator}>
-                <ThemedText style={styles.currentWeekText}>Current week</ThemedText>
+                <ThemedText style={styles.currentWeekText}>Go to current</ThemedText>
               </View>
             )}
           </TouchableOpacity>
@@ -503,17 +604,21 @@ export default function AppointmentScreen() {
             </View>
             
             <View style={styles.actionButtons}>
+              {/* Bouton pour rejoindre l'appel vidéo si le rendez-vous est confirmé/programmé */}
               {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && appointment.sessionLink && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.primaryButton]}
                   onPress={() => openZoomLink(appointment.sessionLink)}
                 >
                   <Ionicons name="videocam" size={16} color={COLORS.white} />
-                  <ThemedText style={styles.buttonText}>Join</ThemedText>
+                  <ThemedText style={styles.buttonText}>Join Call</ThemedText>
                 </TouchableOpacity>
               )}
               
-              {appointment.status === 'cancelled' && (
+              {/* Option de reprogrammation pour les rendez-vous où l'annulation n'est plus possible (J-2 à J-1) */}
+              {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && 
+                !canCancelAppointment(appointment.availability.date) && 
+                canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}
                   onPress={() => router.push({
@@ -526,10 +631,12 @@ export default function AppointmentScreen() {
                 </TouchableOpacity>
               )}
               
-              {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'scheduled') && (
+              {/* Option d'annulation (possible jusqu'à J-2) */}
+              {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'scheduled') && 
+                canCancelAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.cancelButton]}
-                  onPress={() => showCancelConfirmation(appointment._id, appointment.price)}
+                  onPress={() => showCancelConfirmation(appointment._id, appointment.price, appointment.availability.date)}
                 >
                   <Ionicons name="close-outline" size={16} color={COLORS.white} />
                   <ThemedText style={styles.buttonText}>Cancel</ThemedText>
@@ -625,15 +732,10 @@ export default function AppointmentScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <ThemedText style={styles.statNumber}>{getTodayAppointments().length}</ThemedText>
-            <ThemedText style={styles.statLabel}>Today's appointments</ThemedText>
+            <ThemedText style={styles.statLabel}>Today&apos;s appointments</ThemedText>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <ThemedText style={styles.statNumber}>
-              {getTodayAppointments().filter(app => ['scheduled', 'confirmed'].includes(app.status)).length}
-            </ThemedText>
-            <ThemedText style={styles.statLabel}>Confirmed appointments</ThemedText>
-          </View>
+          
         </View>
       </View>
       
@@ -649,28 +751,7 @@ export default function AppointmentScreen() {
       </ScrollView>
       
       {renderCancelModal()}
-      
-      <View style={styles.navbar}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="wallet-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Financials</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="search-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Search</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="calendar-outline" size={24} color="#0F2057" />
-          <ThemedText style={[styles.navText, styles.activeNavText]}>Appointment</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Profile</ThemedText>
-        </TouchableOpacity>
-      </View>
+
     </SafeAreaView>
   );
 }
@@ -1015,29 +1096,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  navbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray200,
-    paddingTop: 10,
-    paddingHorizontal: 24,
-    paddingBottom: 10,
-    backgroundColor: COLORS.white,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navText: {
-    fontSize: 12,
-    marginTop: 5,
-    color: COLORS.gray500,
-  },
-  activeNavText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
