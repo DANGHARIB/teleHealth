@@ -1,13 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Image } from 'expo-image';
-import { StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View } from 'react-native';
+import { StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View, ScrollView } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { patientAPI } from '@/services/api';
+
+// App theme colors
+const COLORS = {
+  primary: '#7AA7CC',
+  primaryDark: '#6990B3',
+  secondary: '#50C878',
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  darkNavy: '#090F47',
+  babyBlue: '#7AA7CC',
+  text: '#333333',
+  textLight: '#6B7280',
+  border: '#E5E7EB',
+  error: '#EF4444',
+  success: '#10B981',
+  yellow: '#FFD700',
+}
 
 type Doctor = {
   _id: string;
@@ -18,6 +34,7 @@ type Doctor = {
   experience: number;
   specialization?: string;
   price?: number;
+  rating?: number;
 };
 
 export default function PatientHomeScreen() {
@@ -32,6 +49,7 @@ export default function PatientHomeScreen() {
     try {
       setLoading(true);
       const data = await patientAPI.getSavedDoctors();
+      console.log('Saved doctors data:', data);
       setSavedDoctors(data);
       setLoading(false);
     } catch (err) {
@@ -45,6 +63,7 @@ export default function PatientHomeScreen() {
     try {
       setRecommendedLoading(true);
       const data = await patientAPI.getRecommendedDoctors();
+      console.log('Recommended doctors data:', data);
       setRecommendedDoctors(data);
       setRecommendedLoading(false);
     } catch (err) {
@@ -82,113 +101,140 @@ export default function PatientHomeScreen() {
     router.push(`/patient/doctor/${doctorId}`);
   };
 
-  const renderDoctorItem = ({ item }: { item: Doctor }) => (
+  const renderRatingStars = (rating: number = 4) => {
+    const stars = [];
+    const maxStars = 5;
+    
+    for (let i = 1; i <= maxStars; i++) {
+      stars.push(
+        <Ionicons 
+          key={i} 
+          name={i <= rating ? "star" : "star-outline"} 
+          size={16} 
+          color={COLORS.yellow} 
+          style={{marginRight: 2}}
+        />
+      );
+    }
+    
+    return <View style={styles.ratingContainer}>{stars}</View>;
+  };
+
+  const renderDoctorItem = (item: Doctor) => {
+    console.log('Rendering doctor item:', item);
+    return (
     <TouchableOpacity 
+      key={item._id}
       style={styles.doctorCard}
       onPress={() => handleExploreDoctor(item._id)}
+      activeOpacity={0.8}
     >
       <Image
         source={item.doctor_image ? { uri: item.doctor_image } : getDefaultImage()}
         style={styles.doctorImage}
         contentFit="cover"
+        transition={300}
       />
-      <ThemedView style={styles.doctorInfo}>
-        <ThemedText type="defaultSemiBold" style={styles.doctorName}>
+      <View style={styles.doctorInfo}>
+        <ThemedText type="title" style={styles.doctorName}>
           Dr. {getDoctorName(item)}
         </ThemedText>
-        <ThemedText style={styles.doctorSpecialization}>
+        <ThemedText style={styles.specialization}>
           {item.specialization || 'General Practitioner'}
         </ThemedText>
-        <View style={styles.doctorDetails}>
-          <View style={styles.experienceTag}>
-            <ThemedText style={styles.doctorExperience}>
-              {item.experience} yrs exp
-            </ThemedText>
-          </View>
-          {item.price && (
-            <View style={styles.priceTag}>
-              <ThemedText style={styles.doctorPrice}>
-                ${item.price.toFixed(0)}/hr
-              </ThemedText>
-            </View>
-          )}
+        {renderRatingStars(item.rating)}
+        <ThemedText style={styles.doctorExperience}>
+          {item.experience} Years experience
+        </ThemedText>
+        <View style={styles.priceContainer}>
+          <Ionicons name="wallet-outline" size={14} color={COLORS.primary} style={styles.priceIcon} />
+          <ThemedText style={styles.priceText}>
+            {item.price && item.price > 0 ? `$${item.price.toFixed(0)}/hr` : 'Price unavailable'}
+          </ThemedText>
         </View>
-      </ThemedView>
-      <View style={styles.arrowContainer}>
-        <Ionicons name="chevron-forward" size={24} color="#A1CEDC" />
       </View>
+      <TouchableOpacity 
+        style={styles.exploreButton}
+        onPress={() => handleExploreDoctor(item._id)}
+      >
+        <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
+      </TouchableOpacity>
     </TouchableOpacity>
-  );
+  )};
 
   const renderEmptyState = (message: string) => (
     <ThemedView style={styles.emptyStateContainer}>
-      <Ionicons name="medical-outline" size={48} color="#A1CEDC" />
+      <Ionicons name="medical-outline" size={48} color={COLORS.primary} />
       <ThemedText style={styles.emptyStateText}>{message}</ThemedText>
     </ThemedView>
   );
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>Doctors</ThemedText>
-      </ThemedView>
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.title}>Find Doctors</ThemedText>
+        <ThemedText style={styles.subtitle}>Your health care specialists</ThemedText>
+      </View>
       
-      <FlatList
-        data={[]}
-        ListHeaderComponent={
-          <>
-            {/* Recommended Doctors Section */}
-            <ThemedView style={styles.sectionContainer}>
-              <ThemedText type="subtitle" style={styles.sectionTitle}>
-                Recommended for you
-              </ThemedText>
-              
-              {recommendedLoading ? (
-                <ActivityIndicator size="large" color="#A1CEDC" style={styles.loader} />
-              ) : recommendedError ? (
-                <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
-              ) : recommendedDoctors.length === 0 ? (
-                renderEmptyState('Complete your assessment to get personalized recommendations.')
-              ) : (
-                <FlatList
-                  data={recommendedDoctors}
-                  renderItem={renderDoctorItem}
-                  keyExtractor={(item) => `recommended-${item._id}`}
-                  horizontal={false}
-                  showsVerticalScrollIndicator={false}
-                  scrollEnabled={false}
-                />
-              )}
-            </ThemedView>
+      <ScrollView 
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Recommended Doctors Section */}
+        <View style={styles.sectionContainer}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Recommended for you
+          </ThemedText>
+          
+          {recommendedLoading ? (
+            <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+          ) : recommendedError ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+              <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchRecommendedDoctors}>
+                <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : recommendedDoctors.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="clipboard-outline" size={48} color={COLORS.textLight} />
+              <ThemedText style={styles.noResults}>No recommendations yet</ThemedText>
+              <ThemedText style={styles.noResultsHint}>Complete your assessment to get personalized recommendations</ThemedText>
+            </View>
+          ) : (
+            recommendedDoctors.map((doctor) => renderDoctorItem(doctor))
+          )}
+        </View>
 
-            {/* Favorite Doctors Section */}
-            <ThemedView style={styles.sectionContainer}>
-              <ThemedText type="subtitle" style={styles.sectionTitle}>
-                Your favorite doctors
-              </ThemedText>
-              
-              {loading ? (
-                <ActivityIndicator size="large" color="#A1CEDC" style={styles.loader} />
-              ) : error ? (
-                <ThemedText style={styles.errorText}>{error}</ThemedText>
-              ) : savedDoctors.length === 0 ? (
-                renderEmptyState('You don\'t have any favorite doctors yet.')
-              ) : (
-                <FlatList
-                  data={savedDoctors}
-                  renderItem={renderDoctorItem}
-                  keyExtractor={(item) => `saved-${item._id}`}
-                  horizontal={false}
-                  showsVerticalScrollIndicator={false}
-                  scrollEnabled={false}
-                />
-              )}
-            </ThemedView>
-          </>
-        }
-        renderItem={() => null}
-        keyExtractor={() => 'dummy'}
-      />
+        {/* Favorite Doctors Section */}
+        <View style={styles.sectionContainer}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Your favorite doctors
+          </ThemedText>
+          
+          {loading ? (
+            <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchSavedDoctors}>
+                <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : savedDoctors.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="heart-outline" size={48} color={COLORS.textLight} />
+              <ThemedText style={styles.noResults}>No favorites yet</ThemedText>
+              <ThemedText style={styles.noResultsHint}>Save doctors to find them here</ThemedText>
+            </View>
+          ) : (
+            savedDoctors.map((doctor) => renderDoctorItem(doctor))
+          )}
+        </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -196,125 +242,190 @@ export default function PatientHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.background,
   },
   header: {
-    paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E1E5EA',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
-  headerTitle: {
-    fontSize: 28,
+  title: {
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#14104B',
+    color: COLORS.darkNavy,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.textLight,
+    marginBottom: 8,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   sectionContainer: {
     marginTop: 16,
-    marginBottom: 20,
-    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#14104B',
+    color: COLORS.darkNavy,
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
   doctorCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#F0F0F5',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+    overflow: 'hidden',
+    padding: 16,
+    alignItems: 'center',
   },
   doctorImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginRight: 16,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#F4F4F4',
   },
   doctorInfo: {
     flex: 1,
+    marginLeft: 16,
     justifyContent: 'center',
   },
   doctorName: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#14104B',
+    color: COLORS.darkNavy,
+    marginBottom: 2,
+  },
+  specialization: {
+    fontSize: 14,
+    color: COLORS.primary,
     marginBottom: 4,
   },
-  doctorSpecialization: {
-    fontSize: 15,
-    color: '#71727A',
-    marginBottom: 8,
+  ratingContainer: {
+    flexDirection: 'row',
+    marginBottom: 4,
   },
-  doctorDetails: {
+  doctorExperience: {
+    fontSize: 14,
+    color: COLORS.textLight,
+  },
+  priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
   },
-  experienceTag: {
-    backgroundColor: '#F0F7FA',
+  priceIcon: {
+    marginRight: 4,
+  },
+  priceText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tag: {
+    backgroundColor: '#F2F5FA',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    marginRight: 10,
+    marginRight: 8,
   },
-  doctorExperience: {
+  tagText: {
     fontSize: 13,
-    color: '#4A90E2',
-  },
-  priceTag: {
-    backgroundColor: '#F0F7FA',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  doctorPrice: {
-    fontSize: 13,
-    color: '#4A90E2',
+    color: COLORS.primary,
     fontWeight: 'bold',
   },
-  arrowContainer: {
+  exploreButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  exploreButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loader: {
     marginVertical: 30,
   },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    padding: 20,
+  },
   errorText: {
-    color: '#FF3B30',
+    fontSize: 16,
+    color: COLORS.text,
     textAlign: 'center',
-    marginVertical: 20,
-    fontSize: 15,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
+    padding: 30,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  noResults: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.darkNavy,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  noResultsHint: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: 'center',
   },
   emptyStateContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
     marginVertical: 10,
     borderWidth: 1,
-    borderColor: '#F0F0F5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: COLORS.border,
   },
   emptyStateText: {
     fontSize: 15,
-    color: '#8E8E93',
+    color: COLORS.textLight,
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 22,

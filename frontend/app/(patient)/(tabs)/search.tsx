@@ -1,12 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, View, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI } from '@/services/api';
+
+// App theme colors
+const COLORS = {
+  primary: '#7AA7CC',
+  primaryDark: '#6990B3',
+  secondary: '#50C878',
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  darkNavy: '#090F47',
+  babyBlue: '#7AA7CC',
+  text: '#333333',
+  textLight: '#6B7280',
+  border: '#E5E7EB',
+  error: '#EF4444',
+  success: '#10B981',
+  yellow: '#FFD700',
+}
 
 type Doctor = {
   _id: string;
@@ -16,6 +33,8 @@ type Doctor = {
   doctor_image?: string;
   experience: number;
   specialization?: string;
+  rating?: number;
+  price?: number;
 };
 
 export default function SearchScreen() {
@@ -25,21 +44,22 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const fetchDoctors = async () => {
-      try {
-        setLoading(true);
-        const data = await doctorAPI.getDoctors();
-        setDoctors(data);
-        setFilteredDoctors(data);
-        setLoading(false);
-      } catch (err) {
-        console.error('Erreur lors du chargement des médecins:', err);
-        setError('Impossible de charger les médecins');
-        setLoading(false);
-      }
-    };
+  const fetchDoctors = async () => {
+    try {
+      setLoading(true);
+      const data = await doctorAPI.getDoctors();
+      console.log('Fetched doctor data:', data);
+      setDoctors(data);
+      setFilteredDoctors(data);
+      setLoading(false);
+    } catch (err) {
+      console.error('Erreur lors du chargement des médecins:', err);
+      setError('Impossible de charger les médecins');
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchDoctors();
   }, []);
 
@@ -65,6 +85,7 @@ export default function SearchScreen() {
     try {
       setLoading(true);
       const data = await doctorAPI.searchDoctors(searchQuery);
+      console.log('Search results:', data);
       setFilteredDoctors(data);
       setLoading(false);
     } catch (err) {
@@ -85,15 +106,38 @@ export default function SearchScreen() {
 
   const getDefaultImage = () => require('@/assets/images/icon.png');
 
+  const renderRatingStars = (rating: number = 4) => {
+    const stars = [];
+    const maxStars = 5;
+    
+    for (let i = 1; i <= maxStars; i++) {
+      stars.push(
+        <Ionicons 
+          key={i} 
+          name={i <= rating ? "star" : "star-outline"} 
+          size={16} 
+          color={COLORS.yellow} 
+          style={{marginRight: 2}}
+        />
+      );
+    }
+    
+    return <View style={styles.ratingContainer}>{stars}</View>;
+  };
+
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>Search Doctors</ThemedText>
-      
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.title}>Find Doctors</ThemedText>
+        <ThemedText style={styles.subtitle}>Search for the best medical specialists available</ThemedText>
+      </View>
+
       <ThemedView style={styles.searchContainer}>
-        <Ionicons name="search" size={24} color="#8e8e93" style={styles.searchIcon} />
+        <Ionicons name="search" size={22} color={COLORS.darkNavy} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search"
+          placeholder="Search by name"
+          placeholderTextColor={COLORS.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
@@ -101,42 +145,74 @@ export default function SearchScreen() {
         />
         {searchQuery !== '' && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-            <Ionicons name="close-circle" size={20} color="#8e8e93" />
+            <Ionicons name="close-circle" size={18} color={COLORS.darkNavy} />
           </TouchableOpacity>
         )}
       </ThemedView>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-      ) : error ? (
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
-      ) : filteredDoctors.length === 0 ? (
-        <ThemedText style={styles.noResults}>Aucun médecin trouvé</ThemedText>
-      ) : (
-        filteredDoctors.map((doctor) => (
-          <ThemedView key={doctor._id} style={styles.doctorCard}>
-            <Image
-              source={doctor.doctor_image ? { uri: doctor.doctor_image } : getDefaultImage()}
-              style={styles.doctorImage}
-              contentFit="cover"
-            />
-            <ThemedView style={styles.doctorInfo}>
-              <ThemedText type="title" style={styles.doctorName}>
-                Dr. {getDoctorName(doctor)}
-              </ThemedText>
-              <ThemedText style={styles.doctorExperience}>
-                {doctor.experience} Years experience
-              </ThemedText>
-            </ThemedView>
-            <TouchableOpacity
-              style={styles.exploreButton}
-              onPress={() => handleExplore(doctor._id)}
-            >
-              <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
+      <ScrollView 
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {loading ? (
+          <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchDoctors()}>
+              <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
             </TouchableOpacity>
-          </ThemedView>
-        ))
-      )}
+          </View>
+        ) : filteredDoctors.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search-outline" size={48} color={COLORS.textLight} />
+            <ThemedText style={styles.noResults}>No doctors found</ThemedText>
+            <ThemedText style={styles.noResultsHint}>Try a different search term or check your connection</ThemedText>
+          </View>
+        ) : (
+          filteredDoctors.map((doctor) => (
+            <TouchableOpacity 
+              key={doctor._id}
+              style={styles.doctorCard}
+              onPress={() => handleExplore(doctor._id)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={doctor.doctor_image ? { uri: doctor.doctor_image } : getDefaultImage()}
+                style={styles.doctorImage}
+                contentFit="cover"
+                transition={300}
+              />
+              <View style={styles.doctorInfo}>
+                <ThemedText type="title" style={styles.doctorName}>
+                  Dr. {getDoctorName(doctor)}
+                </ThemedText>
+                <ThemedText style={styles.specialization}>
+                  {doctor.specialization || 'General Practitioner'}
+                </ThemedText>
+                {renderRatingStars(doctor.rating)}
+                <ThemedText style={styles.doctorExperience}>
+                  {doctor.experience} Years experience
+                </ThemedText>
+                <View style={styles.priceContainer}>
+                  <Ionicons name="wallet-outline" size={14} color={COLORS.primary} style={styles.priceIcon} />
+                  <ThemedText style={styles.priceText}>
+                    {doctor.price && doctor.price > 0 ? `$${doctor.price.toFixed(0)}/hr` : 'Price unavailable'}
+                  </ThemedText>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.exploreButton}
+                onPress={() => handleExplore(doctor._id)}
+              >
+                <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -144,89 +220,168 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 20,
-    marginTop: 50,
+    color: COLORS.darkNavy,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.textLight,
+    marginBottom: 8,
   },
   searchContainer: {
     flexDirection: 'row',
-    backgroundColor: '#f2f2f7',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     alignItems: 'center',
-    paddingHorizontal: 10,
-    marginBottom: 20,
+    paddingHorizontal: 15,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    height: 46,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: COLORS.border,
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 45,
+    height: 50,
     fontSize: 16,
+    color: COLORS.darkNavy,
   },
   clearButton: {
-    padding: 5,
+    padding: 6,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   doctorCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 15,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 2,
+    overflow: 'hidden',
+    padding: 16,
+    alignItems: 'center',
   },
   doctorImage: {
     width: 70,
     height: 70,
     borderRadius: 35,
-    marginRight: 16,
+    backgroundColor: '#F4F4F4',
   },
   doctorInfo: {
     flex: 1,
+    marginLeft: 16,
     justifyContent: 'center',
   },
   doctorName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
+    color: COLORS.darkNavy,
+    marginBottom: 2,
+  },
+  specialization: {
+    fontSize: 14,
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    marginBottom: 4,
   },
   doctorExperience: {
     fontSize: 14,
-    color: '#666',
+    color: COLORS.textLight,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 4,
   },
+  priceIcon: {
+    marginRight: 4,
+  },
+  priceText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
   exploreButton: {
-    backgroundColor: '#4a90e2',
-    borderRadius: 5,
-    padding: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'center',
   },
   exploreButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loader: {
-    marginTop: 30,
+    marginTop: 50,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+    paddingHorizontal: 20,
   },
   errorText: {
-    color: 'red',
+    fontSize: 16,
+    color: COLORS.text,
     textAlign: 'center',
-    marginTop: 30,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+    paddingHorizontal: 20,
   },
   noResults: {
-    textAlign: 'center',
-    marginTop: 30,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.darkNavy,
+    marginTop: 12,
+    marginBottom: 8,
   },
+  noResultsHint: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: 'center',
+  }
 }); 

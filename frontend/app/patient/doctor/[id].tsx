@@ -84,6 +84,25 @@ export default function DoctorDetailScreen() {
   };
 
   const handleBookAppointment = () => {
+    if (!isSaved) {
+      Alert.alert(
+        'Enregistrement requis',
+        'Vous devez d\'abord enregistrer ce médecin dans vos favoris avant de pouvoir prendre rendez-vous.',
+        [
+          {
+            text: 'OK',
+            style: 'default',
+          },
+          {
+            text: 'Enregistrer',
+            onPress: handleSaveDoctor,
+            style: 'default',
+          }
+        ]
+      );
+      return;
+    }
+    
     router.push({
       pathname: '/patient/appointment/new',
       params: { doctorId: id }
@@ -196,15 +215,6 @@ export default function DoctorDetailScreen() {
             </ThemedText>
           </ThemedView>
 
-          <ThemedView style={styles.section}>
-            <ThemedText type="title" style={styles.sectionTitle}>Working Time</ThemedText>
-            <ThemedText style={styles.sectionContent}>
-              {doctor.working_hours?.start && doctor.working_hours?.end 
-                ? `${doctor.working_hours.start} to ${doctor.working_hours.end}`
-                : '9:00 AM to 6:00 PM'}
-            </ThemedText>
-          </ThemedView>
-
           <View style={styles.buttonContainer}>
             <TouchableOpacity 
               style={[styles.saveButton, isSaved && styles.savedButton]}
@@ -223,12 +233,19 @@ export default function DoctorDetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.bookButton}
+              style={[styles.bookButton, !isSaved && styles.disabledButton]}
               onPress={handleBookAppointment}
             >
               <ThemedText style={styles.bookButtonText}>Book Appointment</ThemedText>
             </TouchableOpacity>
           </View>
+          
+          <ThemedView style={styles.noticeContainer}>
+            <Ionicons name="information-circle-outline" size={20} color="#666" style={styles.noticeIcon} />
+            <ThemedText style={styles.noticeText}>
+              Vous devez enregistrer ce médecin avant de pouvoir prendre rendez-vous.
+            </ThemedText>
+          </ThemedView>
         </ScrollView>
       ) : (
         <ThemedView style={styles.container}>
@@ -348,6 +365,9 @@ const styles = StyleSheet.create({
     flex: 2,
     alignItems: 'center',
   },
+  disabledButton: {
+    backgroundColor: '#a0c1e7',
+  },
   buttonIcon: {
     marginRight: 8,
   },
@@ -360,5 +380,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  noticeContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 16,
+    margin: 16,
+    marginTop: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  noticeIcon: {
+    marginRight: 8,
+  },
+  noticeText: {
+    fontSize: 16,
+    color: '#666',
   },
 }); 

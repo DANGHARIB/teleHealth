@@ -7,7 +7,8 @@ import {
   Image, 
   SafeAreaView, 
   StatusBar,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -99,15 +100,31 @@ export default function DoctorProfileTabScreen() {
   );
 
   const handleLogout = async () => {
-    try {
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userInfo');
-      console.log("User token and info removed, logging out doctor.");
-      router.replace('/(doctor)/auth');
-    } catch (error) {
-      console.error("Failed to logout doctor", error);
-      router.replace('/(doctor)/auth');
-    }
+    Alert.alert(
+      "Logout Confirmation",
+      "Are you sure you want to logout?",
+      [
+        {
+          text: "No",
+          style: "cancel"
+        },
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('userToken');
+              await AsyncStorage.removeItem('userInfo');
+              console.log("User token and info removed, logging out doctor.");
+              router.replace('/welcome');
+            } catch (error) {
+              console.error("Failed to logout doctor", error);
+              router.replace('/welcome');
+            }
+          }
+        }
+      ],
+      { cancelable: true }
+    );
   };
 
   const goToEditProfile = () => {
