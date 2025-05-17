@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, View, Alert } from 'react-native';
+import { StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, View, Alert, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,28 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI } from '@/services/api';
 
-// Définir le type pour les données du patient
+// App theme colors
+const COLORS = {
+  primary: '#2D87BB',
+  primaryDark: '#1A5F8C',
+  navyBlue: '#0A2463',  // Navy blue for headings and important text
+  babyBlue: '#7AA7CC',  // Baby blue for secondary text and accents
+  darkNavy: '#090F47',  // Dark navy/blue for patient information
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  text: '#333333',
+  textLight: '#6B7280',
+  border: '#E5E7EB',
+  error: '#EF4444',
+  success: '#10B981',
+  badge: '#E1F5FE',
+  badgeText: '#0288D1',
+};
+
+// Override badgeText to use babyBlue
+COLORS.badgeText = COLORS.babyBlue;
+
+// Define patient data type
 type Patient = {
   _id: string;
   first_name?: string;
@@ -37,48 +58,58 @@ export default function PatientDetailScreen() {
       if (foundPatient) {
         setPatient(foundPatient);
       } else {
-        setError('Patient non trouvé');
+        setError('Patient not found');
       }
       
       setLoading(false);
     } catch (err) {
-      console.error('Erreur lors du chargement des détails du patient:', err);
-      setError('Impossible de charger les détails du patient');
+      console.error('Error loading patient details:', err);
+      setError('Unable to load patient details');
       setLoading(false);
     }
   }, [id]);
 
-  // Chargement initial des données
+  // Initial data loading
   useEffect(() => {
     if (id) {
       fetchPatientDetails();
     }
   }, [id, fetchPatientDetails]);
 
-  // Rafraîchir les données à chaque retour sur cette page
+  // Refresh data when returning to this page
   useFocusEffect(
     useCallback(() => {
       if (id) {
         fetchPatientDetails();
       }
       return () => {
-        // Nettoyage optionnel
+        // Optional cleanup
       };
     }, [fetchPatientDetails, id])
   );
 
-  const getDefaultImage = () => require('@/assets/images/icon.png');
+  const getDefaultImage = (patient: Patient) => {
+    // Use gender-based avatars for better representation
+    const gender = patient?.gender?.toLowerCase();
+    if (gender === 'homme' || gender === 'male') {
+      return { uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' };
+    } else if (gender === 'femme' || gender === 'female') {
+      return { uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135789.png' };
+    } else {
+      return { uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png' };
+    }
+  };
   
   const getPatientName = (patient: Patient) => {
     if (patient.user?.fullName) return patient.user.fullName;
     if (patient.first_name || patient.last_name) {
       return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
     }
-    return 'Patient sans nom';
+    return 'Patient without name';
   };
 
   const calculateAge = (dateOfBirth?: string): string => {
-    if (!dateOfBirth) return 'Âge inconnu';
+    if (!dateOfBirth) return 'Unknown age';
     
     const birthDate = new Date(dateOfBirth);
     const today = new Date();
@@ -89,39 +120,54 @@ export default function PatientDetailScreen() {
       age--;
     }
     
-    return `${age} ans`;
+    return `${age} years`;
   };
 
   const handleContactPatient = () => {
-    // Fonction à implémenter pour contacter le patient
-    Alert.alert('Contact', `Contacter ${getPatientName(patient!)}`);
-  };
-
-  const handleScheduleAppointment = () => {
-    // Fonction à implémenter pour planifier un rendez-vous
-    Alert.alert('Rendez-vous', `Planifier un rendez-vous avec ${getPatientName(patient!)}`);
+    if (patient?.user?.email) {
+      const subject = `Medical follow-up for ${getPatientName(patient)}`;
+      const body = `Hello ${getPatientName(patient)},\n\nI'm reaching out regarding your medical follow-up.\n\nBest regards,\nDr. `;
+      
+      const emailUrl = `mailto:${patient.user.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      
+      Linking.canOpenURL(emailUrl)
+        .then((supported) => {
+          if (supported) {
+            return Linking.openURL(emailUrl);
+          } else {
+            Alert.alert('Error', 'Email app is not available or cannot be opened');
+          }
+        })
+        .catch((err) => {
+          console.error('An error occurred', err);
+          Alert.alert('Error', 'Could not open email client');
+        });
+    } else {
+      Alert.alert('No Email Available', 'This patient does not have an email address on file.');
+    }
   };
 
   return (
     <>
       <Stack.Screen 
         options={{
-          headerTitle: 'Détails du patient',
+          headerTitle: 'Patient Details',
           headerShown: true,
-          headerBackTitle: 'Retour',
+          headerBackTitle: 'Back',
           headerStyle: {
             backgroundColor: '#fff',
           },
           headerTitleStyle: {
             fontWeight: 'bold',
             fontSize: 24,
-            color: '#14104B'
+            color: COLORS.navyBlue
           },
+          headerTintColor: COLORS.babyBlue,
         }} 
       />
       
       {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
+        <ActivityIndicator size="large" color={COLORS.babyBlue} style={styles.loader} />
       ) : error ? (
         <ThemedView style={styles.container}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -131,7 +177,7 @@ export default function PatientDetailScreen() {
           <ThemedView style={styles.patientCard}>
             <View style={styles.patientProfile}>
               <Image
-                source={getDefaultImage()}
+                source={getDefaultImage(patient)}
                 style={styles.patientImage}
                 contentFit="cover"
               />
@@ -141,7 +187,7 @@ export default function PatientDetailScreen() {
                 </ThemedText>
                 <ThemedText style={styles.patientDetails}>
                   {patient.gender ? `${patient.gender} • ` : ''}
-                  {patient.date_of_birth ? calculateAge(patient.date_of_birth) : 'Âge inconnu'}
+                  {patient.date_of_birth ? calculateAge(patient.date_of_birth) : 'Unknown age'}
                 </ThemedText>
                 {patient.user?.email && (
                   <ThemedText style={styles.emailText}>
@@ -153,45 +199,45 @@ export default function PatientDetailScreen() {
             
             {patient.has_taken_assessment && (
               <ThemedView style={styles.assessmentBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#00838f" style={styles.badgeIcon} />
-                <ThemedText style={styles.assessmentText}>Évaluation complétée</ThemedText>
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.navyBlue} style={styles.badgeIcon} />
+                <ThemedText style={styles.assessmentText}>Assessment completed</ThemedText>
               </ThemedView>
             )}
           </ThemedView>
 
           <ThemedView style={styles.section}>
-            <ThemedText type="title" style={styles.sectionTitle}>Informations personnelles</ThemedText>
+            <ThemedText type="title" style={styles.sectionTitle}>Personal Information</ThemedText>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Nom</ThemedText>
-              <ThemedText style={styles.infoValue}>{patient.last_name || 'Non renseigné'}</ThemedText>
+              <ThemedText style={styles.infoLabel}>Last Name</ThemedText>
+              <ThemedText style={styles.infoValue}>{patient.last_name || 'Not provided'}</ThemedText>
             </View>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Prénom</ThemedText>
-              <ThemedText style={styles.infoValue}>{patient.first_name || 'Non renseigné'}</ThemedText>
+              <ThemedText style={styles.infoLabel}>First Name</ThemedText>
+              <ThemedText style={styles.infoValue}>{patient.first_name || 'Not provided'}</ThemedText>
             </View>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Genre</ThemedText>
-              <ThemedText style={styles.infoValue}>{patient.gender || 'Non renseigné'}</ThemedText>
+              <ThemedText style={styles.infoLabel}>Gender</ThemedText>
+              <ThemedText style={styles.infoValue}>{patient.gender || 'Not provided'}</ThemedText>
             </View>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Date de naissance</ThemedText>
+              <ThemedText style={styles.infoLabel}>Date of Birth</ThemedText>
               <ThemedText style={styles.infoValue}>
                 {patient.date_of_birth 
-                  ? new Date(patient.date_of_birth).toLocaleDateString('fr-FR')
-                  : 'Non renseignée'}
+                  ? new Date(patient.date_of_birth).toLocaleDateString('en-US')
+                  : 'Not provided'}
               </ThemedText>
             </View>
           </ThemedView>
 
           <ThemedView style={styles.section}>
-            <ThemedText type="title" style={styles.sectionTitle}>Statut médical</ThemedText>
+            <ThemedText type="title" style={styles.sectionTitle}>Medical Status</ThemedText>
             <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Évaluation initiale</ThemedText>
+              <ThemedText style={styles.infoLabel}>Initial Assessment</ThemedText>
               <ThemedText style={[
                 styles.statusValue, 
-                {color: patient.has_taken_assessment ? '#00838f' : '#e57373'}
+                {color: patient.has_taken_assessment ? COLORS.navyBlue : COLORS.error}
               ]}>
-                {patient.has_taken_assessment ? 'Complétée' : 'Non complétée'}
+                {patient.has_taken_assessment ? 'Completed' : 'Not completed'}
               </ThemedText>
             </View>
           </ThemedView>
@@ -208,27 +254,14 @@ export default function PatientDetailScreen() {
                 style={styles.buttonIcon} 
               />
               <ThemedText style={styles.buttonText}>
-                Contacter
+                Contact
               </ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.scheduleButton}
-              onPress={handleScheduleAppointment}
-            >
-              <Ionicons 
-                name="calendar-outline" 
-                size={20} 
-                color="#fff" 
-                style={styles.buttonIcon} 
-              />
-              <ThemedText style={styles.buttonText}>Rendez-vous</ThemedText>
             </TouchableOpacity>
           </View>
         </ScrollView>
       ) : (
         <ThemedView style={styles.container}>
-          <ThemedText style={styles.errorText}>Patient non trouvé</ThemedText>
+          <ThemedText style={styles.errorText}>Patient not found</ThemedText>
         </ThemedView>
       )}
     </>
@@ -238,7 +271,7 @@ export default function PatientDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: COLORS.background,
   },
   loader: {
     flex: 1,
@@ -247,12 +280,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     textAlign: 'center',
-    color: 'red',
+    color: COLORS.error,
     margin: 20,
     fontSize: 16,
   },
   patientCard: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 12,
     padding: 16,
     margin: 16,
@@ -273,6 +306,7 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     marginRight: 16,
+    backgroundColor: '#F4F4F4',
   },
   patientInfo: {
     flex: 1,
@@ -282,19 +316,20 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 4,
+    color: COLORS.navyBlue,
   },
   patientDetails: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.babyBlue,
     marginBottom: 4,
   },
   emailText: {
     fontSize: 14,
-    color: '#666',
+    color: COLORS.textLight,
   },
   assessmentBadge: {
     flexDirection: 'row',
-    backgroundColor: '#e0f7fa',
+    backgroundColor: 'rgba(122, 167, 204, 0.1)', // Light baby blue background using #7AA7CC with opacity
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -307,10 +342,10 @@ const styles = StyleSheet.create({
   },
   assessmentText: {
     fontSize: 14,
-    color: '#00838f',
+    color: COLORS.babyBlue,
   },
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 12,
     padding: 16,
     margin: 16,
@@ -325,6 +360,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
+    color: COLORS.navyBlue,
   },
   infoRow: {
     flexDirection: 'row',
@@ -335,41 +371,29 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.textLight,
   },
   infoValue: {
     fontSize: 16,
     fontWeight: '500',
+    color: COLORS.darkNavy,
   },
   statusValue: {
     fontSize: 16,
     fontWeight: '500',
+    color: COLORS.darkNavy,
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     margin: 16,
     marginBottom: 30,
   },
   contactButton: {
-    flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#4a90e2',
+    backgroundColor: COLORS.babyBlue,
     borderRadius: 8,
     padding: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-  },
-  scheduleButton: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#14104B',
-    borderRadius: 8,
-    padding: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
   },
   buttonIcon: {
     marginRight: 8,
