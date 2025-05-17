@@ -1,5 +1,8 @@
 const Availability = require('../models/Availability');
 const Doctor = require('../models/Doctor');
+const Appointment = require('../models/Appointment');
+
+const APPOINTMENT_DURATION = 30;
 
 // @desc    Créer une disponibilité
 // @route   POST /api/availability
@@ -17,7 +20,7 @@ exports.createAvailability = async (req, res) => {
     // Créer la disponibilité
     const availability = new Availability({
       doctor: doctor._id,
-      date,
+      date: new Date(date),
       startTime,
       endTime,
       isBooked: false
@@ -27,39 +30,99 @@ exports.createAvailability = async (req, res) => {
     
     res.status(201).json(createdAvailability);
   } catch (error) {
+    console.error('Erreur création disponibilité:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Obtenir toutes les disponibilités d'un médecin
-// @route   GET /api/availability/doctor/:id
+// @desc    Obtenir les créneaux de 30 minutes disponibles pour un médecin à une date donnée
+// @route   GET /api/availability/doctor/:id?date=YYYY-MM-DD
 // @access  Public
 exports.getDoctorAvailability = async (req, res) => {
   try {
     const doctorId = req.params.id;
-    const { date, isBooked } = req.query;
-    
-    let query = { doctor: doctorId };
-    
-    if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      
-      query.date = { $gte: startDate, $lte: endDate };
+    const { date } = req.query;
+
+    console.log('===== RECHERCHE DE CRÉNEAUX DE 30 MIN =====');
+    console.log('Paramètres de recherche:', { doctorId, date });
+
+    if (!date) {
+      console.log('❌ Date manquante pour la recherche de créneaux');
+      return res.status(400).json({ message: 'La date est requise pour obtenir les créneaux.' });
     }
-    
-    if (isBooked !== undefined) {
-      query.isBooked = isBooked === 'true';
+
+    const targetDate = new Date(date);
+    targetDate.setUTCHours(0, 0, 0, 0);
+
+    const nextDay = new Date(targetDate);
+    nextDay.setUTCDate(targetDate.getUTCDate() + 1);
+
+    // 1. Récupérer les plages de disponibilité générales du médecin pour cette date
+    const generalAvailabilities = await Availability.find({
+      doctor: doctorId,
+      date: {
+        $gte: targetDate,
+        $lt: nextDay
+      }
+    }).sort({ startTime: 1 });
+
+    if (!generalAvailabilities.length) {
+      console.log(`ℹ️ Aucune plage de disponibilité générale trouvée pour Dr ${doctorId} le ${date}`);
+      return res.json([]);
     }
+    console.log(`✅ ${generalAvailabilities.length} plage(s) de disponibilité générale trouvée(s) pour le ${date}.`);
+
+    // 2. Récupérer tous les rendez-vous existants pour ce médecin à cette date
+    const existingAppointments = await Appointment.find({
+      doctor: doctorId,
+    }).populate('availability');
+
+    const bookedSlotsForDate = new Set();
+    existingAppointments.forEach(app => {
+      if (app.availability && app.availability.date) {
+        const appDate = new Date(app.availability.date);
+        appDate.setUTCHours(0,0,0,0);
+        if (appDate.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0]) {
+          bookedSlotsForDate.add(app.slotStartTime);
+        }
+      }
+    });
+    console.log(`ℹ️ ${bookedSlotsForDate.size} créneaux déjà réservés pour le ${date}:`, Array.from(bookedSlotsForDate));
     
-    const availabilities = await Availability.find(query).sort({ date: 1, startTime: 1 });
+    const allThirtyMinuteSlots = [];
+
+    generalAvailabilities.forEach(availDoc => {
+      console.log(`Traitement de la plage générale: ${availDoc.startTime} - ${availDoc.endTime} (ID: ${availDoc._id})`);
+      const blockStartMinutes = timeToMinutes(availDoc.startTime);
+      const blockEndMinutes = timeToMinutes(availDoc.endTime);
+
+      for (let slotStart = blockStartMinutes; slotStart < blockEndMinutes; slotStart += APPOINTMENT_DURATION) {
+        const slotStartTimeStr = minutesToTime(slotStart);
+        const slotEndTimeStr = minutesToTime(slotStart + APPOINTMENT_DURATION);
+
+        if (slotStart + APPOINTMENT_DURATION <= blockEndMinutes) {
+          const isBooked = bookedSlotsForDate.has(slotStartTimeStr);
+          allThirtyMinuteSlots.push({
+            _id: `${availDoc._id}_${slotStartTimeStr}`,
+            availabilityId: availDoc._id.toString(),
+            startTime: slotStartTimeStr,
+            endTime: slotEndTimeStr,
+            available: !isBooked
+          });
+        }
+      }
+    });
     
-    res.json(availabilities);
+    allThirtyMinuteSlots.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+    console.log(`✅ ${allThirtyMinuteSlots.length} créneaux de 30 minutes générés pour Dr ${doctorId} le ${date}.`);
+    console.log('===== FIN RECHERCHE DE CRÉNEAUX DE 30 MIN =====');
+    
+    res.json(allThirtyMinuteSlots);
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('❌ Erreur lors de la récupération des créneaux de 30 minutes:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des créneaux.' });
   }
 };
 
@@ -74,22 +137,16 @@ exports.getMyAvailability = async (req, res) => {
       return res.status(404).json({ message: 'Profil de médecin non trouvé' });
     }
     
-    const { date, isBooked } = req.query;
+    const { date } = req.query;
     
     let query = { doctor: doctor._id };
     
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      
-      query.date = { $gte: startDate, $lte: endDate };
-    }
-    
-    if (isBooked !== undefined) {
-      query.isBooked = isBooked === 'true';
+      const targetDate = new Date(date);
+      targetDate.setUTCHours(0,0,0,0);
+      const nextDay = new Date(targetDate);
+      nextDay.setUTCDate(targetDate.getUTCDate() + 1);
+      query.date = { $gte: targetDate, $lt: nextDay };
     }
     
     const availabilities = await Availability.find(query).sort({ date: 1, startTime: 1 });
@@ -105,7 +162,7 @@ exports.getMyAvailability = async (req, res) => {
 // @access  Private/Doctor
 exports.updateAvailability = async (req, res) => {
   try {
-    const { date, startTime, endTime, isBooked } = req.body;
+    const { date, startTime, endTime } = req.body;
     
     const availability = await Availability.findById(req.params.id);
     
@@ -117,18 +174,12 @@ exports.updateAvailability = async (req, res) => {
     const doctor = await Doctor.findOne({ user: req.user._id });
     
     if (!doctor || doctor._id.toString() !== availability.doctor.toString()) {
-      return res.status(403).json({ message: 'Non autorisé à modifier cette disponibilité' });
+      return res.status(403).json({ message: 'Non autorisé' });
     }
     
-    // Ne pas permettre la modification si déjà réservée
-    if (availability.isBooked && (date || startTime || endTime)) {
-      return res.status(400).json({ message: 'Impossible de modifier une disponibilité déjà réservée' });
-    }
-    
-    if (date) availability.date = date;
+    if (date) availability.date = new Date(date);
     if (startTime) availability.startTime = startTime;
     if (endTime) availability.endTime = endTime;
-    if (isBooked !== undefined) availability.isBooked = isBooked;
     
     const updatedAvailability = await availability.save();
     
@@ -153,12 +204,13 @@ exports.deleteAvailability = async (req, res) => {
     const doctor = await Doctor.findOne({ user: req.user._id });
     
     if (!doctor || doctor._id.toString() !== availability.doctor.toString()) {
-      return res.status(403).json({ message: 'Non autorisé à supprimer cette disponibilité' });
+      return res.status(403).json({ message: 'Non autorisé' });
     }
     
-    // Ne pas permettre la suppression si déjà réservée
-    if (availability.isBooked) {
-      return res.status(400).json({ message: 'Impossible de supprimer une disponibilité déjà réservée' });
+    // Vérifier s'il y a des RDV associés avant de supprimer
+    const appointmentsCount = await Appointment.countDocuments({ availability: availability._id, status: { $ne: 'cancelled' } });
+    if (appointmentsCount > 0) {
+      return res.status(400).json({ message: 'Impossible de supprimer une disponibilité avec des rendez-vous actifs. Annulez ou reprogrammez les rendez-vous d\'abord.' });
     }
     
     await availability.deleteOne();
@@ -174,144 +226,50 @@ exports.deleteAvailability = async (req, res) => {
 // @access  Private/Doctor
 exports.createBatchAvailability = async (req, res) => {
   try {
-    const { availabilities } = req.body;
-    
-    if (!availabilities || !Array.isArray(availabilities) || availabilities.length === 0) {
+    const { availabilities: batchData } = req.body;
+    if (!batchData || !Array.isArray(batchData) || batchData.length === 0) {
       return res.status(400).json({ message: 'Veuillez fournir des disponibilités valides' });
     }
-    
-    // Vérifier si le médecin existe
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
       return res.status(404).json({ message: 'Profil de médecin non trouvé' });
     }
-    
-    // Vérifier les doublons dans la requête
-    const uniqueTimeSlots = new Set();
-    const duplicatesInRequest = availabilities.filter(item => {
-      const slotKey = `${item.date}-${item.startTime}-${item.endTime}`;
-      if (uniqueTimeSlots.has(slotKey)) {
-        return true;
-      }
-      uniqueTimeSlots.add(slotKey);
-      return false;
-    });
-    
-    if (duplicatesInRequest.length > 0) {
-      return res.status(400).json({ 
-        message: 'Des créneaux horaires en double ont été détectés dans votre demande' 
-      });
-    }
-    
-    // Vérifier que les disponibilités ne sont pas dans le passé
-    const now = new Date();
-    const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    
-    const pastAvailabilities = availabilities.filter(item => {
-      // Vérifier si la date est dans le passé
-      if (item.date < today) {
-        return true;
-      }
-      
-      // Si c'est aujourd'hui, vérifier si l'heure est déjà passée
-      if (item.date === today) {
-        const startTimeInMinutes = timeToMinutes(item.startTime);
-        return startTimeInMinutes <= currentTimeInMinutes;
-      }
-      
-      return false;
-    });
-    
-    if (pastAvailabilities.length > 0) {
-      return res.status(400).json({
-        message: 'Impossible de créer des disponibilités dans le passé',
-        pastAvailabilities
-      });
-    }
-    
-    // Vérifier si des disponibilités existent déjà pour ces créneaux
-    const datesToCheck = [...new Set(availabilities.map(item => item.date))];
-    
-    const existingAvailabilities = await Availability.find({
-      doctor: doctor._id,
-      date: { $in: datesToCheck }
-    });
-    
-    // Vérifier les conflits avec les disponibilités existantes
-    const conflicts = [];
-    
-    for (const item of availabilities) {
-      const conflictsFound = existingAvailabilities.filter(existing => {
-        const sameDate = new Date(existing.date).toISOString().split('T')[0] === item.date;
-        const sameTimeSlot = existing.startTime === item.startTime && existing.endTime === item.endTime;
-        
-        if (sameDate && sameTimeSlot) {
-          return true;
-        }
-        
-        // Vérifier également les chevauchements
-        if (sameDate) {
-          const itemStart = timeToMinutes(item.startTime);
-          const itemEnd = timeToMinutes(item.endTime);
-          const existingStart = timeToMinutes(existing.startTime);
-          const existingEnd = timeToMinutes(existing.endTime);
-          
-          // Vérifier si le nouveau créneau chevauche un créneau existant
-          if ((itemStart < existingEnd && itemEnd > existingStart)) {
-            return true;
-          }
-        }
-        
-        return false;
-      });
-      
-      if (conflictsFound.length > 0) {
-        conflicts.push({
-          date: item.date,
-          startTime: item.startTime,
-          endTime: item.endTime
-        });
-      }
-    }
-    
-    if (conflicts.length > 0) {
-      return res.status(400).json({ 
-        message: 'Certains créneaux horaires chevauchent des disponibilités déjà définies',
-        conflicts 
-      });
-    }
-    
     const createdAvailabilities = [];
-    
-    for (const item of availabilities) {
+    for (const item of batchData) {
       const { date, startTime, endTime } = item;
-      
       const availability = new Availability({
         doctor: doctor._id,
-        date,
+        date: new Date(date),
         startTime,
         endTime,
         isBooked: false
       });
-      
       const createdAvailability = await availability.save();
       createdAvailabilities.push(createdAvailability);
     }
-    
     res.status(201).json({
       message: 'Disponibilités créées avec succès',
       availabilities: createdAvailabilities
     });
   } catch (error) {
+    console.error('Erreur createBatchAvailability:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Fonction utilitaire pour convertir l'heure (format HH:MM) en minutes
+// Fonction utilitaire pour convertir l'heure en minutes
 const timeToMinutes = (timeString) => {
+  if (!timeString || typeof timeString !== 'string' || !timeString.includes(':')) {
+    console.error('Invalid timeString for timeToMinutes:', timeString);
+    return 0;
+  }
   const [hours, minutes] = timeString.split(':').map(Number);
   return hours * 60 + minutes;
+};
+
+// Fonction utilitaire pour convertir les minutes depuis minuit en heure (HH:MM)
+const minutesToTime = (totalMinutes) => {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }; 

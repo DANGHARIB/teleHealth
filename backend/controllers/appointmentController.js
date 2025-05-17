@@ -10,64 +10,107 @@ const paymentService = require('../services/paymentService');
 // @access  Private/Patient
 exports.createAppointment = async (req, res) => {
   try {
-    const { doctorId, availabilityId, price, duration, caseDetails } = req.body;
+    const { 
+      doctorId, 
+      availabilityId, // ID de la plage de disponibilité générale du médecin
+      slotStartTime,    // Heure de début du créneau de 30 min spécifique
+      slotEndTime,      // Heure de fin du créneau de 30 min spécifique
+      price, 
+      duration, 
+      caseDetails 
+    } = req.body;
     
-    // Vérifier si le médecin existe
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ message: 'Médecin non trouvé' });
-    }
+    console.log('===== DÉBUT DE RÉSERVATION DE CRÉNEAU SPÉCIFIQUE =====');
+    console.log('Données reçues:', JSON.stringify({
+      doctorId,
+      availabilityId,
+      slotStartTime,
+      slotEndTime,
+      price,
+      duration,
+      caseDetails
+    }, null, 2));
     
-    // Vérifier si la disponibilité existe
-    const availability = await Availability.findById(availabilityId);
-    if (!availability) {
-      return res.status(404).json({ message: 'Disponibilité non trouvée' });
-    }
-    
-    // Vérifier si la disponibilité est déjà réservée pour un rendez-vous actif (non annulé)
-    const existingActiveAppointment = await Appointment.findOne({
-      availability: availabilityId,
-      status: { $nin: ['cancelled'] } // Exclure les rendez-vous annulés
-    });
-    
-    if (existingActiveAppointment) {
-      return res.status(400).json({ message: 'Ce créneau est déjà réservé' });
+    if (!slotStartTime || !slotEndTime) {
+      console.log('❌ Heures de début/fin du créneau manquantes');
+      return res.status(400).json({ message: 'Les heures de début et de fin du créneau sont requises' });
     }
 
-    // Rechercher le patient
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      console.log('❌ Médecin non trouvé:', doctorId);
+      return res.status(404).json({ message: 'Médecin non trouvé' });
+    }
+    console.log('✅ Médecin trouvé:', doctor.full_name || `${doctor.first_name} ${doctor.last_name}`);
+    
+    const availability = await Availability.findById(availabilityId);
+    if (!availability) {
+      console.log('❌ Plage de disponibilité générale non trouvée:', availabilityId);
+      return res.status(404).json({ message: 'Plage de disponibilité générale non trouvée' });
+    }
+    console.log('✅ Plage de disponibilité générale trouvée:', {
+      date: new Date(availability.date).toLocaleDateString('fr-FR'),
+      startTimeBlock: availability.startTime,
+      endTimeBlock: availability.endTime
+    });
+    
+    // Vérifier si un rendez-vous existe déjà pour ce créneau spécifique
+    const existingAppointmentForSlot = await Appointment.findOne({
+      doctor: doctorId,
+      availability: availabilityId, // On peut aussi vérifier sur la date de l'availability et le slotStartTime
+      slotStartTime: slotStartTime,
+      status: { $nin: ['cancelled', 'rejected'] } 
+    });
+    
+    if (existingAppointmentForSlot) {
+      console.log('❌ Créneau spécifique déjà réservé:', {
+        date: new Date(availability.date).toLocaleDateString('fr-FR'),
+        slot: `${slotStartTime} - ${slotEndTime}`,
+        appointmentId: existingAppointmentForSlot._id
+      });
+      return res.status(400).json({ message: 'Ce créneau spécifique de 30 minutes est déjà réservé' });
+    }
+    console.log('✅ Créneau spécifique disponible pour réservation:', `${new Date(availability.date).toLocaleDateString('fr-FR')} ${slotStartTime}-${slotEndTime}`);
+
     const patient = await Patient.findOne({ user: req.user._id });
     if (!patient) {
+      console.log('❌ Patient non trouvé:', req.user._id);
       return res.status(404).json({ message: 'Patient non trouvé' });
     }
+    console.log('✅ Patient trouvé:', patient._id);
     
-    // Créer le rendez-vous
     const appointment = new Appointment({
       doctor: doctorId,
       patient: patient._id,
-      availability: availabilityId,
-      price: price || 28, // Prix par défaut
-      duration: duration || 30, // Durée par défaut (minutes)
+      availability: availabilityId, // Lien vers la plage de dispo générale
+      slotStartTime,                // Heure de début du créneau de 30 min
+      slotEndTime,                  // Heure de fin du créneau de 30 min
+      price: price || 28,
+      duration: duration || 30,
       caseDetails: caseDetails || 'Consultation standard',
-      status: 'confirmed', // Tous les rendez-vous sont confirmés par défaut
-      paymentStatus: 'completed' // Tous les paiements sont complétés par défaut
+      status: 'confirmed',
+      paymentStatus: 'completed'
     });
     
-    // Marquer la disponibilité comme réservée
-    availability.isBooked = true;
-    await availability.save();
-    
-    // Sauvegarder le rendez-vous
+    // NE PAS FAIRE : availability.isBooked = true;
+    // NE PAS FAIRE : await availability.save();
+    // La réservation d'un créneau de 30 min ne rend pas toute la plage indisponible.
+
     const createdAppointment = await appointment.save();
+    console.log('✅ Rendez-vous (créneau de 30 min) créé avec succès:', {
+      id: createdAppointment._id,
+      date: new Date(availability.date).toLocaleDateString('fr-FR'),
+      creneauReserve: `${createdAppointment.slotStartTime} - ${createdAppointment.slotEndTime}`
+    });
     
-    // Envoyer une notification au médecin
     await notificationService.notifyAppointmentCreated(createdAppointment);
-    
-    // Planifier le rappel 1h avant le rendez-vous
     await notificationService.scheduleAppointmentReminders(createdAppointment);
+    
+    console.log('===== FIN DE RÉSERVATION DE CRÉNEAU SPÉCIFIQUE =====');
     
     res.status(201).json(createdAppointment);
   } catch (error) {
-    console.error('Erreur lors de la création du rendez-vous:', error);
+    console.error('❌ Erreur lors de la création du rendez-vous (créneau spécifique):', error);
     res.status(500).json({ message: 'Erreur serveur lors de la création du rendez-vous' });
   }
 };

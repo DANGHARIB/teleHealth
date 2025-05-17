@@ -78,16 +78,9 @@ type Doctor = {
   rating?: number;
 };
 
-type Availability = {
-  _id: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  isBooked: boolean;
-};
-
 type TimeSlot = {
   _id: string;
+  availabilityId: string;
   startTime: string;
   endTime: string;
   available: boolean;
@@ -122,7 +115,6 @@ export default function BookAppointmentScreen() {
   const [error, setError] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
-  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [availableDates, setAvailableDates] = useState<DateOption[]>([]);
   
@@ -205,56 +197,22 @@ export default function BookAppointmentScreen() {
     fetchDoctorDetails();
   }, [doctorId]);
 
-  // Retrieve availabilities for a specific date
+  // Retrieve 30-minute time slots for a specific date
   const fetchAvailabilities = async (date: string) => {
     try {
       setLoadingSlots(true);
+      setSelectedTimeSlot(null); // Reset selection when date changes
       
-      const availabilitiesData = await patientAPI.getDoctorAvailability(doctorId as string, date);
-      setAvailabilities(availabilitiesData);
-      
-      // Generate 30-minute time slots
-      generateTimeSlots(availabilitiesData);
+      // This API call will now return an array of TimeSlot objects
+      const timeSlotsData = await patientAPI.getDoctorAvailability(doctorId as string, date);
+      setTimeSlots(timeSlotsData);
       
       setLoadingSlots(false);
     } catch (err) {
-      console.error('Error loading availabilities:', err);
-      setAvailabilities([]);
-      setTimeSlots([]);
+      console.error('Error loading time slots:', err);
+      setTimeSlots([]); // Clear slots on error
       setLoadingSlots(false);
     }
-  };
-
-  // Generate 30-minute time slots from availabilities
-  const generateTimeSlots = (availabilitiesData: Availability[]) => {
-    const slots: TimeSlot[] = [];
-    
-    availabilitiesData.forEach(availability => {
-      const startMinutes = timeToMinutes(availability.startTime);
-      const endMinutes = timeToMinutes(availability.endTime);
-      
-      // Create 30-minute slots
-      for (let time = startMinutes; time < endMinutes; time += APPOINTMENT_DURATION) {
-        const startTime = minutesToTime(time);
-        const endTime = minutesToTime(time + APPOINTMENT_DURATION);
-        
-        // Don't add a slot that exceeds the end time
-        if (time + APPOINTMENT_DURATION <= endMinutes) {
-          slots.push({
-            _id: availability._id, // Original availability ID
-            startTime,
-            endTime,
-            available: !availability.isBooked
-          });
-        }
-      }
-    });
-    
-    // Sort slots by start time
-    slots.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
-    
-    setTimeSlots(slots);
-    setSelectedTimeSlot(null);
   };
 
   // Navigation functions for weeks
@@ -348,7 +306,7 @@ export default function BookAppointmentScreen() {
 
   // Select a time slot
   const handleTimeSlotSelect = (slot: TimeSlot) => {
-    // For the backend, we use the original availability ID
+    // Utiliser l'ID unique du créneau pour la sélection dans l'UI
     setSelectedTimeSlot(slot._id);
   };
 
@@ -388,23 +346,31 @@ export default function BookAppointmentScreen() {
 
   // Book the appointment
   const handleBookAppointment = async () => {
-    if (!selectedTimeSlot || !doctorId) {
-      Alert.alert('Error', 'Please select a date and time');
+    if (!selectedTimeSlot || !doctorId || !doctor) {
+      Alert.alert('Error', 'Please select a date and time, or doctor details are missing.');
       return;
     }
 
     try {
+      const selectedSlot = timeSlots.find(slot => slot._id === selectedTimeSlot);
+      
+      if (!selectedSlot) {
+        Alert.alert('Error', 'Selected time slot not found.');
+        return;
+      }
+
       const appointmentData = {
         doctorId: doctorId,
-        availabilityId: selectedTimeSlot,
-        price: doctor?.price || 28,
+        availabilityId: selectedSlot.availabilityId,
+        slotStartTime: selectedSlot.startTime,
+        slotEndTime: selectedSlot.endTime,
+        price: doctor.price || 28,
         duration: APPOINTMENT_DURATION,
         caseDetails: 'Standard consultation'
       };
 
       const createdAppointment = await patientAPI.createAppointment(appointmentData);
       
-      // Redirect to payment page instead of home page
       router.push({
         pathname: '/patient/payment',
         params: { appointmentId: createdAppointment._id }

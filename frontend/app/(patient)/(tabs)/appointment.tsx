@@ -34,9 +34,11 @@ type Appointment = {
   };
   availability: {
     date: string;
-    startTime: string;
-    endTime: string;
+    // startTime: string;
+    // endTime: string;
   };
+  slotStartTime: string;
+  slotEndTime: string;
   status: 'pending' | 'confirmed' | 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
   caseDetails: string;
   sessionLink?: string;
@@ -566,8 +568,8 @@ export default function AppointmentScreen() {
     }
     
     return filteredAppointments.map((appointment, index) => {
-      const time = formatTime(appointment.availability.startTime);
-      const endTime = formatTime(appointment.availability.endTime);
+      const time = formatTime(appointment.slotStartTime);
+      const endTime = formatTime(appointment.slotEndTime);
       const doctor = appointment.doctor;
       const statusConfig = getStatusConfig(appointment.status);
       

@@ -16,6 +16,14 @@ const appointmentSchema = new mongoose.Schema({
     ref: 'Availability',
     required: true
   },
+  slotStartTime: {
+    type: String,
+    required: true
+  },
+  slotEndTime: {
+    type: String,
+    required: true
+  },
   price: {
     type: Number,
     required: true
