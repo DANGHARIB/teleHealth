@@ -1,14 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  StyleSheet, 
+  ScrollView, 
+  View, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  Alert,
+  StatusBar,
+  Dimensions,
+  SafeAreaView
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { format, addDays, parseISO, isToday, isTomorrow, isFuture } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { 
+  format, 
+  addDays, 
+  parseISO, 
+  isToday, 
+  isTomorrow, 
+  isFuture, 
+  startOfWeek, 
+  endOfWeek, 
+  addWeeks, 
+  subWeeks, 
+  isSameWeek,
+  isBefore,
+  addMinutes,
+  parse
+} from 'date-fns';
+import { enUS } from 'date-fns/locale';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI, patientAPI } from '@/services/api';
+
+const { width } = Dimensions.get('window');
+
+// Constants for scroll calculation
+const DATE_OPTION_WIDTH = 56;
+const DATE_OPTION_MARGIN = 12;
+const DATE_SELECTOR_PADDING = 16;
+const APPOINTMENT_DURATION = 30; // Appointment duration in minutes
+
+const COLORS = {
+  primary: '#2563EB',
+  primaryLight: '#3B82F6',
+  primaryDark: '#1D4ED8',
+  secondary: '#F8FAFC',
+  accent: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  success: '#22C55E',
+  purple: '#8B5CF6',
+  gray100: '#F1F5F9',
+  gray200: '#E2E8F0',
+  gray300: '#CBD5E1',
+  gray400: '#94A3B8',
+  gray500: '#64748B',
+  gray600: '#475569',
+  gray700: '#334155',
+  gray800: '#1E293B',
+  gray900: '#0F172A',
+  white: '#FFFFFF',
+  background: '#FAFBFE',
+};
 
 // Types
 type Doctor = {
@@ -27,11 +83,13 @@ type Availability = {
   date: string;
   startTime: string;
   endTime: string;
+  isBooked: boolean;
 };
 
 type TimeSlot = {
   _id: string;
-  time: string;
+  startTime: string;
+  endTime: string;
   available: boolean;
 };
 
@@ -40,6 +98,20 @@ type DateOption = {
   formattedDate: string;
   dayName: string;
   dayNumber: string;
+  hasAvailabilities: boolean;
+};
+
+// Function to convert time in HH:MM format to minutes
+const timeToMinutes = (timeString: string): number => {
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+// Function to convert minutes to HH:MM format
+const minutesToTime = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 };
 
 export default function BookAppointmentScreen() {
@@ -48,13 +120,68 @@ export default function BookAppointmentScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [error, setError] = useState('');
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
-  const [availableDates, setAvailableDates] = useState<DateOption[]>([]);
+  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  const [currentMonth, setCurrentMonth] = useState<string>('');
+  const [availableDates, setAvailableDates] = useState<DateOption[]>([]);
+  
+  // Week navigation
+  const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
+  const [dateOptions, setDateOptions] = useState<Date[]>([]);
+  
+  // Ref for date selector ScrollView
+  const dateScrollViewRef = useRef<ScrollView>(null);
 
-  // Charger les détails du médecin
+  // New state to track loading of available dates
+  const [loadingAvailableDates, setLoadingAvailableDates] = useState(false);
+
+  // Generate date options for the current week
+  useEffect(() => {
+    const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Start on Monday
+    const dates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    setDateOptions(dates);
+    
+    // Check which dates have availabilities
+    checkAvailableDates(dates);
+  }, [currentWeek]);
+
+  // Check which dates of the week have availabilities
+  const checkAvailableDates = async (dates: Date[]) => {
+    if (!doctorId) return;
+    
+    try {
+      setLoadingAvailableDates(true);
+      
+      // Extract formatted dates for the API
+      const formattedDates = dates.map(date => format(date, 'yyyy-MM-dd'));
+      
+      // Retrieve availabilities for the entire week in a single request
+      // Note: this would require a backend update to accept an array of dates
+      // For now, we'll make one call per day, but group them in Promise.all
+      const availabilitiesPromises = formattedDates.map(date => 
+        patientAPI.getDoctorAvailability(doctorId as string, date)
+      );
+      
+      const availabilitiesResults = await Promise.all(availabilitiesPromises);
+      
+      const availableDatesOptions: DateOption[] = dates.map((date, index) => ({
+        date,
+        formattedDate: formattedDates[index],
+        dayName: format(date, 'EEE', { locale: enUS }),
+        dayNumber: format(date, 'd'),
+        hasAvailabilities: availabilitiesResults[index].length > 0
+      }));
+      
+      setAvailableDates(availableDatesOptions);
+    } catch (err) {
+      console.error('Error checking available dates:', err);
+    } finally {
+      setLoadingAvailableDates(false);
+    }
+  };
+
+  // Load doctor details
   useEffect(() => {
     const fetchDoctorDetails = async () => {
       try {
@@ -64,13 +191,13 @@ export default function BookAppointmentScreen() {
         const doctorData = await doctorAPI.getDoctorById(doctorId as string);
         setDoctor(doctorData);
         
-        // Obtenir les dates disponibles
-        await fetchAvailableDates();
+        // Once doctor details are loaded, load slots for the selected date
+        await fetchAvailabilities(format(selectedDate, 'yyyy-MM-dd'));
         
         setLoading(false);
       } catch (err) {
-        console.error('Erreur lors du chargement des détails du médecin:', err);
-        setError('Impossible de charger les détails du médecin');
+        console.error('Error loading doctor details:', err);
+        setError('Unable to load doctor details');
         setLoading(false);
       }
     };
@@ -78,88 +205,191 @@ export default function BookAppointmentScreen() {
     fetchDoctorDetails();
   }, [doctorId]);
 
-  // Récupérer les dates disponibles pour les 14 prochains jours
-  const fetchAvailableDates = async () => {
-    try {
-      if (!doctorId) return;
-      
-      // Créer un tableau de dates pour les 14 prochains jours
-      const today = new Date();
-      const dates: DateOption[] = [];
-      
-      // Ajouter les 14 prochains jours
-      for (let i = 0; i < 14; i++) {
-        const date = addDays(today, i);
-        
-        // Vérifier si ce jour a des disponibilités
-        const formattedDate = format(date, 'yyyy-MM-dd');
-        const availabilities = await patientAPI.getDoctorAvailability(doctorId as string, formattedDate);
-        
-        if (availabilities && availabilities.length > 0) {
-          dates.push({
-            date: date,
-            formattedDate: formattedDate,
-            dayName: format(date, 'EEE', { locale: fr }),
-            dayNumber: format(date, 'd'),
-          });
-        }
-      }
-      
-      setAvailableDates(dates);
-      
-      // Définir le mois actuel
-      setCurrentMonth(format(today, 'MMMM', { locale: fr }));
-      
-      // Sélectionner la première date disponible par défaut
-      if (dates.length > 0) {
-        setSelectedDate(dates[0].date);
-        fetchTimeSlots(dates[0].formattedDate);
-      }
-    } catch (err) {
-      console.error('Erreur lors du chargement des dates disponibles:', err);
-      setError('Impossible de charger les dates disponibles');
-    }
-  };
-
-  // Récupérer les créneaux horaires pour une date spécifique
-  const fetchTimeSlots = async (date: string) => {
+  // Retrieve availabilities for a specific date
+  const fetchAvailabilities = async (date: string) => {
     try {
       setLoadingSlots(true);
       
-      const availabilities = await patientAPI.getDoctorAvailability(doctorId as string, date);
+      const availabilitiesData = await patientAPI.getDoctorAvailability(doctorId as string, date);
+      setAvailabilities(availabilitiesData);
       
-      // Convertir les disponibilités en créneaux horaires
-      const slots: TimeSlot[] = availabilities.map((avail: Availability) => ({
-        _id: avail._id,
-        time: avail.startTime,
-        available: true
-      }));
+      // Generate 30-minute time slots
+      generateTimeSlots(availabilitiesData);
       
-      setTimeSlots(slots);
-      setSelectedTimeSlot(null);
       setLoadingSlots(false);
     } catch (err) {
-      console.error('Erreur lors du chargement des créneaux horaires:', err);
+      console.error('Error loading availabilities:', err);
+      setAvailabilities([]);
       setTimeSlots([]);
       setLoadingSlots(false);
     }
   };
 
-  // Sélectionner une date
-  const handleDateSelect = (date: Date, formattedDate: string) => {
+  // Generate 30-minute time slots from availabilities
+  const generateTimeSlots = (availabilitiesData: Availability[]) => {
+    const slots: TimeSlot[] = [];
+    
+    availabilitiesData.forEach(availability => {
+      const startMinutes = timeToMinutes(availability.startTime);
+      const endMinutes = timeToMinutes(availability.endTime);
+      
+      // Create 30-minute slots
+      for (let time = startMinutes; time < endMinutes; time += APPOINTMENT_DURATION) {
+        const startTime = minutesToTime(time);
+        const endTime = minutesToTime(time + APPOINTMENT_DURATION);
+        
+        // Don't add a slot that exceeds the end time
+        if (time + APPOINTMENT_DURATION <= endMinutes) {
+          slots.push({
+            _id: availability._id, // Original availability ID
+            startTime,
+            endTime,
+            available: !availability.isBooked
+          });
+        }
+      }
+    });
+    
+    // Sort slots by start time
+    slots.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    
+    setTimeSlots(slots);
+    setSelectedTimeSlot(null);
+  };
+
+  // Navigation functions for weeks
+  const goToPreviousWeek = () => {
+    const newWeek = subWeeks(currentWeek, 1);
+    const today = new Date();
+    
+    // Don't allow navigation before the current week
+    if (isBefore(newWeek, today) && !isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      return;
+    }
+    
+    // Check if the new week is the current week
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // For the current week, select today
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // For other weeks, select Monday
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
+  };
+
+  const goToNextWeek = () => {
+    const newWeek = addWeeks(currentWeek, 1);
+    const today = new Date();
+    
+    // Check if the new week is the current week
+    if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+      // For the current week, select today
+      setCurrentWeek(newWeek);
+      setSelectedDate(today);
+    } else {
+      // For other weeks, select Monday
+      const mondayOfNewWeek = startOfWeek(newWeek, { weekStartsOn: 1 });
+      setCurrentWeek(newWeek);
+      setSelectedDate(mondayOfNewWeek);
+    }
+  };
+
+  const goToCurrentWeek = () => {
+    // For the current week, always select today
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
+  };
+
+  // Auto-scroll to selected date
+  const scrollToSelectedDate = (targetDate: Date) => {
+    const selectedIndex = dateOptions.findIndex(date => 
+      format(date, 'yyyy-MM-dd') === format(targetDate, 'yyyy-MM-dd')
+    );
+    
+    if (selectedIndex > -1 && dateScrollViewRef.current) {
+      // Calculate scroll position to center the selected date or show upcoming days
+      const scrollX = Math.max(0, selectedIndex * (DATE_OPTION_WIDTH + DATE_OPTION_MARGIN) - DATE_SELECTOR_PADDING);
+      
+      dateScrollViewRef.current.scrollTo({
+        x: scrollX,
+        animated: true
+      });
+    }
+  };
+
+  // Handle date selection with auto-scroll
+  const handleDateSelection = (date: Date) => {
     setSelectedDate(date);
-    fetchTimeSlots(formattedDate);
+    // Retrieve availabilities for the new date
+    fetchAvailabilities(format(date, 'yyyy-MM-dd'));
+    scrollToSelectedDate(date);
   };
 
-  // Sélectionner un créneau horaire
-  const handleTimeSlotSelect = (slotId: string) => {
-    setSelectedTimeSlot(slotId);
+  // Effect to auto-scroll when selectedDate changes (including week changes)
+  useEffect(() => {
+    if (dateOptions.length > 0) {
+      // Delay the scroll to ensure the ScrollView is rendered
+      setTimeout(() => {
+        scrollToSelectedDate(selectedDate);
+      }, 100);
+    }
+  }, [dateOptions, selectedDate]);
+
+  // Initialization: select current date on load
+  useEffect(() => {
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
+  }, []);
+
+  // Select a time slot
+  const handleTimeSlotSelect = (slot: TimeSlot) => {
+    // For the backend, we use the original availability ID
+    setSelectedTimeSlot(slot._id);
   };
 
-  // Réserver le rendez-vous
+  // Format time for display with time range (e.g., 8:00-8:30 AM)
+  const formatTimeForDisplay = (startTime: string, endTime: string): string => {
+    const formatSingleTime = (time: string): string => {
+      const [hours, minutes] = time.split(':');
+      let formattedHours = parseInt(hours);
+      const ampm = formattedHours >= 12 ? 'PM' : 'AM';
+      
+      if (formattedHours > 12) {
+        formattedHours -= 12;
+      } else if (formattedHours === 0) {
+        formattedHours = 12;
+      }
+      
+      return `${formattedHours}:${minutes}`;
+    };
+
+    const startFormatted = formatSingleTime(startTime);
+    const endFormatted = formatSingleTime(endTime);
+    
+    // If both times are in the same period (AM/PM), only show AM/PM once
+    const startHour = parseInt(startTime.split(':')[0]);
+    const endHour = parseInt(endTime.split(':')[0]);
+    const samePeriod = (startHour < 12 && endHour < 12) || (startHour >= 12 && endHour >= 12);
+    
+    if (samePeriod) {
+      const period = endHour >= 12 ? 'PM' : 'AM';
+      return `${startFormatted}-${endFormatted} ${period}`;
+    } else {
+      const startPeriod = startHour >= 12 ? 'PM' : 'AM';
+      const endPeriod = endHour >= 12 ? 'PM' : 'AM';
+      return `${startFormatted} ${startPeriod}-${endFormatted} ${endPeriod}`;
+    }
+  };
+
+  // Book the appointment
   const handleBookAppointment = async () => {
     if (!selectedTimeSlot || !doctorId) {
-      Alert.alert('Erreur', 'Veuillez sélectionner une date et un horaire');
+      Alert.alert('Error', 'Please select a date and time');
       return;
     }
 
@@ -168,33 +398,33 @@ export default function BookAppointmentScreen() {
         doctorId: doctorId,
         availabilityId: selectedTimeSlot,
         price: doctor?.price || 28,
-        duration: 30, // Durée par défaut en minutes
-        caseDetails: 'Consultation standard'
+        duration: APPOINTMENT_DURATION,
+        caseDetails: 'Standard consultation'
       };
 
       const createdAppointment = await patientAPI.createAppointment(appointmentData);
       
-      // Rediriger vers la page de paiement au lieu de la page d'accueil
+      // Redirect to payment page instead of home page
       router.push({
         pathname: '/patient/payment',
         params: { appointmentId: createdAppointment._id }
       });
     } catch (err) {
-      console.error('Erreur lors de la réservation du rendez-vous:', err);
-      Alert.alert('Erreur', 'Impossible de réserver le rendez-vous. Veuillez réessayer.');
+      console.error('Error booking appointment:', err);
+      Alert.alert('Error', 'Unable to book appointment. Please try again.');
     }
   };
 
-  // Obtenir une image par défaut si celle du médecin n'est pas disponible
+  // Get default image if doctor's image is not available
   const getDefaultImage = () => require('@/assets/images/icon.png');
   
-  // Obtenir le nom complet du médecin
+  // Get doctor's full name
   const getDoctorName = (doctor: Doctor) => {
     if (doctor.full_name) return doctor.full_name;
     return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim();
   };
 
-  // Afficher les étoiles de notation
+  // Render rating stars
   const renderRatingStars = (rating: number = 4) => {
     const stars = [];
     const maxStars = 5;
@@ -204,7 +434,7 @@ export default function BookAppointmentScreen() {
         <Ionicons 
           key={i} 
           name={i <= rating ? "star" : "star-outline"} 
-          size={24} 
+          size={20} 
           color="#FFD700" 
         />
       );
@@ -213,20 +443,261 @@ export default function BookAppointmentScreen() {
     return <View style={styles.ratingContainer}>{stars}</View>;
   };
 
-  // Formater un jour pour l'affichage
-  const formatDayLabel = (date: Date) => {
-    if (isToday(date)) return "Aujourd'hui";
-    if (isTomorrow(date)) return "Demain";
-    return format(date, 'EEEE', { locale: fr });
+  // Check if current week is this week
+  const isCurrentWeek = isSameWeek(currentWeek, new Date(), { weekStartsOn: 1 });
+
+  // Render week navigation header
+  const renderWeekNavigation = () => {
+    const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+    const weekRange = `${format(weekStart, 'MMM dd')} - ${format(weekEnd, 'MMM dd, yyyy')}`;
+
+    return (
+      <View style={styles.weekNavigationContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.weekNavButton,
+            isBefore(subWeeks(currentWeek, 1), new Date()) && 
+            !isSameWeek(subWeeks(currentWeek, 1), new Date(), { weekStartsOn: 1 }) && 
+            styles.disabledButton
+          ]} 
+          onPress={goToPreviousWeek}
+          disabled={isBefore(subWeeks(currentWeek, 1), new Date()) && 
+                  !isSameWeek(subWeeks(currentWeek, 1), new Date(), { weekStartsOn: 1 })}
+        >
+          <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+        
+        <View style={styles.weekInfo}>
+          <TouchableOpacity style={styles.weekRangeButton} onPress={goToCurrentWeek}>
+            <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+            <ThemedText style={styles.weekRangeText}>{weekRange}</ThemedText>
+            {!isCurrentWeek && (
+              <View style={styles.currentWeekIndicator}>
+                <ThemedText style={styles.currentWeekText}>Current Week</ThemedText>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity style={styles.weekNavButton} onPress={goToNextWeek}>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render date selection
+  const renderDateSelector = () => {
+    return (
+      <View style={styles.dateSelectorContainer}>
+        {loadingAvailableDates ? (
+          <View style={styles.dateLoaderContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <ThemedText style={styles.dateLoaderText}>
+              Loading availabilities...
+            </ThemedText>
+          </View>
+        ) : (
+          <ScrollView 
+            ref={dateScrollViewRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.dateSelector}
+          >
+            {dateOptions.map((date, index) => {
+              const isSelected = format(selectedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
+              const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+              
+              // Check if this date has availabilities
+              const dateOption = availableDates.find(
+                d => format(d.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+              );
+              const hasAvailabilities = dateOption?.hasAvailabilities || false;
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.dateOption,
+                    isSelected && styles.selectedDateOption,
+                    !hasAvailabilities && styles.unavailableDateOption
+                  ]}
+                  onPress={() => hasAvailabilities && handleDateSelection(date)}
+                  disabled={!hasAvailabilities}
+                >
+                  <ThemedText style={[
+                    styles.dayName,
+                    isSelected && styles.selectedDateText,
+                    !hasAvailabilities && styles.unavailableDateText
+                  ]}>
+                    {format(date, 'EEE', { locale: enUS })}
+                  </ThemedText>
+                  <ThemedText style={[
+                    styles.dayNumber,
+                    isSelected && styles.selectedDateText,
+                    !hasAvailabilities && styles.unavailableDateText
+                  ]}>
+                    {format(date, 'dd')}
+                  </ThemedText>
+                  {isToday && !isSelected && (
+                    <View style={styles.todayIndicator} />
+                  )}
+                  {!hasAvailabilities && (
+                    <View style={styles.noAvailabilityIndicator}>
+                      <Ionicons name="close" size={12} color={COLORS.white} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    );
+  };
+
+  // Render time slots grid
+  const renderTimeSlots = () => {
+    if (loadingSlots) {
+      return <ActivityIndicator size="small" color={COLORS.primary} style={styles.slotLoader} />;
+    }
+    
+    if (timeSlots.length === 0) {
+      return (
+        <ThemedText style={styles.noSlotsText}>
+          No available slots for this date
+        </ThemedText>
+      );
+    }
+    
+    // Group slots by time of day
+    const morningSlots = timeSlots.filter(slot => {
+      const hour = parseInt(slot.startTime.split(':')[0]);
+      return hour < 12;
+    });
+    
+    const afternoonSlots = timeSlots.filter(slot => {
+      const hour = parseInt(slot.startTime.split(':')[0]);
+      return hour >= 12 && hour < 17;
+    });
+    
+    const eveningSlots = timeSlots.filter(slot => {
+      const hour = parseInt(slot.startTime.split(':')[0]);
+      return hour >= 17;
+    });
+    
+    return (
+      <View style={styles.timeSlotsContainer}>
+        {morningSlots.length > 0 && (
+          <View style={styles.timeSlotSection}>
+            <View style={styles.timeSlotSectionHeader}>
+              <Ionicons name="sunny-outline" size={18} color={COLORS.warning} />
+              <ThemedText style={styles.timeSlotSectionTitle}>Morning</ThemedText>
+            </View>
+            <View style={styles.timeGrid}>
+              {morningSlots.map((slot, index) => (
+                <TouchableOpacity
+                  key={`morning-${index}`}
+                  style={[
+                    styles.timeSlot,
+                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
+                    !slot.available && styles.unavailableTimeSlot
+                  ]}
+                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
+                  disabled={!slot.available}
+                >
+                  <ThemedText 
+                    style={[
+                      styles.timeText,
+                      selectedTimeSlot === slot._id && styles.selectedTimeText,
+                      !slot.available && styles.unavailableTimeText
+                    ]}
+                  >
+                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+        
+        {afternoonSlots.length > 0 && (
+          <View style={styles.timeSlotSection}>
+            <View style={styles.timeSlotSectionHeader}>
+              <Ionicons name="partly-sunny-outline" size={18} color={COLORS.primary} />
+              <ThemedText style={styles.timeSlotSectionTitle}>Afternoon</ThemedText>
+            </View>
+            <View style={styles.timeGrid}>
+              {afternoonSlots.map((slot, index) => (
+                <TouchableOpacity
+                  key={`afternoon-${index}`}
+                  style={[
+                    styles.timeSlot,
+                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
+                    !slot.available && styles.unavailableTimeSlot
+                  ]}
+                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
+                  disabled={!slot.available}
+                >
+                  <ThemedText 
+                    style={[
+                      styles.timeText,
+                      selectedTimeSlot === slot._id && styles.selectedTimeText,
+                      !slot.available && styles.unavailableTimeText
+                    ]}
+                  >
+                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+        
+        {eveningSlots.length > 0 && (
+          <View style={styles.timeSlotSection}>
+            <View style={styles.timeSlotSectionHeader}>
+              <Ionicons name="moon-outline" size={18} color={COLORS.purple} />
+              <ThemedText style={styles.timeSlotSectionTitle}>Evening</ThemedText>
+            </View>
+            <View style={styles.timeGrid}>
+              {eveningSlots.map((slot, index) => (
+                <TouchableOpacity
+                  key={`evening-${index}`}
+                  style={[
+                    styles.timeSlot,
+                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
+                    !slot.available && styles.unavailableTimeSlot
+                  ]}
+                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
+                  disabled={!slot.available}
+                >
+                  <ThemedText 
+                    style={[
+                      styles.timeText,
+                      selectedTimeSlot === slot._id && styles.selectedTimeText,
+                      !slot.available && styles.unavailableTimeText
+                    ]}
+                  >
+                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
     <>
       <Stack.Screen 
         options={{
-          headerTitle: 'Prendre un Rendez-vous',
+          headerTitle: 'Book Appointment',
           headerShown: true,
-          headerBackTitle: 'Retour',
+          headerBackTitle: 'Back',
           headerStyle: {
             backgroundColor: '#fff',
           },
@@ -239,14 +710,14 @@ export default function BookAppointmentScreen() {
       />
       
       {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
       ) : error ? (
         <ThemedView style={styles.container}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
         </ThemedView>
       ) : doctor ? (
         <ScrollView style={styles.container}>
-          {/* Carte du médecin */}
+          {/* Doctor card */}
           <ThemedView style={styles.doctorCard}>
             <View style={styles.doctorProfile}>
               <Image
@@ -263,114 +734,32 @@ export default function BookAppointmentScreen() {
                 {renderRatingStars(doctor.rating)}
                 
                 <ThemedText style={styles.priceText}>
-                  $ {doctor.price ? doctor.price.toFixed(2) : '28.00'}/session
+                  ${doctor.price ? doctor.price.toFixed(2) : '28.00'} / session
                 </ThemedText>
               </View>
             </View>
             
             <ThemedText style={styles.experienceText}>
-              {doctor.experience} Years experience
+              {doctor.experience} years of experience
             </ThemedText>
           </ThemedView>
 
-          {/* Sélection de date */}
-          <ThemedView style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText type="title" style={styles.sectionTitle}>
-                Select Date
-              </ThemedText>
-              
-              <View style={styles.monthSelector}>
-                <TouchableOpacity style={styles.monthNav}>
-                  <Ionicons name="chevron-back" size={24} color="#666" />
-                </TouchableOpacity>
-                
-                <ThemedText style={styles.monthName}>
-                  {currentMonth}
-                </ThemedText>
-                
-                <TouchableOpacity style={styles.monthNav}>
-                  <Ionicons name="chevron-forward" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-            </View>
+          {/* Week navigation */}
+          {renderWeekNavigation()}
+          
+          {/* Date selection */}
+          {renderDateSelector()}
 
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dateList}
-            >
-              {availableDates.map((dateOption) => (
-                <TouchableOpacity
-                  key={dateOption.formattedDate}
-                  style={[
-                    styles.dateItem,
-                    selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateOption.formattedDate && styles.selectedDateItem
-                  ]}
-                  onPress={() => handleDateSelect(dateOption.date, dateOption.formattedDate)}
-                >
-                  <ThemedText 
-                    style={[
-                      styles.dateNumber,
-                      selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateOption.formattedDate && styles.selectedDateText
-                    ]}
-                  >
-                    {dateOption.dayNumber}
-                  </ThemedText>
-                  <ThemedText 
-                    style={[
-                      styles.dateDay,
-                      selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateOption.formattedDate && styles.selectedDateText
-                    ]}
-                  >
-                    {dateOption.dayName}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </ThemedView>
-
-          {/* Sélection d'horaire */}
+          {/* Time selection */}
           <ThemedView style={styles.section}>
             <ThemedText type="title" style={styles.sectionTitle}>
-              Select Time
+              Choose a time
             </ThemedText>
             
-            {loadingSlots ? (
-              <ActivityIndicator size="small" color="#0000ff" style={styles.slotLoader} />
-            ) : (
-              <View style={styles.timeGrid}>
-                {timeSlots.length > 0 ? (
-                  timeSlots.map((slot) => (
-                    <TouchableOpacity
-                      key={slot._id}
-                      style={[
-                        styles.timeSlot,
-                        selectedTimeSlot === slot._id && styles.selectedTimeSlot
-                      ]}
-                      onPress={() => handleTimeSlotSelect(slot._id)}
-                      disabled={!slot.available}
-                    >
-                      <ThemedText 
-                        style={[
-                          styles.timeText,
-                          selectedTimeSlot === slot._id && styles.selectedTimeText
-                        ]}
-                      >
-                        {slot.time}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <ThemedText style={styles.noSlotsText}>
-                    Aucun créneau disponible pour cette date
-                  </ThemedText>
-                )}
-              </View>
-            )}
+            {renderTimeSlots()}
           </ThemedView>
 
-          {/* Bouton de réservation */}
+          {/* Book button */}
           <TouchableOpacity 
             style={[
               styles.bookButton,
@@ -386,7 +775,7 @@ export default function BookAppointmentScreen() {
         </ScrollView>
       ) : (
         <ThemedView style={styles.container}>
-          <ThemedText style={styles.errorText}>Médecin non trouvé</ThemedText>
+          <ThemedText style={styles.errorText}>Doctor not found</ThemedText>
         </ThemedView>
       )}
     </>
@@ -396,7 +785,7 @@ export default function BookAppointmentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: COLORS.background,
   },
   loader: {
     flex: 1,
@@ -407,17 +796,17 @@ const styles = StyleSheet.create({
     margin: 20,
   },
   errorText: {
-    color: 'red',
+    color: COLORS.danger,
     textAlign: 'center',
     marginTop: 30,
     fontSize: 16,
   },
   doctorCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
     borderRadius: 15,
     padding: 20,
     margin: 16,
-    shadowColor: '#000',
+    shadowColor: COLORS.gray900,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -440,7 +829,7 @@ const styles = StyleSheet.create({
   doctorName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#14104B',
+    color: COLORS.gray900,
     marginBottom: 5,
   },
   ratingContainer: {
@@ -449,20 +838,20 @@ const styles = StyleSheet.create({
   },
   priceText: {
     fontSize: 18,
-    color: '#4a90e2',
+    color: COLORS.primary,
     fontWeight: 'bold',
   },
   experienceText: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.gray600,
   },
   section: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
     borderRadius: 15,
     padding: 20,
     margin: 16,
-    marginTop: 0,
-    shadowColor: '#000',
+    marginTop: 16,
+    shadowColor: COLORS.gray900,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -477,99 +866,230 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#14104B',
+    color: COLORS.gray900,
+    marginBottom: 15,
   },
-  monthSelector: {
+  timeSlotsContainer: {
+    marginTop: 5,
+  },
+  timeSlotSection: {
+    marginBottom: 20,
+  },
+  timeSlotSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
   },
-  monthNav: {
-    padding: 5,
-  },
-  monthName: {
+  timeSlotSectionTitle: {
     fontSize: 16,
-    color: '#666',
-    textTransform: 'capitalize',
-    marginHorizontal: 10,
-  },
-  dateList: {
-    paddingVertical: 10,
-  },
-  dateItem: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  selectedDateItem: {
-    backgroundColor: '#14104B',
-    borderColor: '#14104B',
-  },
-  dateNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  dateDay: {
-    fontSize: 14,
-    color: '#666',
-    textTransform: 'capitalize',
-  },
-  selectedDateText: {
-    color: '#fff',
+    fontWeight: '600',
+    color: COLORS.gray800,
+    marginLeft: 8,
   },
   timeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 5,
   },
   timeSlot: {
     width: '31%',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.gray100,
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: COLORS.gray200,
   },
   selectedTimeSlot: {
-    backgroundColor: '#14104B',
-    borderColor: '#14104B',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  unavailableTimeSlot: {
+    backgroundColor: COLORS.gray200,
+    borderColor: COLORS.gray300,
+    opacity: 0.6,
   },
   timeText: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.gray800,
+    textAlign: 'center',
   },
   selectedTimeText: {
-    color: '#fff',
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  unavailableTimeText: {
+    color: COLORS.gray500,
   },
   noSlotsText: {
     textAlign: 'center',
-    color: '#666',
+    color: COLORS.gray500,
     marginVertical: 20,
     fontStyle: 'italic',
   },
   bookButton: {
-    backgroundColor: '#4a90e2',
-    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
     padding: 18,
     margin: 16,
     marginTop: 8,
     alignItems: 'center',
   },
   disabledButton: {
-    backgroundColor: '#a0a0a0',
+    backgroundColor: COLORS.gray400,
   },
   bookButtonText: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: 'bold',
   },
-}); 
+  // Styles for week navigation and date selection
+  weekNavigationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  weekNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}10`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weekInfo: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  weekRangeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}05`,
+    position: 'relative',
+  },
+  weekRangeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.gray800,
+    marginLeft: 8,
+  },
+  currentWeekIndicator: {
+    position: 'absolute',
+    right: -8,
+    top: -8,
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  currentWeekText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  dateSelectorContainer: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 16,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  dateSelector: {
+    paddingVertical: 16,
+    paddingHorizontal: DATE_SELECTOR_PADDING,
+  },
+  dateOption: {
+    width: DATE_OPTION_WIDTH,
+    height: 70,
+    borderRadius: 16,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: DATE_OPTION_MARGIN,
+    position: 'relative',
+  },
+  selectedDateOption: {
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  unavailableDateOption: {
+    backgroundColor: COLORS.gray200,
+    opacity: 0.7,
+  },
+  dayName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.gray500,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  selectedDateText: {
+    color: COLORS.white,
+  },
+  unavailableDateText: {
+    color: COLORS.gray500,
+  },
+  dayNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.gray700,
+  },
+  todayIndicator: {
+    position: 'absolute',
+    bottom: 6,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: COLORS.accent,
+  },
+  noAvailabilityIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.gray400,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateLoaderContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateLoaderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: COLORS.gray600,
+  },
+});

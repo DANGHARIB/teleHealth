@@ -46,11 +46,13 @@ type Payment = {
       startTime: string;
     };
     patient: {
+      _id?: string;
       first_name: string;
       last_name: string;
     };
   };
   patient: {
+    _id?: string;
     first_name: string;
     last_name: string;
   };
@@ -81,9 +83,12 @@ export default function DoctorFinancialsScreen() {
         setLoading(true);
         const data = await doctorAPI.getPayments();
         
-        // Process data to mark refunds
+        console.log('Données brutes des paiements reçues:', data);
+        
+        // Traitement initial des données similaire à celui côté patient
         const processedPayments = data.map((payment: Payment) => {
-          const isRefund = payment.status === 'refunded';
+          // Un paiement est un remboursement s'il a un montant négatif
+          const isRefund = payment.amount < 0;
           return {
             ...payment,
             isRefund,
@@ -91,8 +96,12 @@ export default function DoctorFinancialsScreen() {
           };
         });
         
-        // Grouper les remboursements avec leurs paiements originaux
+        console.log('Paiements après traitement initial:', processedPayments);
+        
+        // Utiliser exactement la même logique de regroupement que côté patient
         const groupedPayments = groupRefundsWithOriginals(processedPayments);
+        
+        console.log('Paiements après regroupement:', groupedPayments);
         
         setPayments(groupedPayments);
         setLoading(false);
@@ -130,30 +139,37 @@ export default function DoctorFinancialsScreen() {
 
   // Group refunds with originals
   const groupRefundsWithOriginals = (payments: Payment[]) => {
-    // Create a map to track refunds by appointment ID
+    console.log('Début du regroupement des remboursements');
+    
+    // Créer une map pour suivre les remboursements par ID de rendez-vous
     const refundMap: Record<string, Payment> = {};
     const refundIds: Set<string> = new Set();
     
-    // First pass: identify all refunds
+    // Premier passage: identifier tous les remboursements
     payments.forEach(payment => {
       if (payment.isRefund && payment.appointment?._id) {
+        console.log('Remboursement détecté:', payment);
         refundMap[payment.appointment._id] = payment;
         refundIds.add(payment._id);
       }
     });
     
-    // Second pass: combine refunds with original payments
+    console.log('Map des remboursements:', refundMap);
+    console.log('IDs des remboursements:', Array.from(refundIds));
+    
+    // Deuxième passage: combiner les remboursements avec les paiements originaux
     const combinedPayments = payments
-      .filter(payment => !refundIds.has(payment._id)) // Filter out refunds that have been combined
+      .filter(payment => !refundIds.has(payment._id)) // Filtrer les remboursements qui ont été combinés
       .map(payment => {
         if (!payment.isRefund && payment.status === 'refunded' && payment.appointment?._id) {
-          // If this is an original payment that has been refunded
+          // Si c'est un paiement original qui a été remboursé
           const refund = refundMap[payment.appointment._id];
           if (refund) {
+            console.log(`Paiement ${payment._id} combiné avec remboursement ${refund._id}`);
             return {
               ...payment,
               refundDetails: refund,
-              // Mark as a combined payment
+              // Marquer comme un paiement combiné
               isCombined: true
             };
           }
@@ -161,6 +177,7 @@ export default function DoctorFinancialsScreen() {
         return payment;
       });
     
+    console.log('Paiements combinés finaux:', combinedPayments);
     return combinedPayments;
   };
 
@@ -464,10 +481,30 @@ export default function DoctorFinancialsScreen() {
 
   // Render combined refund payment
   const renderCombinedRefundPayment = (payment: any, index: number) => {
-    // Calculate amounts for partial refund
+    console.log('Détails du paiement remboursé:', { 
+      id: payment._id, 
+      amount: payment.amount, 
+      status: payment.status,
+      refundDetails: payment.refundDetails 
+    });
+    
+    // Calculer les montants pour le remboursement partiel
     const originalAmount = payment.amount;
-    const penaltyAmount = originalAmount * 0.2; // 20% penalty retained by the doctor
-    const refundAmount = originalAmount * 0.8; // 80% refunded to the patient
+    
+    // Utiliser les détails du remboursement s'ils sont disponibles, sinon estimer
+    let refundAmount, penaltyAmount;
+    
+    if (payment.refundDetails) {
+      // Si nous avons les détails du remboursement, utiliser le montant réel
+      refundAmount = Math.abs(payment.refundDetails.amount);
+      penaltyAmount = originalAmount - refundAmount;
+    } else {
+      // Sinon estimer selon la règle 80/20
+      penaltyAmount = originalAmount * 0.2; // 20% de pénalité conservée par le médecin
+      refundAmount = originalAmount * 0.8; // 80% remboursés au patient
+    }
+    
+    console.log(`Montants calculés: original=${originalAmount}, remboursement=${refundAmount}, pénalité=${penaltyAmount}`);
 
     return (
       <View key={payment._id} style={[styles.refundCard, { marginTop: index > 0 ? 16 : 0 }]}>
@@ -524,7 +561,7 @@ export default function DoctorFinancialsScreen() {
             <View style={styles.transactionIdContainer}>
               <Ionicons name="key-outline" size={12} color={COLORS.text.light} />
               <ThemedText style={styles.transactionId}>
-                {payment.transactionId.substring(0, 8)}...
+                {payment.transactionId?.substring(0, 8) || 'N/A'}...
               </ThemedText>
             </View>
             <ThemedText style={styles.penaltyAmount}>
@@ -558,10 +595,21 @@ export default function DoctorFinancialsScreen() {
 
     // Show monthly summary if monthly filter is active
     if (activeFilter === 'monthly') {
+      // Log les détails des paiements pour débogage
+      console.log('Tous les paiements:', payments.map(p => ({
+        id: p._id,
+        amount: p.amount,
+        status: p.status,
+        isRefund: p.isRefund,
+        date: p.paymentDate || p.createdAt,
+        hasRefundDetails: !!p.refundDetails
+      })));
+      
       return renderMonthlySummary();
     }
 
     const filteredPayments = getFilteredPayments();
+    console.log('Paiements filtrés à afficher:', filteredPayments);
     
     if (!filteredPayments.length) {
       return (
@@ -579,10 +627,12 @@ export default function DoctorFinancialsScreen() {
     }
 
     return filteredPayments.map((payment, index) => {
-      // Check if this is a payment that has been refunded
-      if (payment.status === 'refunded' || payment.isCombined) {
+      // Utiliser exactement la même condition que côté patient
+      if (payment.status === 'refunded') {
+        console.log(`Rendu d'un paiement remboursé (status=refunded):`, payment);
         return renderCombinedRefundPayment(payment, index);
       } else {
+        console.log(`Rendu d'un paiement normal:`, payment);
         return renderPayment(payment, index);
       }
     });
