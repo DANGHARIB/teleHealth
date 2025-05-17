@@ -5,7 +5,7 @@ import { FontAwesome } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors, PRIMARY_COLOR, DARK_BLUE_THEME } from '@/constants/Colors';
+import { Colors, PRIMARY_COLOR, DARK_BLUE_THEME, LIGHT_BLUE_ACCENT } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function DoctorTabLayout() {
@@ -30,7 +30,7 @@ export default function DoctorTabLayout() {
         options={{
           title: 'Financials',
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesome name="dollar" size={24} color={focused ? DARK_BLUE_THEME : color} />
+            <FontAwesome name="credit-card" size={22} color={focused ? DARK_BLUE_THEME : color} />
           ),
         }}
       />

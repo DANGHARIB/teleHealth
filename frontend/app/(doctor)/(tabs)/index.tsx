@@ -3,11 +3,31 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator } fro
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { doctorAPI } from '@/services/api';
+
+// App theme colors
+const COLORS = {
+  primary: '#2D87BB',
+  primaryDark: '#1A5F8C',
+  navyBlue: '#0A2463',  // Navy blue for headings and important text
+  darkNavy: '#090F47',  // Dark navy for headings and important information
+  babyBlue: '#7AA7CC',  // Baby blue for secondary text and accents
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  text: '#333333',
+  textLight: '#8F9BB3',
+  border: '#E5E7EB',
+  error: '#EF4444',
+  success: '#10B981',
+  pending: '#FFA500',
+  refunded: '#FF9999',  // Light pastel red for refunds
+  failed: '#DC3545',
+  completed: '#7AA7CC',
+};
 
 // Types
 type Payment = {
@@ -42,7 +62,7 @@ export default function DoctorFinancialsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [totalEarnings, setTotalEarnings] = useState(0);
 
-  // Charger les paiements
+  // Load payments
   useEffect(() => {
     const fetchPayments = async () => {
       try {
@@ -50,7 +70,7 @@ export default function DoctorFinancialsScreen() {
         const data = await doctorAPI.getPayments();
         setPayments(data);
         
-        // Calculer le total des gains (seulement pour les paiements 'completed')
+        // Calculate total earnings (only for 'completed' payments)
         const total = data
           .filter((payment: Payment) => payment.status === 'completed')
           .reduce((sum: number, payment: Payment) => sum + payment.amount, 0);
@@ -58,8 +78,8 @@ export default function DoctorFinancialsScreen() {
         setTotalEarnings(total);
         setLoading(false);
       } catch (err) {
-        console.error('Erreur lors du chargement des paiements:', err);
-        setError('Impossible de charger votre historique de paiements');
+        console.error('Error loading payments:', err);
+        setError('Unable to load your payment history');
         setLoading(false);
       }
     };
@@ -67,39 +87,39 @@ export default function DoctorFinancialsScreen() {
     fetchPayments();
   }, []);
 
-  // Formater la date
+  // Format date
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return format(date, 'dd MMM yyyy', { locale: fr });
+      return format(date, 'MMM dd, yyyy', { locale: enUS });
     } catch (error) {
       return dateString;
     }
   };
 
-  // Obtenir le nom complet du patient
+  // Get patient's full name
   const getPatientName = (patient: any) => {
-    if (!patient) return 'Patient inconnu';
+    if (!patient) return 'Unknown patient';
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
   };
 
-  // Rendu pour le statut de paiement
+  // Render payment status
   const renderPaymentStatus = (status: string) => {
-    let color = '#5586CC';
-    let label = 'Complété';
+    let color = COLORS.completed;
+    let label = 'Completed';
 
     switch (status) {
       case 'pending':
-        color = '#FFA500';
-        label = 'En attente';
+        color = COLORS.pending;
+        label = 'Pending';
         break;
       case 'refunded':
-        color = '#4CAF50';
-        label = 'Remboursé';
+        color = COLORS.refunded;
+        label = 'Refunded';
         break;
       case 'failed':
-        color = '#DC3545';
-        label = 'Échoué';
+        color = COLORS.failed;
+        label = 'Failed';
         break;
     }
 
@@ -110,21 +130,43 @@ export default function DoctorFinancialsScreen() {
     );
   };
 
-  // Rendu pour la liste des paiements
+  // Render the payment method icon
+  const renderPaymentMethodIcon = (method: string) => {
+    switch (method) {
+      case 'card':
+        return <Ionicons name="card-outline" size={18} color={COLORS.textLight} />;
+      case 'paypal':
+        return <Ionicons name="logo-paypal" size={18} color={COLORS.textLight} />;
+      case 'apple_pay':
+        return <Ionicons name="logo-apple" size={18} color={COLORS.textLight} />;
+      case 'google_pay':
+        return <Ionicons name="logo-google" size={18} color={COLORS.textLight} />;
+      default:
+        return <Ionicons name="cash-outline" size={18} color={COLORS.textLight} />;
+    }
+  };
+
+  // Render payment list
   const renderPayments = () => {
     if (loading) {
-      return <ActivityIndicator size="large" color="#5586cc" style={styles.loader} />;
+      return <ActivityIndicator size="large" color={COLORS.babyBlue} style={styles.loader} />;
     }
 
     if (error) {
-      return <ThemedText style={styles.errorText}>{error}</ThemedText>;
+      return (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+        </View>
+      );
     }
 
     if (!payments.length) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="cash-outline" size={50} color="#B5CDEC" />
-          <ThemedText style={styles.emptyText}>Aucun paiement reçu</ThemedText>
+          <Ionicons name="cash-outline" size={60} color={COLORS.babyBlue} />
+          <ThemedText style={styles.emptyText}>No payments received yet</ThemedText>
+          <ThemedText style={styles.emptySubtext}>Payments will appear here once processed</ThemedText>
         </View>
       );
     }
@@ -137,27 +179,32 @@ export default function DoctorFinancialsScreen() {
           pathname: '/doctor/payment/details',
           params: { paymentId: payment._id }
         })}
+        activeOpacity={0.7}
       >
         <View style={styles.paymentHeader}>
-          <ThemedText style={styles.patientName}>
-            {getPatientName(payment.patient || payment.appointment?.patient)}
-          </ThemedText>
-          {renderPaymentStatus(payment.status)}
-        </View>
-
-        <View style={styles.paymentDetails}>
-          <ThemedText style={styles.paymentDate}>
-            {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
-          </ThemedText>
-          <ThemedText style={styles.paymentId}>
-            ID: {payment.transactionId.substring(0, 8)}...
-          </ThemedText>
-        </View>
-
-        <View style={styles.paymentFooter}>
-          <ThemedText style={styles.paymentAmount}>
-            {payment.amount} €
-          </ThemedText>
+          <View style={styles.patientSection}>
+            <ThemedText style={styles.patientName}>
+              {getPatientName(payment.patient || payment.appointment?.patient)}
+            </ThemedText>
+            <View style={styles.paymentDateContainer}>
+              <Ionicons name="calendar-outline" size={16} color={COLORS.babyBlue} style={styles.detailIcon} />
+              <ThemedText style={styles.paymentDate}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
+            </View>
+            <View style={styles.paymentIdContainer}>
+              {renderPaymentMethodIcon(payment.paymentMethod)}
+              <ThemedText style={styles.paymentId}>
+                ID: {payment.transactionId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.statusContainer}>
+            {renderPaymentStatus(payment.status)}
+            <ThemedText style={styles.paymentAmount}>
+              ${payment.amount.toFixed(2)}
+            </ThemedText>
+          </View>
         </View>
       </TouchableOpacity>
     ));
@@ -168,42 +215,29 @@ export default function DoctorFinancialsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <View style={styles.header}>
-        <ThemedText style={styles.title}>Revenus</ThemedText>
-        <ThemedText style={styles.subtitle}>Récapitulatif de vos paiements</ThemedText>
+        <ThemedText type="title" style={styles.title}>Financials</ThemedText>
       </View>
       
       <View style={styles.summaryCard}>
-        <ThemedText style={styles.summaryLabel}>Total des revenus</ThemedText>
-        <ThemedText style={styles.summaryAmount}>{totalEarnings} €</ThemedText>
+        <View style={styles.summaryContent}>
+          <ThemedText style={styles.summaryLabel}>Total Earnings</ThemedText>
+          <ThemedText style={styles.summaryAmount}>${totalEarnings.toFixed(2)}</ThemedText>
+        </View>
+        <View style={styles.summaryIconContainer}>
+          <Ionicons name="wallet" size={32} color={COLORS.darkNavy} />
+        </View>
       </View>
       
-      <ThemedText style={styles.listTitle}>Historique des paiements</ThemedText>
+      <ThemedText style={styles.listTitle}>Payment History</ThemedText>
       
-      <ScrollView style={styles.paymentsContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.paymentsContainer} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {renderPayments()}
+        <View style={styles.scrollPadding} />
       </ScrollView>
-      
-      <View style={styles.navbar}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="wallet-outline" size={24} color="#0F2057" />
-          <ThemedText style={[styles.navText, styles.activeNavText]}>Revenus</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/patients')}>
-          <Ionicons name="people-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Patients</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/appointment')}>
-          <Ionicons name="calendar-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Rendez-vous</ThemedText>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/profile')}>
-          <Ionicons name="person-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Profil</ThemedText>
-        </TouchableOpacity>
-      </View>
     </ThemedView>
   );
 }
@@ -211,147 +245,172 @@ export default function DoctorFinancialsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: COLORS.background,
   },
   header: {
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#0F2057',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#6C757D',
-    marginBottom: 5,
+    color: COLORS.darkNavy,
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   summaryCard: {
-    backgroundColor: '#E6F0FF',
-    borderRadius: 12,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 24,
     padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: COLORS.darkNavy,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryContent: {
+    flex: 1,
   },
   summaryLabel: {
     fontSize: 16,
-    color: '#6C757D',
+    color: COLORS.babyBlue,
     marginBottom: 8,
   },
   summaryAmount: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.darkNavy,
+  },
+  summaryIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(122, 167, 204, 0.1)', // Light baby blue with opacity
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
-    marginBottom: 10,
+    color: COLORS.darkNavy,
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
   paymentsContainer: {
     flex: 1,
   },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  scrollPadding: {
+    height: 80, // Add extra padding at the bottom
+  },
   paymentCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 2,
   },
   paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
+    alignItems: 'flex-start',
+  },
+  patientSection: {
+    flex: 1,
+    marginRight: 10,
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
   },
   patientName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.darkNavy,
+    marginBottom: 6,
+  },
+  paymentAmount: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.darkNavy,
+    marginTop: 6,
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   statusText: {
     color: 'white',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   paymentDetails: {
+    marginBottom: 12,
+  },
+  paymentDateContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  paymentIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailIcon: {
+    marginRight: 6,
   },
   paymentDate: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.babyBlue,
   },
   paymentId: {
     fontSize: 12,
-    color: '#6C757D',
-  },
-  paymentFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 5,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-  },
-  paymentAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.textLight,
+    marginLeft: 6,
   },
   loader: {
     marginTop: 50,
   },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+    paddingHorizontal: 20,
+  },
   errorText: {
-    marginTop: 30,
+    marginTop: 12,
     fontSize: 16,
-    color: '#DC3545',
+    color: COLORS.error,
     textAlign: 'center',
   },
   emptyContainer: {
-    marginTop: 50,
+    marginTop: 80,
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#6C757D',
-    marginTop: 10,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.darkNavy,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  navbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-    paddingTop: 10,
-    marginTop: 10,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navText: {
-    fontSize: 12,
-    marginTop: 5,
-    color: '#6C757D',
-  },
-  activeNavText: {
-    color: '#0F2057',
-    fontWeight: 'bold',
-  },
+  emptySubtext: {
+    fontSize: 14,
+    color: COLORS.babyBlue,
+    textAlign: 'center',
+  }
 }); 
