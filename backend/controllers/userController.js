@@ -106,4 +106,31 @@ exports.deleteUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// @desc    Enregistrer le token d'appareil pour les notifications
+// @route   POST /api/users/device-token
+// @access  Private
+exports.registerDeviceToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ message: 'Token requis' });
+    }
+    
+    // Dans une application réelle, on stockerait le token dans la base de données
+    // Ici on utilise un service qui stocke le token en mémoire
+    const notificationService = require('../services/notificationService');
+    const success = notificationService.registerDeviceToken(req.user._id, token);
+    
+    if (success) {
+      res.status(200).json({ message: 'Token enregistré avec succès' });
+    } else {
+      res.status(500).json({ message: 'Erreur lors de l\'enregistrement du token' });
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'enregistrement du token d\'appareil:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
 }; 

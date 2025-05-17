@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, Text } from 'react-native';
-import { Stack } from 'expo-router';
-import { format, parseISO, addDays } from 'date-fns';
+import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -23,11 +23,15 @@ type Appointment = {
     startTime: string;
     endTime: string;
   };
-  status: 'scheduled' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
   caseDetails: string;
+  sessionLink?: string;
+  paymentStatus: 'pending' | 'completed' | 'refunded';
+  price: number;
 };
 
 export default function AppointmentScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +64,51 @@ export default function AppointmentScreen() {
 
     fetchAppointments();
   }, []);
+
+  // Annuler un rendez-vous
+  const cancelAppointment = async (appointmentId: string) => {
+    try {
+      // Confirmation de l'annulation
+      Alert.alert(
+        "Confirmation",
+        "Êtes-vous sûr de vouloir annuler ce rendez-vous ?",
+        [
+          {
+            text: "Non",
+            style: "cancel"
+          },
+          {
+            text: "Oui",
+            onPress: async () => {
+              setLoading(true);
+              
+              try {
+                // Appel à l'API pour annuler le rendez-vous
+                await patientAPI.cancelAppointment(appointmentId);
+                
+                // Mise à jour de la liste des rendez-vous
+                setAppointments(prevAppointments => 
+                  prevAppointments.map(app => 
+                    app._id === appointmentId ? { ...app, status: 'cancelled' } : app
+                  )
+                );
+                
+                setLoading(false);
+                Alert.alert("Succès", "Le rendez-vous a été annulé avec succès");
+              } catch (error) {
+                console.error('Erreur lors de l\'annulation du rendez-vous:', error);
+                setLoading(false);
+                Alert.alert("Erreur", "Impossible d'annuler le rendez-vous. Veuillez réessayer.");
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Erreur lors de la confirmation d\'annulation:', error);
+      Alert.alert("Erreur", "Une erreur est survenue. Veuillez réessayer.");
+    }
+  };
 
   // Filtrer les rendez-vous par date
   const getAppointmentsForDate = () => {
@@ -142,33 +191,138 @@ export default function AppointmentScreen() {
     return filteredAppointments.map((appointment) => {
       const time = formatTime(appointment.availability.startTime);
       const doctor = appointment.doctor;
-      const isAvailable = false; // Pour l'exemple des créneaux disponibles
+      
+      // Déterminer le statut et la couleur correspondante
+      let statusColor = '#5586CC'; // Bleu par défaut
+      let statusText = 'Programmé';
+      
+      if (appointment.status === 'pending') {
+        statusColor = '#FFA500'; // Orange pour "en attente"
+        statusText = 'En attente de confirmation';
+      } else if (appointment.status === 'confirmed') {
+        statusColor = '#5586CC'; // Bleu pour "confirmé"
+        statusText = 'Confirmé';
+      } else if (appointment.status === 'completed') {
+        statusColor = '#4CAF50'; // Vert pour "terminé"
+        statusText = 'Terminé';
+      } else if (appointment.status === 'cancelled') {
+        statusColor = '#DC3545'; // Rouge pour "annulé"
+        statusText = 'Annulé';
+      } else if (appointment.status === 'rescheduled') {
+        statusColor = '#9C27B0'; // Violet pour "reprogrammé"
+        statusText = 'Reprogrammé';
+      }
+
+      // Afficher le badge de statut de paiement
+      const renderPaymentBadge = () => {
+        if (appointment.paymentStatus === 'completed') {
+          return (
+            <View style={styles.paymentBadgeContainer}>
+              <View style={[styles.paymentBadge, { backgroundColor: '#4CAF50' }]}>
+                <Ionicons name="checkmark-circle" size={12} color="white" />
+                <ThemedText style={styles.paymentBadgeText}>Payé</ThemedText>
+              </View>
+            </View>
+          );
+        } else if (appointment.paymentStatus === 'refunded') {
+          return (
+            <View style={styles.paymentBadgeContainer}>
+              <View style={[styles.paymentBadge, { backgroundColor: '#FFC107' }]}>
+                <Ionicons name="return-down-back" size={12} color="white" />
+                <ThemedText style={styles.paymentBadgeText}>Remboursé</ThemedText>
+              </View>
+            </View>
+          );
+        } else {
+          return (
+            <View style={styles.paymentBadgeContainer}>
+              <View style={[styles.paymentBadge, { backgroundColor: '#F44336' }]}>
+                <Ionicons name="alert-circle" size={12} color="white" />
+                <ThemedText style={styles.paymentBadgeText}>Non payé</ThemedText>
+              </View>
+            </View>
+          );
+        }
+      };
+
+      // Ouvrir le lien de consultation Zoom
+      const openZoomLink = async () => {
+        if (appointment.sessionLink) {
+          try {
+            const canOpen = await Linking.canOpenURL(appointment.sessionLink);
+            if (canOpen) {
+              await Linking.openURL(appointment.sessionLink);
+            } else {
+              Alert.alert(
+                "Erreur",
+                "Impossible d'ouvrir le lien de consultation. Veuillez copier le lien manuellement."
+              );
+            }
+          } catch (error) {
+            Alert.alert(
+              "Erreur",
+              "Impossible d'ouvrir le lien de consultation."
+            );
+          }
+        }
+      };
 
       return (
         <View key={appointment._id} style={styles.timelineItem}>
           <View style={styles.timeContainer}>
             <ThemedText style={styles.timeText}>{time}</ThemedText>
+            <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
           </View>
           
-          <View style={[
-            styles.appointmentCard, 
-            isAvailable ? styles.availableCard : styles.bookedCard
-          ]}>
-            {isAvailable ? (
-              <ThemedText style={styles.availableText}>Disponible</ThemedText>
-            ) : (
-              <>
-                <ThemedText style={styles.patientName}>
-                  {getDoctorName(doctor)}
-                </ThemedText>
-                <ThemedText style={styles.caseNumber}>
-                  {appointment.caseDetails || 'Consultation standard'}
-                </ThemedText>
-                <TouchableOpacity style={styles.callButton}>
-                  <ThemedText style={styles.callButtonText}>Call</ThemedText>
+          <View style={[styles.appointmentCard, { borderLeftColor: statusColor }]}>
+            <View style={styles.appointmentHeader}>
+              <ThemedText style={styles.doctorName}>
+                {getDoctorName(doctor)}
+              </ThemedText>
+              {renderPaymentBadge()}
+            </View>
+            
+            <ThemedText style={styles.caseNumber}>
+              {appointment.caseDetails || 'Consultation standard'}
+            </ThemedText>
+            <ThemedText style={styles.statusText}>
+              {statusText}
+            </ThemedText>
+            
+            <View style={styles.actionButtons}>
+              {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && appointment.sessionLink && (
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.joinButton]}
+                  onPress={openZoomLink}
+                >
+                  <Ionicons name="videocam-outline" size={16} color="#FFFFFF" />
+                  <ThemedText style={styles.buttonText}>Rejoindre</ThemedText>
                 </TouchableOpacity>
-              </>
-            )}
+              )}
+              
+              {appointment.paymentStatus === 'pending' && (
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.payButton]}
+                  onPress={() => router.push({
+                    pathname: '/patient/payment',
+                    params: { appointmentId: appointment._id }
+                  })}
+                >
+                  <Ionicons name="card-outline" size={16} color="#FFFFFF" />
+                  <ThemedText style={styles.buttonText}>Payer</ThemedText>
+                </TouchableOpacity>
+              )}
+              
+              {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'scheduled') && (
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.cancelButton]}
+                  onPress={() => cancelAppointment(appointment._id)}
+                >
+                  <Ionicons name="close-outline" size={16} color="#FFFFFF" />
+                  <ThemedText style={styles.buttonText}>Annuler</ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       );
@@ -204,7 +358,7 @@ export default function AppointmentScreen() {
           <ThemedText style={styles.navText}>Search</ThemedText>
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.navItem, styles.activeNavItem]}>
+        <TouchableOpacity style={styles.navItem}>
           <Ionicons name="calendar-outline" size={24} color="#0F2057" />
           <ThemedText style={[styles.navText, styles.activeNavText]}>Appointment</ThemedText>
         </TouchableOpacity>
@@ -283,59 +437,75 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   timeContainer: {
-    width: 100,
-    paddingRight: 10,
-    justifyContent: 'flex-start',
+    width: 80,
+    alignItems: 'center',
   },
   timeText: {
     fontSize: 16,
     color: '#6C757D',
+    marginBottom: 8,
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#5586CC',
   },
   appointmentCard: {
     flex: 1,
     borderRadius: 10,
     padding: 15,
-    justifyContent: 'center',
-  },
-  bookedCard: {
     backgroundColor: '#E6F0FF',
     borderLeftWidth: 3,
     borderLeftColor: '#5586CC',
+    marginLeft: 15,
   },
-  availableCard: {
-    backgroundColor: '#E0FFED',
-    borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
   },
-  patientName: {
+  doctorName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#0F2057',
-    marginBottom: 5,
   },
   caseNumber: {
     fontSize: 16,
     color: '#6C757D',
+    marginBottom: 5,
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#6C757D',
     marginBottom: 10,
+    fontStyle: 'italic',
   },
-  availableText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
   },
-  callButton: {
-    position: 'absolute',
-    right: 15,
-    top: '50%',
-    marginTop: -15,
-    backgroundColor: '#0F2057',
-    paddingVertical: 5,
-    paddingHorizontal: 20,
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 20,
+    marginLeft: 10,
   },
-  callButtonText: {
+  joinButton: {
+    backgroundColor: '#5586CC',
+  },
+  cancelButton: {
+    backgroundColor: '#DC3545',
+  },
+  buttonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+    fontSize: 12,
+    marginLeft: 5,
   },
   loader: {
     marginTop: 50,
@@ -366,9 +536,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  activeNavItem: {
-    // Style spécifique pour l'élément actif de la navigation
-  },
   navText: {
     fontSize: 12,
     marginTop: 5,
@@ -377,5 +544,25 @@ const styles = StyleSheet.create({
   activeNavText: {
     color: '#0F2057',
     fontWeight: 'bold',
+  },
+  payButton: {
+    backgroundColor: '#FFA500',
+  },
+  paymentBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  paymentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  paymentBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 }); 

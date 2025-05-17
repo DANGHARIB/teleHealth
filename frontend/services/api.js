@@ -142,10 +142,40 @@ export const doctorAPI = {
     }
   },
   
+  // Récupérer les paiements du médecin
+  getPayments: async () => {
+    try {
+      const response = await api.get('/payments/doctor');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
   // Mettre à jour le statut d'un rendez-vous
   updateAppointmentStatus: async (appointmentId, statusData) => {
     try {
       const response = await api.put(`/appointments/${appointmentId}/status`, statusData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Confirmer un rendez-vous et générer un lien zoom
+  confirmAppointment: async (appointmentId) => {
+    try {
+      const response = await api.post(`/appointments/${appointmentId}/confirm`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Reprogrammer un rendez-vous
+  rescheduleAppointment: async (appointmentId, availabilityId) => {
+    try {
+      const response = await api.put(`/appointments/${appointmentId}/reschedule`, { availabilityId });
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -266,11 +296,51 @@ export const patientAPI = {
     }
   },
   
+  // Création d'un paiement
+  createPayment: async (paymentData) => {
+    try {
+      const response = await api.post('/payments', paymentData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les paiements du patient
+  getPayments: async () => {
+    try {
+      const response = await api.get('/payments/patient');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer un paiement par ID
+  getPaymentById: async (paymentId) => {
+    try {
+      const response = await api.get(`/payments/${paymentId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Récupérer les rendez-vous du patient
   getAppointments: async (status) => {
     try {
       const queryParams = status ? `?status=${status}` : '';
       const response = await api.get(`/appointments/patient/me${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Annuler un rendez-vous
+  cancelAppointment: async (appointmentId) => {
+    try {
+      const response = await api.delete(`/appointments/${appointmentId}`);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

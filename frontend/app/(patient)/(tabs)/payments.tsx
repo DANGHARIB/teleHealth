@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Text } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -7,7 +7,7 @@ import { fr } from 'date-fns/locale';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { doctorAPI } from '@/services/api';
+import { patientAPI } from '@/services/api';
 
 // Types
 type Payment = {
@@ -18,14 +18,9 @@ type Payment = {
       date: string;
       startTime: string;
     };
-    patient: {
-      first_name: string;
-      last_name: string;
+    doctor: {
+      full_name: string;
     };
-  };
-  patient: {
-    first_name: string;
-    last_name: string;
   };
   amount: number;
   paymentMethod: 'card' | 'paypal' | 'apple_pay' | 'google_pay';
@@ -35,27 +30,19 @@ type Payment = {
   createdAt: string;
 };
 
-export default function DoctorFinancialsScreen() {
+export default function PaymentsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [totalEarnings, setTotalEarnings] = useState(0);
 
   // Charger les paiements
   useEffect(() => {
     const fetchPayments = async () => {
       try {
         setLoading(true);
-        const data = await doctorAPI.getPayments();
+        const data = await patientAPI.getPayments();
         setPayments(data);
-        
-        // Calculer le total des gains (seulement pour les paiements 'completed')
-        const total = data
-          .filter((payment: Payment) => payment.status === 'completed')
-          .reduce((sum: number, payment: Payment) => sum + payment.amount, 0);
-        
-        setTotalEarnings(total);
         setLoading(false);
       } catch (err) {
         console.error('Erreur lors du chargement des paiements:', err);
@@ -77,10 +64,32 @@ export default function DoctorFinancialsScreen() {
     }
   };
 
-  // Obtenir le nom complet du patient
-  const getPatientName = (patient: any) => {
-    if (!patient) return 'Patient inconnu';
-    return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+  // Rendu pour un moyen de paiement
+  const renderPaymentMethod = (method: string) => {
+    let icon = 'card-outline';
+    let label = 'Carte bancaire';
+
+    switch (method) {
+      case 'paypal':
+        icon = 'logo-paypal';
+        label = 'PayPal';
+        break;
+      case 'apple_pay':
+        icon = 'logo-apple';
+        label = 'Apple Pay';
+        break;
+      case 'google_pay':
+        icon = 'logo-google';
+        label = 'Google Pay';
+        break;
+    }
+
+    return (
+      <View style={styles.methodContainer}>
+        <Ionicons name={icon as any} size={16} color="#6C757D" />
+        <ThemedText style={styles.methodText}>{label}</ThemedText>
+      </View>
+    );
   };
 
   // Rendu pour le statut de paiement
@@ -123,8 +132,8 @@ export default function DoctorFinancialsScreen() {
     if (!payments.length) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="cash-outline" size={50} color="#B5CDEC" />
-          <ThemedText style={styles.emptyText}>Aucun paiement reçu</ThemedText>
+          <Ionicons name="wallet-outline" size={50} color="#B5CDEC" />
+          <ThemedText style={styles.emptyText}>Aucun paiement effectué</ThemedText>
         </View>
       );
     }
@@ -134,13 +143,13 @@ export default function DoctorFinancialsScreen() {
         key={payment._id} 
         style={styles.paymentCard}
         onPress={() => router.push({
-          pathname: '/doctor/payment/details',
+          pathname: '/patient/payment/details',
           params: { paymentId: payment._id }
         })}
       >
         <View style={styles.paymentHeader}>
-          <ThemedText style={styles.patientName}>
-            {getPatientName(payment.patient || payment.appointment?.patient)}
+          <ThemedText style={styles.paymentDoctor}>
+            {payment.appointment?.doctor?.full_name || 'Docteur'}
           </ThemedText>
           {renderPaymentStatus(payment.status)}
         </View>
@@ -149,12 +158,13 @@ export default function DoctorFinancialsScreen() {
           <ThemedText style={styles.paymentDate}>
             {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
           </ThemedText>
-          <ThemedText style={styles.paymentId}>
-            ID: {payment.transactionId.substring(0, 8)}...
-          </ThemedText>
+          {renderPaymentMethod(payment.paymentMethod)}
         </View>
 
         <View style={styles.paymentFooter}>
+          <ThemedText style={styles.transactionId}>
+            ID: {payment.transactionId.substring(0, 8)}...
+          </ThemedText>
           <ThemedText style={styles.paymentAmount}>
             {payment.amount} €
           </ThemedText>
@@ -168,38 +178,31 @@ export default function DoctorFinancialsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <View style={styles.header}>
-        <ThemedText style={styles.title}>Revenus</ThemedText>
-        <ThemedText style={styles.subtitle}>Récapitulatif de vos paiements</ThemedText>
+        <ThemedText style={styles.title}>Paiements</ThemedText>
+        <ThemedText style={styles.subtitle}>Historique de vos paiements</ThemedText>
       </View>
-      
-      <View style={styles.summaryCard}>
-        <ThemedText style={styles.summaryLabel}>Total des revenus</ThemedText>
-        <ThemedText style={styles.summaryAmount}>{totalEarnings} €</ThemedText>
-      </View>
-      
-      <ThemedText style={styles.listTitle}>Historique des paiements</ThemedText>
       
       <ScrollView style={styles.paymentsContainer} showsVerticalScrollIndicator={false}>
         {renderPayments()}
       </ScrollView>
       
       <View style={styles.navbar}>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/finances')}>
           <Ionicons name="wallet-outline" size={24} color="#0F2057" />
-          <ThemedText style={[styles.navText, styles.activeNavText]}>Revenus</ThemedText>
+          <ThemedText style={[styles.navText, styles.activeNavText]}>Finances</ThemedText>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/patients')}>
-          <Ionicons name="people-outline" size={24} color="#6C757D" />
-          <ThemedText style={styles.navText}>Patients</ThemedText>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)')}>
+          <Ionicons name="search-outline" size={24} color="#6C757D" />
+          <ThemedText style={styles.navText}>Recherche</ThemedText>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/appointment')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/appointment')}>
           <Ionicons name="calendar-outline" size={24} color="#6C757D" />
           <ThemedText style={styles.navText}>Rendez-vous</ThemedText>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/doctor/(tabs)/profile')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient/(tabs)/profile')}>
           <Ionicons name="person-outline" size={24} color="#6C757D" />
           <ThemedText style={styles.navText}>Profil</ThemedText>
         </TouchableOpacity>
@@ -227,33 +230,6 @@ const styles = StyleSheet.create({
     color: '#6C757D',
     marginBottom: 5,
   },
-  summaryCard: {
-    backgroundColor: '#E6F0FF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: '#6C757D',
-    marginBottom: 8,
-  },
-  summaryAmount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#0F2057',
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F2057',
-    marginBottom: 10,
-  },
   paymentsContainer: {
     flex: 1,
   },
@@ -274,7 +250,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  patientName: {
+  paymentDoctor: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#0F2057',
@@ -298,17 +274,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6C757D',
   },
-  paymentId: {
-    fontSize: 12,
+  methodContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  methodText: {
+    fontSize: 14,
     color: '#6C757D',
+    marginLeft: 4,
   },
   paymentFooter: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 5,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#E5E5E5',
+  },
+  transactionId: {
+    fontSize: 12,
+    color: '#6C757D',
   },
   paymentAmount: {
     fontSize: 18,

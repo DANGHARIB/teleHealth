@@ -87,3 +87,70 @@ Suivez les instructions dans le terminal pour lancer l'application sur un émula
 ## License
 
 MIT 
+
+# Téléhealth App
+
+Application mobile de consultation médicale à distance.
+
+## Fonctionnalités de gestion des rendez-vous
+
+### Flux de rendez-vous
+1. Le patient sélectionne un médecin et voit ses disponibilités
+2. Le patient réserve un créneau, créant un rendez-vous avec statut "pending"
+3. Le médecin reçoit la demande et peut la confirmer, générant un lien Zoom
+4. Le médecin et le patient peuvent voir le lien de consultation dans les détails du rendez-vous
+5. Après la consultation, le médecin peut marquer le rendez-vous comme "completed"
+
+### Statuts de rendez-vous
+- **pending**: En attente de confirmation par le médecin
+- **confirmed**: Confirmé par le médecin avec lien de consultation
+- **scheduled**: Programmé (statut hérité)
+- **completed**: Consultation terminée
+- **cancelled**: Annulé par le patient ou le médecin
+- **rescheduled**: Reprogrammé à un autre créneau
+
+### Gestion des empêchements
+Le médecin peut reprogrammer un rendez-vous en:
+1. Sélectionnant une nouvelle disponibilité
+2. Libérant l'ancien créneau
+3. Réservant le nouveau créneau
+4. Mettant à jour le statut à "rescheduled"
+
+### Paiement
+Le paiement est initialement en statut "pending" et pourra être complété ultérieurement.
+
+## Fonctionnalités implémentées
+
+### Backend
+- Modèle de rendez-vous avec statuts multiples
+- Confirmation des rendez-vous avec génération de lien Zoom
+- Reprogrammation des rendez-vous
+- Annulation des rendez-vous
+
+### Frontend Médecin
+- Visualisation des rendez-vous avec code couleur selon statut
+- Confirmation des rendez-vous en attente
+- Interface de reprogrammation avec sélection des disponibilités
+- Marquage des rendez-vous comme terminés
+
+### Frontend Patient
+- Visualisation des rendez-vous avec code couleur selon statut
+- Accès au lien de consultation Zoom
+- Annulation des rendez-vous
+
+## Prochaines étapes
+
+### Priorité haute
+1. Implémentation du système de paiement (simulé)
+2. Système de notification pour informer des changements de statut
+3. Validation des rendez-vous annulés ou reprogrammés
+
+### Priorité moyenne
+1. Historique des rendez-vous passés
+2. Évaluation post-consultation
+3. Gestion des remboursements pour les annulations
+
+### Priorité basse
+1. Intégration avec des calendriers externes
+2. Rappels automatiques avant rendez-vous
+3. Interface administrateur pour supervision 

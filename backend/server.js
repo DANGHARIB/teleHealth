@@ -50,6 +50,7 @@ app.use('/api/specializations', require('./routes/specializations'));
 app.use('/api/questions', require('./routes/questions'));
 app.use('/api/appointments', require('./routes/appointments'));
 app.use('/api/availability', require('./routes/availability'));
+app.use('/api/payments', require('./routes/payments'));
 
 // Gestion des erreurs 404
 app.use((req, res) => {

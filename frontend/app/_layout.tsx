@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notificationService from '../services/notificationService';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -21,6 +22,20 @@ export default function RootLayout() {
   const segments = useSegments();
   const [authChecked, setAuthChecked] = useState(false);
   const [initialRoute, setInitialRoute] = useState<string | undefined>(undefined);
+
+  // Configurer les notifications
+  useEffect(() => {
+    if (loaded) {
+      // Configurer les permissions de notification
+      notificationService.configureNotifications();
+      
+      // Mettre en place les gestionnaires de notification
+      const cleanupNotifications = notificationService.setupNotificationHandlers();
+      
+      // Nettoyer les gestionnaires à la déconnexion
+      return cleanupNotifications;
+    }
+  }, [loaded]);
 
   useEffect(() => {
     if (error) throw error;

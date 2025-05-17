@@ -7,7 +7,9 @@ const {
   getDoctorAppointments,
   getAppointmentById,
   updateAppointmentStatus,
-  cancelAppointment
+  cancelAppointment,
+  confirmAppointment,
+  rescheduleAppointment
 } = require('../controllers/appointmentController');
 const { protect, admin, doctor, patient } = require('../middlewares/authMiddleware');
 
@@ -25,6 +27,8 @@ router.get('/patient/me', protect, patient, getPatientAppointments);
 // Routes protégées pour les médecins
 router.get('/doctor/me', protect, doctor, getDoctorAppointments);
 router.put('/:id/status', protect, doctor, updateAppointmentStatus);
+router.post('/:id/confirm', protect, doctor, confirmAppointment);
+router.put('/:id/reschedule', protect, doctor, rescheduleAppointment);
 
 // Route d'annulation pour les patients
 router.put('/:id/cancel', protect, patient, cancelAppointment);

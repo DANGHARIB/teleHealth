@@ -2,6 +2,7 @@ const Appointment = require('../models/Appointment');
 const Availability = require('../models/Availability');
 const Doctor = require('../models/Doctor');
 const Patient = require('../models/Patient');
+const notificationService = require('../services/notificationService');
 
 // @desc    Créer un nouveau rendez-vous
 // @route   POST /api/appointments
@@ -40,7 +41,8 @@ exports.createAppointment = async (req, res) => {
       price: price || 28, // Prix par défaut
       duration: duration || 30, // Durée par défaut (minutes)
       caseDetails: caseDetails || 'Consultation standard',
-      status: 'scheduled'
+      status: 'pending', // Statut par défaut est maintenant 'pending'
+      paymentStatus: 'pending' // Statut de paiement par défaut
     });
     
     // Marquer la disponibilité comme réservée
@@ -49,6 +51,12 @@ exports.createAppointment = async (req, res) => {
     
     // Sauvegarder le rendez-vous
     const createdAppointment = await appointment.save();
+    
+    // Envoyer une notification au médecin
+    await notificationService.notifyAppointmentCreated(createdAppointment);
+    
+    // Planifier le rappel 1h avant le rendez-vous
+    await notificationService.scheduleAppointmentReminders(createdAppointment);
     
     res.status(201).json(createdAppointment);
   } catch (error) {
@@ -244,6 +252,116 @@ exports.updateAppointmentStatus = async (req, res) => {
   }
 };
 
+// @desc    Confirmer un rendez-vous et générer un lien zoom
+// @route   POST /api/appointments/:id/confirm
+// @access  Private/Doctor
+exports.confirmAppointment = async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Rendez-vous non trouvé' });
+    }
+    
+    // Vérifier si l'utilisateur est le médecin assigné au rendez-vous
+    const doctor = await Doctor.findOne({ user: req.user._id });
+    if (!doctor || doctor._id.toString() !== appointment.doctor.toString()) {
+      return res.status(403).json({ message: 'Vous n\'êtes pas autorisé à confirmer ce rendez-vous' });
+    }
+    
+    // Vérifier si le rendez-vous est en attente
+    if (appointment.status !== 'pending') {
+      return res.status(400).json({ 
+        message: `Impossible de confirmer ce rendez-vous car son statut est ${appointment.status}` 
+      });
+    }
+    
+    // Générer un lien Zoom simulé
+    const zoomLink = `https://zoom.us/j/${Math.floor(100000000 + Math.random() * 900000000)}`;
+    
+    // Mettre à jour le statut et ajouter le lien Zoom
+    appointment.status = 'confirmed';
+    appointment.sessionLink = zoomLink;
+    
+    const updatedAppointment = await appointment.save();
+    
+    // Envoyer une notification au patient
+    await notificationService.notifyAppointmentConfirmed(updatedAppointment);
+    
+    res.status(200).json(updatedAppointment);
+  } catch (error) {
+    console.error('Erreur lors de la confirmation du rendez-vous:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la confirmation du rendez-vous' });
+  }
+};
+
+// @desc    Reprogrammer un rendez-vous
+// @route   PUT /api/appointments/:id/reschedule
+// @access  Private/Doctor
+exports.rescheduleAppointment = async (req, res) => {
+  try {
+    const { availabilityId } = req.body;
+    if (!availabilityId) {
+      return res.status(400).json({ message: 'Veuillez fournir un nouveau créneau de disponibilité' });
+    }
+    
+    // Vérifier si la nouvelle disponibilité existe
+    const newAvailability = await Availability.findById(availabilityId);
+    if (!newAvailability) {
+      return res.status(404).json({ message: 'Nouveau créneau de disponibilité non trouvé' });
+    }
+    
+    if (newAvailability.isBooked) {
+      return res.status(400).json({ message: 'Ce créneau est déjà réservé' });
+    }
+    
+    // Trouver le rendez-vous
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Rendez-vous non trouvé' });
+    }
+    
+    // Vérifier les autorisations
+    const doctor = await Doctor.findOne({ user: req.user._id });
+    if (!doctor || doctor._id.toString() !== appointment.doctor.toString()) {
+      return res.status(403).json({ message: 'Non autorisé à reprogrammer ce rendez-vous' });
+    }
+    
+    // Récupérer l'ancienne disponibilité pour les informations de notification
+    const oldAvailability = await Availability.findById(appointment.availability);
+    const oldDate = oldAvailability ? oldAvailability.date : '';
+    const oldTime = oldAvailability ? oldAvailability.startTime : '';
+    
+    // Libérer l'ancien créneau
+    if (oldAvailability) {
+      oldAvailability.isBooked = false;
+      await oldAvailability.save();
+    }
+    
+    // Réserver le nouveau créneau
+    newAvailability.isBooked = true;
+    await newAvailability.save();
+    
+    // Mettre à jour le rendez-vous
+    appointment.availability = availabilityId;
+    appointment.status = 'rescheduled';
+    
+    const updatedAppointment = await appointment.save();
+    
+    // Envoyer une notification au patient
+    await notificationService.notifyAppointmentRescheduled(updatedAppointment, oldDate, oldTime);
+    
+    // Reprogrammer le rappel 1h avant le rendez-vous
+    await notificationService.scheduleAppointmentReminders(updatedAppointment);
+    
+    res.status(200).json(updatedAppointment);
+  } catch (error) {
+    console.error('Erreur lors de la reprogrammation du rendez-vous:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la reprogrammation du rendez-vous' });
+  }
+};
+
 // @desc    Annuler un rendez-vous
 // @route   DELETE /api/appointments/:id
 // @access  Private
@@ -281,6 +399,9 @@ exports.cancelAppointment = async (req, res) => {
     // Libérer le créneau de disponibilité
     availability.isBooked = false;
     await availability.save();
+    
+    // Envoyer une notification au médecin
+    await notificationService.notifyAppointmentCancelled(appointment);
 
     res.status(200).json({ message: 'Rendez-vous annulé avec succès' });
   } catch (error) {
