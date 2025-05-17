@@ -18,15 +18,16 @@ const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/ap
 const BASE_SERVER_URL = API_URL.replace('/api', '');
 
 const COLORS = {
-  primary: '#2563EB',
-  primaryLight: '#3B82F6',
-  primaryDark: '#1D4ED8',
+  primary: '#7AA7CC',
+  primaryLight: '#8FB5D5',
+  primaryDark: '#6999BE',
   secondary: '#F8FAFC',
-  accent: '#10B981',
+  accent: '#7AA7CC',
   warning: '#F59E0B',
   danger: '#EF4444',
   success: '#22C55E',
   purple: '#8B5CF6',
+  darkBlue: '#090F47',
   gray100: '#F1F5F9',
   gray200: '#E2E8F0',
   gray300: '#CBD5E1',
@@ -35,7 +36,7 @@ const COLORS = {
   gray600: '#475569',
   gray700: '#334155',
   gray800: '#1E293B',
-  gray900: '#0F172A',
+  gray900: '#090F47',
   white: '#FFFFFF',
   background: '#FAFBFE',
 };
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: COLORS.gray900,
+    color: COLORS.darkBlue,
     marginBottom: 4,
   },
   headerSubtitle: {
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginBottom: 32,
     padding: 24,
-    shadowColor: COLORS.gray900,
+    shadowColor: COLORS.darkBlue,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     borderWidth: 3,
     borderColor: COLORS.white,
-    shadowColor: COLORS.gray900,
+    shadowColor: COLORS.darkBlue,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -298,7 +299,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     borderColor: COLORS.white,
-    shadowColor: COLORS.gray900,
+    shadowColor: COLORS.darkBlue,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.gray900,
+    color: COLORS.darkBlue,
     marginBottom: 4,
   },
   welcomeText: {
@@ -325,13 +326,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.gray700,
+    color: COLORS.darkBlue,
     marginBottom: 16,
   },
   menuList: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    shadowColor: COLORS.gray900,
+    shadowColor: COLORS.darkBlue,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.02,
     shadowRadius: 6,
@@ -361,7 +362,7 @@ const styles = StyleSheet.create({
   menuItemTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: COLORS.gray900,
+    color: COLORS.darkBlue,
     marginBottom: 2,
   },
   menuItemDescription: {
@@ -380,11 +381,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.danger,
+    backgroundColor: COLORS.primary,
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 24,
-    shadowColor: COLORS.danger,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

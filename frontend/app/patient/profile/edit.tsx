@@ -1,11 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
+import {
+  StyleSheet, 
+  Text, 
+  View, 
+  TouchableOpacity, 
+  TextInput, 
+  ScrollView, 
+  ActivityIndicator, 
+  Alert, 
+  Platform, 
+  Image, 
+  KeyboardAvoidingView
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+
+// Color scheme matching the app
+const COLORS = {
+  primary: '#7AA7CC',
+  primaryLight: '#8FB5D5',
+  primaryDark: '#6999BE',
+  darkBlue: '#090F47',
+  white: '#FFFFFF',
+  background: '#FAFBFE',
+  gray100: '#F1F5F9',
+  gray200: '#E2E8F0',
+  gray300: '#CBD5E1',
+  gray400: '#94A3B8',
+  gray500: '#64748B',
+  danger: '#EF4444',
+  secondary: '#64748B',
+};
 
 interface FormData {
   email: string;
@@ -67,14 +97,16 @@ export default function EditProfileScreen() {
             date_of_birth: userInfo.profile?.date_of_birth ? new Date(userInfo.profile.date_of_birth) : new Date(),
           });
         } else {
-          Alert.alert('Erreur', 'Impossible de récupérer les informations du profil (API et local).');
+          Alert.alert('Error', 'Could not retrieve profile information (API and local).');
         }
          console.error("API error fetching profile:", await response.text());
-         Alert.alert('Erreur réseau', 'Impossible de joindre le serveur pour récupérer le profil.');
+         if (response.status !== 404) {
+           Alert.alert('Network Error', 'Could not connect to the server to retrieve the profile.');
+         }
       }
     } catch (error) {
       console.error('Failed to fetch profile:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la récupération du profil.');
+      Alert.alert('Error', 'An error occurred while retrieving the profile.');
       const userInfoString = await AsyncStorage.getItem('userInfo');
       if (userInfoString) {
         const userInfo = JSON.parse(userInfoString);
@@ -100,7 +132,7 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (!formData.first_name.trim() || !formData.last_name.trim()) {
-      Alert.alert('Champs requis', 'Merci de remplir votre prénom et nom.');
+      Alert.alert('Required Fields', 'Please fill in your first and last name.');
       return;
     }
 
@@ -109,7 +141,7 @@ export default function EditProfileScreen() {
       const userToken = await AsyncStorage.getItem('userToken');
       
       if (!userToken) {
-        Alert.alert('Session expirée', 'Veuillez vous reconnecter.');
+        Alert.alert('Session Expired', 'Please log in again.');
         router.replace('/patient/auth/login');
         return;
       }
@@ -157,16 +189,16 @@ export default function EditProfileScreen() {
         
         await AsyncStorage.setItem('userInfo', JSON.stringify(updatedAsyncStorageUser));
         
-        Alert.alert('Succès', 'Votre profil a été mis à jour avec succès.');
+        Alert.alert('Success', 'Your profile has been updated successfully.');
         router.back();
       } else {
-        const errorData = await response.json().catch(() => ({ message: 'Erreur inconnue lors de la mise à jour.' }));
-        Alert.alert('Erreur de mise à jour', errorData.message || 'Une erreur est survenue lors de la mise à jour du profil.');
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error during update.' }));
+        Alert.alert('Update Error', errorData.message || 'An error occurred while updating the profile.');
         console.error("API error updating profile:", errorData);
       }
     } catch (error) {
       console.error('Failed to update profile:', error);
-      Alert.alert('Erreur', 'Impossible de mettre à jour le profil.');
+      Alert.alert('Error', 'Could not update profile.');
     } finally {
       setIsSaving(false);
     }
@@ -175,82 +207,114 @@ export default function EditProfileScreen() {
   if (isLoading) {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading your profile...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>{'<'}</Text>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+            <Ionicons name="chevron-back" size={28} color={COLORS.darkBlue} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Modifier mon profil</Text>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <View style={styles.headerButton} />
         </View>
-
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Informations personnelles</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Prénom</Text>
-            <TextInput
-              style={styles.textInput}
-              value={formData.first_name}
-              onChangeText={(text) => handleChange('first_name', text)}
-              placeholder="Entrez votre prénom"
-            />
-          </View>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Nom</Text>
-            <TextInput
-              style={styles.textInput}
-              value={formData.last_name}
-              onChangeText={(text) => handleChange('last_name', text)}
-              placeholder="Entrez votre nom"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <TextInput
-              style={[styles.textInput, styles.disabledInput]}
-              value={formData.email}
-              editable={false}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Genre</Text>
-            <View style={[styles.textInput, styles.disabledInput, { justifyContent: 'center' }]}>
-                 <Text style={{ color: '#777' }}>{formData.gender}</Text>
+        
+        <ScrollView 
+          style={styles.container} 
+          contentContainerStyle={styles.scrollContentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Profile Image Section */}
+          <View style={styles.imageSection}>
+            <View style={styles.profileImageContainer}>
+              <View style={styles.profileImagePlaceholder}>
+                <FontAwesome5 name="user" size={50} color={COLORS.primaryLight} />
+              </View>
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Date de naissance</Text>
-            <TextInput
-              style={[styles.textInput, styles.disabledInput]} 
-              value={formData.date_of_birth.toLocaleDateString()} 
-              editable={false} 
-            />
-          </View>
-        </View>
+          {/* Personal Information Card */}
+          <View style={styles.formCard}>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="person" size={22} color={COLORS.darkBlue} />
+              <Text style={styles.cardTitle}>Personal Information</Text>
+            </View>
+            
+            <View style={styles.inputRow}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>First Name</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={formData.first_name}
+                  onChangeText={(text) => handleChange('first_name', text)}
+                  placeholder="First name"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Last Name</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={formData.last_name}
+                  onChangeText={(text) => handleChange('last_name', text)}
+                  placeholder="Last name"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
 
-        <TouchableOpacity 
-          style={styles.saveButton} 
-          onPress={handleSave}
-          disabled={isSaving || isLoading}
-        >
-          {isSaving ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Enregistrer</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Email</Text>
+              <View style={styles.disabledInputContainer}>
+                <Ionicons name="mail" size={20} color={COLORS.secondary} style={styles.inputIcon} />
+                <Text style={styles.disabledInputText}>{formData.email}</Text>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Gender</Text>
+              <View style={styles.disabledInputContainer}>
+                <Ionicons name="person" size={20} color={COLORS.secondary} style={styles.inputIcon} />
+                <Text style={styles.disabledInputText}>{formData.gender}</Text>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Date of Birth</Text>
+              <View style={styles.disabledInputContainer}>
+                <Ionicons name="calendar" size={20} color={COLORS.secondary} style={styles.inputIcon} />
+                <Text style={styles.disabledInputText}>
+                  {formData.date_of_birth.toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.saveButton, (isSaving || isLoading) && styles.saveButtonDisabled]} 
+            onPress={handleSave}
+            disabled={isSaving || isLoading}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <>
+                <Ionicons name="save-outline" size={22} color={COLORS.white} style={styles.buttonIcon} />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -258,122 +322,172 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.white,
   },
   container: {
     flex: 1,
-    padding: 20,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: COLORS.darkBlue,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
-    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
-  backButton: {
-    padding: 10,
-    marginRight: 5,
-  },
-  backButtonText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
+  headerButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: COLORS.darkBlue,
+    textAlign: 'center',
   },
-  formSection: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  // Image section styles
+  imageSection: {
+    alignItems: 'center',
+    marginTop: 20,
     marginBottom: 20,
-    color: '#333',
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  profileImagePlaceholder: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#E0E0E0',
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.darkBlue,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  // Card styles
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.darkBlue,
+    marginLeft: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
   inputGroup: {
     marginBottom: 20,
+    flex: 1,
   },
   inputLabel: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#555',
+    fontSize: 14,
     fontWeight: '500',
+    color: COLORS.darkBlue,
+    marginBottom: 8,
   },
   textInput: {
-    height: 50,
-    borderColor: '#E0E0E0',
     borderWidth: 1,
-    borderRadius: 8,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
     paddingHorizontal: 15,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.white,
+    color: COLORS.darkBlue,
   },
-  disabledInput: {
-    backgroundColor: '#F5F5F5',
-    color: '#777',
+  inputIcon: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 14 : 12,
+    left: 12,
+    zIndex: 1,
   },
-  genderContainer: {
+  disabledInputContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingLeft: 40,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 12,
+    backgroundColor: '#F8F9FA',
     flexDirection: 'row',
-  },
-  genderOption: {
-    flex: 1,
-    height: 45,
-    justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 5,
   },
-  genderOptionMargin: {
-    marginRight: 10,
-  },
-  selectedGender: {
-    borderColor: '#007AFF',
-    backgroundColor: '#E6F2FF',
-  },
-  genderText: {
+  disabledInputText: {
     fontSize: 16,
-    color: '#555',
-  },
-  selectedGenderText: {
-    color: '#007AFF',
-    fontWeight: 'bold',
-  },
-  datePickerButton: {
-    height: 50,
-    borderColor: '#E0E0E0',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    justifyContent: 'center',
+    color: COLORS.secondary,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    justifyContent: 'center',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   saveButtonText: {
-    color: 'white',
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: 'bold',
   },
