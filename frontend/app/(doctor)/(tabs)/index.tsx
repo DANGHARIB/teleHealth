@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -11,23 +11,30 @@ import { doctorAPI } from '@/services/api';
 
 // App theme colors
 const COLORS = {
-  primary: '#2D87BB',
-  primaryDark: '#1A5F8C',
-  navyBlue: '#0A2463',  // Navy blue for headings and important text
-  darkNavy: '#090F47',  // Dark navy for headings and important information
-  babyBlue: '#7AA7CC',  // Baby blue for secondary text and accents
-  background: '#F8FAFC',
-  cardBackground: '#FFFFFF',
-  text: '#333333',
-  textLight: '#8F9BB3',
-  border: '#E5E7EB',
-  error: '#EF4444',
-  success: '#10B981',
-  pending: '#FFA500',
-  refunded: '#FF9999',  // Light pastel red for refunds
-  failed: '#DC3545',
-  completed: '#7AA7CC',
+  primary: '#0F2057',
+  primaryLight: '#5586CC',
+  secondary: '#4CAF50',
+  background: '#F8F9FF',
+  surface: '#FFFFFF',
+  error: '#DC3545',
+  text: {
+    primary: '#0F2057',
+    secondary: '#6C757D',
+    light: '#A0A0A0',
+    white: '#FFFFFF'
+  },
+  border: '#E5E9F2',
+  warning: '#FFA500',
+  status: {
+    completed: '#5586CC',
+    refund: '#4CAF50',
+    pending: '#FFA500',
+    failed: '#DC3545'
+  }
 };
+
+const { width, height } = Dimensions.get('window');
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 // Types
 type Payment = {
@@ -53,6 +60,11 @@ type Payment = {
   transactionId: string;
   paymentDate: string;
   createdAt: string;
+  // Add these for consistency with patient interface
+  isRefund?: boolean;
+  displayAmount?: number;
+  refundDetails?: Payment;
+  isCombined?: boolean;
 };
 
 export default function DoctorFinancialsScreen() {
@@ -60,7 +72,7 @@ export default function DoctorFinancialsScreen() {
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   // Load payments
   useEffect(() => {
@@ -68,14 +80,21 @@ export default function DoctorFinancialsScreen() {
       try {
         setLoading(true);
         const data = await doctorAPI.getPayments();
-        setPayments(data);
         
-        // Calculate total earnings (only for 'completed' payments)
-        const total = data
-          .filter((payment: Payment) => payment.status === 'completed')
-          .reduce((sum: number, payment: Payment) => sum + payment.amount, 0);
+        // Process data to mark refunds
+        const processedPayments = data.map((payment: Payment) => {
+          const isRefund = payment.status === 'refunded';
+          return {
+            ...payment,
+            isRefund,
+            displayAmount: Math.abs(payment.amount)
+          };
+        });
         
-        setTotalEarnings(total);
+        // Grouper les remboursements avec leurs paiements originaux
+        const groupedPayments = groupRefundsWithOriginals(processedPayments);
+        
+        setPayments(groupedPayments);
         setLoading(false);
       } catch (err) {
         console.error('Error loading payments:', err);
@@ -86,6 +105,123 @@ export default function DoctorFinancialsScreen() {
 
     fetchPayments();
   }, []);
+
+  // Filter payments
+  const getFilteredPayments = () => {
+    if (!activeFilter) return payments;
+    
+    return payments.filter(payment => {
+      if (activeFilter === 'refunds') {
+        return payment.isRefund || payment.status === 'refunded';
+      }
+      if (activeFilter === 'payments') {
+        return !payment.isRefund && payment.status === 'completed';
+      }
+      if (activeFilter === 'monthly') {
+        // Filter by current month
+        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+        const currentDate = new Date();
+        return paymentDate.getMonth() === currentDate.getMonth() && 
+               paymentDate.getFullYear() === currentDate.getFullYear();
+      }
+      return true;
+    });
+  };
+
+  // Group refunds with originals
+  const groupRefundsWithOriginals = (payments: Payment[]) => {
+    // Create a map to track refunds by appointment ID
+    const refundMap: Record<string, Payment> = {};
+    const refundIds: Set<string> = new Set();
+    
+    // First pass: identify all refunds
+    payments.forEach(payment => {
+      if (payment.isRefund && payment.appointment?._id) {
+        refundMap[payment.appointment._id] = payment;
+        refundIds.add(payment._id);
+      }
+    });
+    
+    // Second pass: combine refunds with original payments
+    const combinedPayments = payments
+      .filter(payment => !refundIds.has(payment._id)) // Filter out refunds that have been combined
+      .map(payment => {
+        if (!payment.isRefund && payment.status === 'refunded' && payment.appointment?._id) {
+          // If this is an original payment that has been refunded
+          const refund = refundMap[payment.appointment._id];
+          if (refund) {
+            return {
+              ...payment,
+              refundDetails: refund,
+              // Mark as a combined payment
+              isCombined: true
+            };
+          }
+        }
+        return payment;
+      });
+    
+    return combinedPayments;
+  };
+
+  // Calculate monthly summary
+  const getMonthlyTotal = () => {
+    const currentDate = new Date();
+    let totalEarned = 0;
+    let totalRefunded = 0;
+    let totalPenalties = 0;
+    let paymentCount = 0;
+    let refundCount = 0;
+
+    payments.forEach(payment => {
+      const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+      if (paymentDate.getMonth() === currentDate.getMonth() && 
+          paymentDate.getFullYear() === currentDate.getFullYear()) {
+        
+        // If this is a payment that has a refundDetails (original payment refunded)
+        if (payment.refundDetails) {
+          // The original amount is counted in earnings
+          totalEarned += payment.amount;
+          paymentCount++;
+          
+          // The refund amount is deducted from total earnings
+          const refundAmount = Math.abs(payment.refundDetails.amount);
+          totalRefunded += refundAmount;
+          
+          // Calculate penalty (difference between original amount and refund)
+          // For the doctor, this is a revenue retained
+          const penaltyAmount = payment.amount - refundAmount;
+          totalPenalties += penaltyAmount;
+          
+          refundCount++;
+        }
+        // If this is a direct refund (not an original payment)
+        else if (payment.isRefund || payment.amount < 0) {
+          // We ignore direct refunds as they are already
+          // accounted for via refundDetails of the original payment
+        } 
+        // If this is a normal payment
+        else if (payment.status === 'completed') {
+          totalEarned += payment.amount;
+          paymentCount++;
+        }
+      }
+    });
+
+    // Net amount is calculated as earnings minus refunds
+    // Note: penalties are already included in totalEarned - totalRefunded
+    const netAmount = totalEarned - totalRefunded;
+
+    return {
+      totalEarned,
+      totalRefunded,
+      totalPenalties,
+      netAmount,
+      paymentCount,
+      refundCount,
+      monthName: format(currentDate, 'MMMM yyyy', { locale: enUS })
+    };
+  };
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -103,314 +239,785 @@ export default function DoctorFinancialsScreen() {
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
   };
 
-  // Render payment status
-  const renderPaymentStatus = (status: string) => {
-    let color = COLORS.completed;
-    let label = 'Completed';
+  // Render payment method
+  const renderPaymentMethod = (method: string) => {
+    let icon: any = 'card-outline';
+    let label = 'Credit Card';
+    let color = COLORS.text.secondary;
 
-    switch (status) {
-      case 'pending':
-        color = COLORS.pending;
-        label = 'Pending';
+    switch (method) {
+      case 'paypal':
+        icon = 'logo-paypal';
+        label = 'PayPal';
+        color = '#0070BA';
         break;
-      case 'refunded':
-        color = COLORS.refunded;
-        label = 'Refunded';
+      case 'apple_pay':
+        icon = 'logo-apple';
+        label = 'Apple Pay';
+        color = '#000000';
         break;
-      case 'failed':
-        color = COLORS.failed;
-        label = 'Failed';
+      case 'google_pay':
+        icon = 'logo-google';
+        label = 'Google Pay';
+        color = '#4285F4';
         break;
     }
 
     return (
+      <View style={styles.methodContainer}>
+        <Ionicons name={icon} size={16} color={color} />
+        <ThemedText style={[styles.methodText, { color }]}>{label}</ThemedText>
+      </View>
+    );
+  };
+
+  // Render payment status
+  const renderPaymentStatus = (status: string, isRefund: boolean) => {
+    let color = COLORS.status.completed;
+    let icon: any = 'checkmark-circle';
+    let label = 'Completed';
+
+    if (isRefund) {
+      color = COLORS.status.refund;
+      icon = 'arrow-undo-outline';
+      label = 'Refund';
+    } else {
+      switch (status) {
+        case 'pending':
+          color = COLORS.status.pending;
+          icon = 'time-outline';
+          label = 'Pending';
+          break;
+        case 'refunded':
+          color = COLORS.status.refund;
+          icon = 'return-down-back-outline';
+          label = 'Refunded';
+          break;
+        case 'failed':
+          color = COLORS.status.failed;
+          icon = 'close-circle-outline';
+          label = 'Failed';
+          break;
+      }
+    }
+
+    return (
       <View style={[styles.statusBadge, { backgroundColor: color }]}>
+        <Ionicons name={icon} size={12} color="white" style={styles.statusIcon} />
         <ThemedText style={styles.statusText}>{label}</ThemedText>
       </View>
     );
   };
 
-  // Render the payment method icon
-  const renderPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case 'card':
-        return <Ionicons name="card-outline" size={18} color={COLORS.textLight} />;
-      case 'paypal':
-        return <Ionicons name="logo-paypal" size={18} color={COLORS.textLight} />;
-      case 'apple_pay':
-        return <Ionicons name="logo-apple" size={18} color={COLORS.textLight} />;
-      case 'google_pay':
-        return <Ionicons name="logo-google" size={18} color={COLORS.textLight} />;
-      default:
-        return <Ionicons name="cash-outline" size={18} color={COLORS.textLight} />;
-    }
+  // Render filters
+  const renderFilters = () => {
+    return (
+      <View style={styles.filtersContainer}>
+        <TouchableOpacity 
+          style={[styles.filterButton, activeFilter === null ? styles.activeFilter : null]}
+          onPress={() => setActiveFilter(null)}
+        >
+          <ThemedText style={[styles.filterText, activeFilter === null ? styles.activeFilterText : null]}>
+            All
+          </ThemedText>
+          {activeFilter === null && <View style={styles.filterActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.filterButton, activeFilter === 'payments' ? styles.activeFilter : null]}
+          onPress={() => setActiveFilter('payments')}
+        >
+          <ThemedText style={[styles.filterText, activeFilter === 'payments' ? styles.activeFilterText : null]}>
+            Payments
+          </ThemedText>
+          {activeFilter === 'payments' && <View style={styles.filterActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.filterButton, activeFilter === 'refunds' ? styles.activeFilter : null]}
+          onPress={() => setActiveFilter('refunds')}
+        >
+          <ThemedText style={[styles.filterText, activeFilter === 'refunds' ? styles.activeFilterText : null]}>
+            Refunds
+          </ThemedText>
+          {activeFilter === 'refunds' && <View style={styles.filterActiveIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.filterButton, activeFilter === 'monthly' ? styles.activeFilter : null]}
+          onPress={() => setActiveFilter('monthly')}
+        >
+          <ThemedText style={[styles.filterText, activeFilter === 'monthly' ? styles.activeFilterText : null]}>
+            Monthly
+          </ThemedText>
+          {activeFilter === 'monthly' && <View style={styles.filterActiveIndicator} />}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render monthly summary
+  const renderMonthlySummary = () => {
+    const monthlyData = getMonthlyTotal();
+    
+    return (
+      <View style={styles.monthlySummaryContainer}>
+        <View style={styles.monthlyHeader}>
+          <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
+          <ThemedText style={styles.monthlyTitle}>{monthlyData.monthName}</ThemedText>
+        </View>
+        
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <ThemedText style={styles.summaryLabel}>Total Earned</ThemedText>
+              <ThemedText style={styles.summaryAmount}>{monthlyData.totalEarned.toFixed(2)} €</ThemedText>
+              <ThemedText style={styles.summaryCount}>{monthlyData.paymentCount} payments</ThemedText>
+            </View>
+          </View>
+          
+          {monthlyData.totalRefunded > 0 && (
+            <>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={styles.summaryLabel}>Total Refunded (80%)</ThemedText>
+                  <ThemedText style={styles.refundSummaryAmount}>- {monthlyData.totalRefunded.toFixed(2)} €</ThemedText>
+                  <ThemedText style={styles.summaryCount}>{monthlyData.refundCount} refunds</ThemedText>
+                </View>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryItem}>
+                  <ThemedText style={styles.summaryLabel}>Penalties Kept (20%)</ThemedText>
+                  <ThemedText style={styles.penaltySummaryAmount}>{monthlyData.totalPenalties.toFixed(2)} €</ThemedText>
+                  <ThemedText style={styles.summaryCount}>{monthlyData.refundCount} cancellations</ThemedText>
+                </View>
+              </View>
+            </>
+          )}
+          
+          <View style={[styles.summaryRow, styles.totalRow]}>
+            <View style={styles.summaryItem}>
+              <ThemedText style={styles.totalLabel}>Net Income</ThemedText>
+              <ThemedText style={styles.totalAmount}>{monthlyData.netAmount.toFixed(2)} €</ThemedText>
+            </View>
+          </View>
+        </View>
+        
+        {monthlyData.paymentCount === 0 && (
+          <View style={styles.emptyMonthly}>
+            <Ionicons name="calendar-clear-outline" size={40} color={COLORS.text.light} />
+            <ThemedText style={styles.emptyMonthlyText}>No transactions this month</ThemedText>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Render a standard payment
+  const renderPayment = (payment: any, index: number) => {
+    return (
+      <View key={payment._id} style={[styles.paymentCard, { marginTop: index > 0 ? 16 : 0 }]}>
+        <TouchableOpacity  
+          style={styles.paymentCardInner}
+          activeOpacity={0.7}
+          onPress={() => router.push({
+            pathname: '/doctor/payment/details',
+            params: { paymentId: payment._id }
+          })}
+        >
+          <View style={styles.paymentHeader}>
+            <ThemedText style={styles.paymentPatient}>
+              {getPatientName(payment.patient || payment.appointment?.patient)}
+            </ThemedText>
+            {renderPaymentStatus(payment.status, payment.isRefund)}
+          </View>
+
+          <View style={styles.paymentDetails}>
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={14} color={COLORS.text.secondary} />
+              <ThemedText style={styles.paymentDate}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
+            </View>
+            {renderPaymentMethod(payment.paymentMethod)}
+          </View>
+
+          <View style={styles.paymentFooter}>
+            <View style={styles.transactionIdContainer}>
+              <Ionicons name="key-outline" size={12} color={COLORS.text.light} />
+              <ThemedText style={styles.transactionId}>
+                {payment.transactionId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+            <ThemedText style={[
+              styles.paymentAmount, 
+              payment.isRefund ? styles.refundAmount : null
+            ]}>
+              {payment.isRefund ? '- ' : ''}{payment.displayAmount || payment.amount} €
+            </ThemedText>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render combined refund payment
+  const renderCombinedRefundPayment = (payment: any, index: number) => {
+    // Calculate amounts for partial refund
+    const originalAmount = payment.amount;
+    const penaltyAmount = originalAmount * 0.2; // 20% penalty retained by the doctor
+    const refundAmount = originalAmount * 0.8; // 80% refunded to the patient
+
+    return (
+      <View key={payment._id} style={[styles.refundCard, { marginTop: index > 0 ? 16 : 0 }]}>
+        <TouchableOpacity 
+          style={styles.paymentCardInner}
+          activeOpacity={0.7}
+          onPress={() => router.push({
+            pathname: '/doctor/payment/details',
+            params: { paymentId: payment._id }
+          })}
+        >
+          <View style={styles.refundHeader}>
+            <View style={styles.refundHeaderLeft}>
+              <ThemedText style={styles.paymentPatient}>
+                {getPatientName(payment.patient || payment.appointment?.patient)}
+              </ThemedText>
+            </View>
+            {renderPaymentStatus('refunded', false)}
+          </View>
+
+          <View style={styles.paymentDetails}>
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={14} color={COLORS.text.secondary} />
+              <ThemedText style={styles.paymentDate}>
+                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
+              </ThemedText>
+            </View>
+            {renderPaymentMethod(payment.paymentMethod)}
+          </View>
+
+          <View style={styles.refundDetailsContainer}>
+            <View style={styles.refundDetailRow}>
+              <ThemedText style={styles.refundDetailLabel}>Original Amount</ThemedText>
+              <ThemedText style={styles.refundDetailValue}>{originalAmount.toFixed(2)} €</ThemedText>
+            </View>
+            
+            <View style={styles.refundDetailRow}>
+              <View style={styles.penaltyLabelContainer}>
+                <ThemedText style={styles.refundDetailLabel}>Penalty Kept (20%)</ThemedText>
+                <TouchableOpacity style={styles.infoButton}>
+                  <Ionicons name="information-circle-outline" size={14} color={COLORS.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              <ThemedText style={styles.penaltyValue}>{penaltyAmount.toFixed(2)} €</ThemedText>
+            </View>
+            
+            <View style={[styles.refundDetailRow, styles.refundTotalRow]}>
+              <ThemedText style={styles.refundTotalLabel}>Refunded to Patient (80%)</ThemedText>
+              <ThemedText style={styles.refundTotalValue}>- {refundAmount.toFixed(2)} €</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.paymentFooter}>
+            <View style={styles.transactionIdContainer}>
+              <Ionicons name="key-outline" size={12} color={COLORS.text.light} />
+              <ThemedText style={styles.transactionId}>
+                {payment.transactionId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.penaltyAmount}>
+              + {penaltyAmount.toFixed(2)} €
+            </ThemedText>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   // Render payment list
   const renderPayments = () => {
     if (loading) {
-      return <ActivityIndicator size="large" color={COLORS.babyBlue} style={styles.loader} />;
+      return (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={COLORS.primaryLight} style={styles.loader} />
+          <ThemedText style={styles.loaderText}>Loading your transactions...</ThemedText>
+        </View>
+      );
     }
 
     if (error) {
       return (
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+          <Ionicons name="alert-circle-outline" size={50} color={COLORS.error} />
           <ThemedText style={styles.errorText}>{error}</ThemedText>
         </View>
       );
     }
 
-    if (!payments.length) {
+    // Show monthly summary if monthly filter is active
+    if (activeFilter === 'monthly') {
+      return renderMonthlySummary();
+    }
+
+    const filteredPayments = getFilteredPayments();
+    
+    if (!filteredPayments.length) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="cash-outline" size={60} color={COLORS.babyBlue} />
-          <ThemedText style={styles.emptyText}>No payments received yet</ThemedText>
-          <ThemedText style={styles.emptySubtext}>Payments will appear here once processed</ThemedText>
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="wallet-outline" size={50} color={COLORS.primaryLight} />
+          </View>
+          <ThemedText style={styles.emptyText}>
+            {activeFilter === 'refunds' 
+              ? 'No refunds found' 
+              : 'No payments received yet'}
+          </ThemedText>
         </View>
       );
     }
 
-    return payments.map((payment) => (
-      <TouchableOpacity 
-        key={payment._id} 
-        style={styles.paymentCard}
-        onPress={() => router.push({
-          pathname: '/doctor/payment/details',
-          params: { paymentId: payment._id }
-        })}
-        activeOpacity={0.7}
-      >
-        <View style={styles.paymentHeader}>
-          <View style={styles.patientSection}>
-            <ThemedText style={styles.patientName}>
-              {getPatientName(payment.patient || payment.appointment?.patient)}
-            </ThemedText>
-            <View style={styles.paymentDateContainer}>
-              <Ionicons name="calendar-outline" size={16} color={COLORS.babyBlue} style={styles.detailIcon} />
-              <ThemedText style={styles.paymentDate}>
-                {formatDate(payment.appointment?.availability?.date || payment.createdAt)}
-              </ThemedText>
-            </View>
-            <View style={styles.paymentIdContainer}>
-              {renderPaymentMethodIcon(payment.paymentMethod)}
-              <ThemedText style={styles.paymentId}>
-                ID: {payment.transactionId.substring(0, 8)}...
-              </ThemedText>
-            </View>
-          </View>
-          <View style={styles.statusContainer}>
-            {renderPaymentStatus(payment.status)}
-            <ThemedText style={styles.paymentAmount}>
-              ${payment.amount.toFixed(2)}
-            </ThemedText>
-          </View>
-        </View>
-      </TouchableOpacity>
-    ));
+    return filteredPayments.map((payment, index) => {
+      // Check if this is a payment that has been refunded
+      if (payment.status === 'refunded' || payment.isCombined) {
+        return renderCombinedRefundPayment(payment, index);
+      } else {
+        return renderPayment(payment, index);
+      }
+    });
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
-      <View style={styles.header}>
-        <ThemedText type="title" style={styles.title}>Financials</ThemedText>
-      </View>
-      
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryContent}>
-          <ThemedText style={styles.summaryLabel}>Total Earnings</ThemedText>
-          <ThemedText style={styles.summaryAmount}>${totalEarnings.toFixed(2)}</ThemedText>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <ThemedView style={styles.container}>
+        <Stack.Screen options={{ 
+          headerShown: false,
+          contentStyle: { backgroundColor: COLORS.background }
+        }} />
+        
+        <View style={styles.header}>
+          <ThemedText style={styles.title}>Finances</ThemedText>
+          <ThemedText style={styles.subtitle}>Your earning history</ThemedText>
         </View>
-        <View style={styles.summaryIconContainer}>
-          <Ionicons name="wallet" size={32} color={COLORS.darkNavy} />
-        </View>
-      </View>
-      
-      <ThemedText style={styles.listTitle}>Payment History</ThemedText>
-      
-      <ScrollView 
-        style={styles.paymentsContainer} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {renderPayments()}
-        <View style={styles.scrollPadding} />
-      </ScrollView>
-    </ThemedView>
+        
+        {renderFilters()}
+        
+        <ScrollView 
+          style={styles.paymentsContainer} 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {renderPayments()}
+        </ScrollView>
+        
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 16,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'ios' ? 8 : 16,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: COLORS.darkNavy,
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  summaryCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 24,
-    padding: 20,
-    shadowColor: COLORS.darkNavy,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryContent: {
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: COLORS.babyBlue,
+  headerBackButton: {
     marginBottom: 8,
   },
-  summaryAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.darkNavy,
+  backButton: {
+    padding: 4,
   },
-  summaryIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(122, 167, 204, 0.1)', // Light baby blue with opacity
-    justifyContent: 'center',
+  header: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+    marginTop: 8,
+  },
+  title: {
+    fontSize: width < 375 ? 28 : 32,
+    fontWeight: '800',
+    color: COLORS.primary,
+    marginBottom: 6,
+    letterSpacing: -0.5,
+    lineHeight: width < 375 ? 34 : 38,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.text.secondary,
+    marginBottom: 4,
+    fontWeight: '400',
+    lineHeight: 22,
+  },
+  filtersContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 12,
     alignItems: 'center',
+    borderRadius: 12,
+    position: 'relative',
   },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.darkNavy,
-    marginBottom: 12,
-    paddingHorizontal: 16,
+  activeFilter: {
+    backgroundColor: 'rgba(85, 134, 204, 0.1)',
+  },
+  filterText: {
+    fontSize: 15,
+    color: COLORS.text.secondary,
+    fontWeight: '500',
+  },
+  activeFilterText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  filterActiveIndicator: {
+    position: 'absolute',
+    bottom: 6,
+    width: 20,
+    height: 3,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 2,
   },
   paymentsContainer: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  scrollPadding: {
-    height: 80, // Add extra padding at the bottom
+    paddingBottom: 20,
   },
   paymentCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  paymentCardInner: {
+    padding: 18,
+    borderRadius: 16,
   },
   paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  patientSection: {
-    flex: 1,
-    marginRight: 10,
-  },
-  statusContainer: {
-    alignItems: 'flex-end',
-  },
-  patientName: {
-    fontSize: 17,
+  paymentPatient: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.darkNavy,
-    marginBottom: 6,
-  },
-  paymentAmount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.darkNavy,
-    marginTop: 6,
+    color: COLORS.primary,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  statusIcon: {
+    marginRight: 5,
   },
   statusText: {
-    color: 'white',
+    color: COLORS.text.white,
     fontSize: 12,
     fontWeight: '600',
   },
   paymentDetails: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  paymentDateContainer: {
+  dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
-  },
-  paymentIdContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  detailIcon: {
-    marginRight: 6,
   },
   paymentDate: {
     fontSize: 14,
-    color: COLORS.babyBlue,
+    color: COLORS.text.secondary,
+    marginLeft: 4,
   },
-  paymentId: {
+  methodContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 247, 252, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  methodText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 5,
+  },
+  paymentFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  transactionIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  transactionId: {
     fontSize: 12,
-    color: COLORS.textLight,
-    marginLeft: 6,
+    color: COLORS.text.light,
+    marginLeft: 4,
+  },
+  paymentAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  refundAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+  loaderContainer: {
+    flex: 1,
+    marginTop: 60,
+    alignItems: 'center',
   },
   loader: {
-    marginTop: 50,
+    marginBottom: 10,
+  },
+  loaderText: {
+    fontSize: 16,
+    color: COLORS.text.secondary,
   },
   errorContainer: {
+    marginTop: 50,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 80,
-    paddingHorizontal: 20,
   },
   errorText: {
-    marginTop: 12,
+    marginTop: 10,
     fontSize: 16,
     color: COLORS.error,
     textAlign: 'center',
   },
   emptyContainer: {
-    marginTop: 80,
+    marginTop: 60,
     alignItems: 'center',
-    paddingHorizontal: 20,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(85, 134, 204, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.darkNavy,
-    marginTop: 12,
-    marginBottom: 8,
+    fontSize: 16,
+    color: COLORS.text.secondary,
   },
-  emptySubtext: {
+  monthlySummaryContainer: {
+    paddingTop: 20,
+  },
+  monthlyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  monthlyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginLeft: 8,
+  },
+  summaryCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  summaryRow: {
+    marginBottom: 16,
+  },
+  summaryItem: {
+    alignItems: 'center',
+  },
+  summaryLabel: {
     fontSize: 14,
-    color: COLORS.babyBlue,
-    textAlign: 'center',
-  }
+    color: COLORS.text.secondary,
+    marginBottom: 4,
+  },
+  summaryAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 2,
+  },
+  refundSummaryAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+    marginBottom: 2,
+  },
+  summaryCount: {
+    fontSize: 12,
+    color: COLORS.text.light,
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 16,
+    marginBottom: 0,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: 6,
+  },
+  totalAmount: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  emptyMonthly: {
+    alignItems: 'center',
+    marginTop: 30,
+  },
+  emptyMonthlyText: {
+    fontSize: 16,
+    color: COLORS.text.light,
+    marginTop: 10,
+  },
+  refundCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.secondary,
+  },
+  refundHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  refundHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  refundTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.secondary,
+    marginLeft: 6,
+  },
+  refundDetailsContainer: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 14,
+  },
+  refundDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  refundDetailLabel: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+  },
+  refundDetailValue: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  penaltyLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoButton: {
+    marginLeft: 5,
+  },
+  penaltyValue: {
+    fontSize: 14,
+    color: COLORS.secondary,
+    fontWeight: '500',
+  },
+  refundTotalRow: {
+    marginTop: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginBottom: 0,
+  },
+  refundTotalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  refundTotalValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.error,
+  },
+  penaltyAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+  penaltySummaryAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.warning,
+    marginBottom: 2,
+  },
 }); 
