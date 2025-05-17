@@ -5,7 +5,7 @@ import { FontAwesome } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors, PRIMARY_COLOR } from '@/constants/Colors';
+import { Colors, PRIMARY_COLOR, DARK_BLUE_THEME } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function DoctorTabLayout() {
@@ -14,7 +14,7 @@ export default function DoctorTabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: PRIMARY_COLOR,
+        tabBarActiveTintColor: DARK_BLUE_THEME,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -26,38 +26,38 @@ export default function DoctorTabLayout() {
         }),
       }}>
       <Tabs.Screen
-        name="index" // Sera (doctor)/(tabs)/index.tsx (Financials)
+        name="index" // Will be (doctor)/(tabs)/index.tsx (Financials)
         options={{
           title: 'Financials',
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesome name="dollar" size={24} color={focused ? PRIMARY_COLOR : color} />
+            <FontAwesome name="dollar" size={24} color={focused ? DARK_BLUE_THEME : color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="search" // Sera (doctor)/(tabs)/search.tsx
+        name="search" // Will be (doctor)/(tabs)/search.tsx
         options={{
           title: 'Search',
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesome name="search" size={24} color={focused ? PRIMARY_COLOR : color} />
+            <FontAwesome name="search" size={24} color={focused ? DARK_BLUE_THEME : color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="appointment" // Sera (doctor)/(tabs)/appointment.tsx
+        name="appointment" // Will be (doctor)/(tabs)/appointment.tsx
         options={{
           title: 'Appointment',
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesome name="calendar" size={24} color={focused ? PRIMARY_COLOR : color} />
+            <FontAwesome name="calendar" size={24} color={focused ? DARK_BLUE_THEME : color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="profile" // Sera (doctor)/(tabs)/profile.tsx
+        name="profile" // Will be (doctor)/(tabs)/profile.tsx
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesome name="user-md" size={24} color={focused ? PRIMARY_COLOR : color} />
+            <FontAwesome name="user-md" size={24} color={focused ? DARK_BLUE_THEME : color} />
           ),
         }}
       />

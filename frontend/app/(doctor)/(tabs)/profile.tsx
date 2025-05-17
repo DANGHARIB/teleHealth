@@ -1,12 +1,18 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native'; // Image retiré car non utilisé ici
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native'; // Added Image
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { DARK_BLUE_THEME, LIGHT_BLUE_ACCENT } from '@/constants/Colors'; // Import the new colors
+import Constants from 'expo-constants'; // Import Constants
+
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+const BASE_SERVER_URL = API_URL.replace('/api', ''); // Define base server URL
 
 export default function DoctorProfileTabScreen() { // Renommé pour indiquer que c'est un écran d'onglet
   const router = useRouter();
   const [userName, setUserName] = useState('Lorem ipsum');
+  const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined); // Added state for image URI
 
   useFocusEffect(
     useCallback(() => {
@@ -33,10 +39,26 @@ export default function DoctorProfileTabScreen() { // Renommé pour indiquer que
             }
             setUserName(displayName);
 
+            const imagePath = userInfo.profile?.doctor_image;
+            if (imagePath && imagePath.trim() !== '') {
+              // Handle both absolute paths (from older records) and relative paths
+              if (imagePath.startsWith('C:') || imagePath.startsWith('/') || imagePath.startsWith('\\')) {
+                // For absolute paths, extract just the filename
+                const fileName = imagePath.split(/[\\\/]/).pop();
+                setProfileImageUri(`${BASE_SERVER_URL}/uploads/${fileName}`);
+              } else {
+                // For proper relative paths
+                setProfileImageUri(`${BASE_SERVER_URL}${imagePath.replace(/\\/g, '/')}`);
+              }
+            } else {
+              setProfileImageUri(undefined);
+            }
+
           }
         } catch (error) {
           console.error("Failed to fetch doctor info from storage", error);
           setUserName('Doctor'); 
+          setProfileImageUri(undefined); // Reset on error
         }
       };
 
@@ -71,28 +93,32 @@ export default function DoctorProfileTabScreen() { // Renommé pour indiquer que
 
       <View style={styles.profileInfoContainer}>
         <View style={styles.profileIconPlaceholder}>
-            <FontAwesome name="user-md" size={40} color="#777" /> {/* Couleur ajustée */}
+          {profileImageUri ? (
+            <Image source={{ uri: profileImageUri }} style={styles.profileImage} />
+          ) : (
+            <FontAwesome name="user-o" size={50} color={DARK_BLUE_THEME} />
+          )}
         </View>
         
         <View style={styles.profileTextContainer}>
           <Text style={styles.greetingText}>Hi, {userName}</Text>
-          <Text style={styles.welcomeText}>Welcome to Tabeeou.com</Text>
+          <Text style={styles.welcomeText}>Welcome to Tabeebou.com</Text>
         </View>
       </View>
 
       <TouchableOpacity style={styles.settingsButton} onPress={goToEditProfile}>
-        <FontAwesome name="cog" size={24} color="#4A4A4A" style={styles.settingsIcon} />
+        <FontAwesome name="cog" size={24} color={DARK_BLUE_THEME} style={styles.settingsIcon} />
         <Text style={styles.settingsButtonText}>Edit Profile</Text>
-        <Text style={styles.settingsArrow}>{'>'}</Text>
+        <Ionicons name="chevron-forward" size={22} color={DARK_BLUE_THEME} />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={styles.settingsButton} 
         onPress={() => router.push('/doctor/availability')}
       >
-        <FontAwesome name="calendar" size={24} color="#4A4A4A" style={styles.settingsIcon} />
+        <FontAwesome name="calendar" size={24} color={DARK_BLUE_THEME} style={styles.settingsIcon} />
         <Text style={styles.settingsButtonText}>Set Availability Slots</Text>
-        <Text style={styles.settingsArrow}>{'>'}</Text>
+        <Ionicons name="chevron-forward" size={22} color={DARK_BLUE_THEME} />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -112,38 +138,44 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#0A1E42', 
+    color: DARK_BLUE_THEME, 
     textAlign: 'left',
-    marginBottom: 30,
+    marginBottom: 40,
     alignSelf: 'flex-start',
   },
   profileInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 40,
   },
   profileIconPlaceholder: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#E9E9E9', // Légère variation de couleur pour la différencier si besoin
+    backgroundColor: '#FFFFFF', 
     marginRight: 20,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#0A1E42',
+    borderColor: DARK_BLUE_THEME,
+    overflow: 'hidden', // Important to clip the Image to borderRadius
+  },
+  profileImage: { // Style for the actual profile image
+    width: '100%',
+    height: '100%',
+    // borderRadius is handled by the parent View with overflow: hidden
   },
   profileTextContainer: {
     flexDirection: 'column',
   },
   greetingText: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#0A1E42', 
+    color: DARK_BLUE_THEME, 
   },
   welcomeText: {
-    fontSize: 16,
-    color: '#555',
+    fontSize: 14,
+    color: DARK_BLUE_THEME,
   },
   settingsButton: {
     flexDirection: 'row',
@@ -156,22 +188,27 @@ const styles = StyleSheet.create({
   },
   settingsButtonText: {
     fontSize: 18,
-    color: '#4A4A4A', 
+    color: LIGHT_BLUE_ACCENT,
     flex: 1,
   },
   settingsArrow: {
     fontSize: 18,
-    color: '#4A4A4A',
+    color: DARK_BLUE_THEME,
   },
   logoutButton: {
     alignSelf: 'center',
-    marginTop: 30,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    marginTop: 50,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    backgroundColor: LIGHT_BLUE_ACCENT,
+    borderRadius: 8,
+    minWidth: '50%',
+    alignItems: 'center',
   },
   logoutButtonText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#FFFFFF',
     textAlign: 'center',
+    fontWeight: 'bold',
   }
 }); 

@@ -121,7 +121,10 @@ exports.updateDoctorProfile = async (req, res) => {
       bio, 
       address, 
       phone, 
-      consultation_fees 
+      consultation_fees,
+      education,
+      experience,
+      price
     } = req.body;
 
     const user = await User.findById(req.user.id);
@@ -166,16 +169,39 @@ exports.updateDoctorProfile = async (req, res) => {
     // Assigner doctor.full_name également, pour la cohérence si ce champ est utilisé ailleurs
     doctor.full_name = user.fullName; 
 
-    if (date_of_birth) doctor.date_of_birth = date_of_birth; // S'assurer du format Date si nécessaire
+    if (date_of_birth) doctor.dob = date_of_birth; // Map date_of_birth to the dob field in model
     if (specialization) doctor.specialization = specialization; 
-    if (bio) doctor.bio = bio;
+    
+    // Map bio to about field in model
+    if (bio) doctor.about = bio;
+    
+    // Handle education field properly
+    if (education) doctor.education = education;
+    
+    // Experience can come from either experience or may need conversion
+    if (experience !== undefined) {
+      doctor.experience = Number(experience);
+    }
+    
+    // Price can come from either price or consultation_fees field
+    if (price !== undefined) {
+      doctor.price = Number(price);
+    } else if (consultation_fees !== undefined) {
+      doctor.price = Number(consultation_fees);
+    }
+    
+    // Handle non-schema fields (if needed in the future, could add to schema)
     if (address) doctor.address = address; 
     if (phone) doctor.phone = phone;
-    if (consultation_fees) doctor.consultation_fees = consultation_fees;
 
     // Handle uploaded certification files
     if (req.files && req.files.length > 0) {
-      const certificationFilePaths = req.files.map(file => `/uploads/${file.filename}`); 
+      const certificationFilePaths = req.files.map(file => {
+        // Convert absolute path to relative path for proper URL construction
+        return file.path.includes('\\uploads\\') || file.path.includes('/uploads/') 
+          ? '/uploads/' + file.path.split(/[\\\/]uploads[\\\/]/).pop() 
+          : '/uploads/' + file.path.split(/[\\\/]/).pop();
+      });
       doctor.certifications = certificationFilePaths;
     }
 
@@ -235,7 +261,12 @@ exports.uploadProfileImage = async (req, res) => {
       return res.status(400).json({ message: 'Veuillez télécharger une image' });
     }
     
-    doctor.doctor_image = req.file.path;
+    // Convert absolute path to relative path for proper URL construction
+    const relativePath = req.file.path.includes('\\uploads\\') || req.file.path.includes('/uploads/') 
+      ? '/uploads/' + req.file.path.split(/[\\\/]uploads[\\\/]/).pop() 
+      : '/uploads/' + req.file.path.split(/[\\\/]/).pop();
+    
+    doctor.doctor_image = relativePath;
     const updatedDoctor = await doctor.save();
     
     res.json({
@@ -262,7 +293,12 @@ exports.uploadCertificate = async (req, res) => {
       return res.status(400).json({ message: 'Veuillez télécharger un certificat' });
     }
     
-    doctor.certification_path = req.file.path;
+    // Convert absolute path to relative path for proper URL construction
+    const relativePath = req.file.path.includes('\\uploads\\') || req.file.path.includes('/uploads/') 
+      ? '/uploads/' + req.file.path.split(/[\\\/]uploads[\\\/]/).pop() 
+      : '/uploads/' + req.file.path.split(/[\\\/]/).pop();
+    
+    doctor.certification_path = relativePath;
     const updatedDoctor = await doctor.save();
     
     res.json({

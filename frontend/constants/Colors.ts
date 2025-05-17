@@ -37,3 +37,5 @@ export const WARNING_COLOR = '#FFC107';
 export const INFO_COLOR = '#17A2B8';
 export const WHITE_COLOR = '#FFFFFF';
 export const BLACK_COLOR = '#000000';
+export const DARK_BLUE_THEME = '#090F47';
+export const LIGHT_BLUE_ACCENT = '#7AA7CC';
