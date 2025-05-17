@@ -28,7 +28,7 @@ const appointmentSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'scheduled', 'completed', 'cancelled', 'rescheduled'],
-    default: 'pending'
+    default: 'scheduled' // Changé de 'pending' à 'scheduled' car confirmé automatiquement après paiement
   },
   sessionLink: {
     type: String,

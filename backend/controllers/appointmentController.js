@@ -48,7 +48,7 @@ exports.createAppointment = async (req, res) => {
       price: price || 28, // Prix par défaut
       duration: duration || 30, // Durée par défaut (minutes)
       caseDetails: caseDetails || 'Consultation standard',
-      status: 'pending', // Statut par défaut est maintenant 'pending'
+      status: 'scheduled', // Statut par défaut est maintenant 'scheduled' car confirmé après paiement
       paymentStatus: 'pending' // Statut de paiement par défaut
     });
     
@@ -259,49 +259,8 @@ exports.updateAppointmentStatus = async (req, res) => {
   }
 };
 
-// @desc    Confirmer un rendez-vous et générer un lien zoom
-// @route   POST /api/appointments/:id/confirm
-// @access  Private/Doctor
-exports.confirmAppointment = async (req, res) => {
-  try {
-    const appointmentId = req.params.id;
-    
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) {
-      return res.status(404).json({ message: 'Rendez-vous non trouvé' });
-    }
-    
-    // Vérifier si l'utilisateur est le médecin assigné au rendez-vous
-    const doctor = await Doctor.findOne({ user: req.user._id });
-    if (!doctor || doctor._id.toString() !== appointment.doctor.toString()) {
-      return res.status(403).json({ message: 'Vous n\'êtes pas autorisé à confirmer ce rendez-vous' });
-    }
-    
-    // Vérifier si le rendez-vous est en attente
-    if (appointment.status !== 'pending') {
-      return res.status(400).json({ 
-        message: `Impossible de confirmer ce rendez-vous car son statut est ${appointment.status}` 
-      });
-    }
-    
-    // Générer un lien Zoom simulé
-    const zoomLink = `https://zoom.us/j/${Math.floor(100000000 + Math.random() * 900000000)}`;
-    
-    // Mettre à jour le statut et ajouter le lien Zoom
-    appointment.status = 'confirmed';
-    appointment.sessionLink = zoomLink;
-    
-    const updatedAppointment = await appointment.save();
-    
-    // Envoyer une notification au patient
-    await notificationService.notifyAppointmentConfirmed(updatedAppointment);
-    
-    res.status(200).json(updatedAppointment);
-  } catch (error) {
-    console.error('Erreur lors de la confirmation du rendez-vous:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la confirmation du rendez-vous' });
-  }
-};
+// La fonction de confirmation a été supprimée car les rendez-vous sont automatiquement confirmés après paiement par le patient
+// La génération du lien Zoom sera gérée par le service de paiement
 
 // @desc    Reprogrammer un rendez-vous
 // @route   PUT /api/appointments/:id/reschedule

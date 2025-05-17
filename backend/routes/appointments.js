@@ -8,7 +8,6 @@ const {
   getAppointmentById,
   updateAppointmentStatus,
   cancelAppointment,
-  confirmAppointment,
   rescheduleAppointment
 } = require('../controllers/appointmentController');
 const { protect, admin, doctor, patient } = require('../middlewares/authMiddleware');
@@ -27,7 +26,7 @@ router.get('/patient/me', protect, patient, getPatientAppointments);
 // Routes protégées pour les médecins
 router.get('/doctor/me', protect, doctor, getDoctorAppointments);
 router.put('/:id/status', protect, doctor, updateAppointmentStatus);
-router.post('/:id/confirm', protect, doctor, confirmAppointment);
+// La route de confirmation a été supprimée car les rendez-vous sont confirmés automatiquement après paiement
 router.put('/:id/reschedule', protect, doctor, rescheduleAppointment);
 
 // Route d'annulation pour les patients

@@ -1,18 +1,49 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native'; // Added Image
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TouchableOpacity, 
+  Image, 
+  SafeAreaView, 
+  StatusBar,
+  ScrollView
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
-import { DARK_BLUE_THEME, LIGHT_BLUE_ACCENT } from '@/constants/Colors'; // Import the new colors
-import Constants from 'expo-constants'; // Import Constants
+import Constants from 'expo-constants';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
-const BASE_SERVER_URL = API_URL.replace('/api', ''); // Define base server URL
+const BASE_SERVER_URL = API_URL.replace('/api', '');
 
-export default function DoctorProfileTabScreen() { // Renommé pour indiquer que c'est un écran d'onglet
+const COLORS = {
+  primary: '#2563EB',
+  primaryLight: '#3B82F6',
+  primaryDark: '#1D4ED8',
+  secondary: '#F8FAFC',
+  accent: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  success: '#22C55E',
+  purple: '#8B5CF6',
+  gray100: '#F1F5F9',
+  gray200: '#E2E8F0',
+  gray300: '#CBD5E1',
+  gray400: '#94A3B8',
+  gray500: '#64748B',
+  gray600: '#475569',
+  gray700: '#334155',
+  gray800: '#1E293B',
+  gray900: '#0F172A',
+  white: '#FFFFFF',
+  background: '#FAFBFE',
+};
+
+export default function DoctorProfileTabScreen() {
   const router = useRouter();
-  const [userName, setUserName] = useState('Lorem ipsum');
-  const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined); // Added state for image URI
+  const [userName, setUserName] = useState('Doctor');
+  const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
 
   useFocusEffect(
     useCallback(() => {
@@ -27,45 +58,41 @@ export default function DoctorProfileTabScreen() { // Renommé pour indiquer que
             if (userInfo.fullName) {
               displayName = userInfo.fullName.trim();
             } else {
-                const firstName = userInfo.profile?.first_name || '';
-                const lastName = userInfo.profile?.last_name || '';
-                if (firstName && lastName) {
-                    displayName = `${firstName.trim()} ${lastName.trim()}`;
-                } else if (firstName) {
-                    displayName = firstName.trim();
-                } else if (lastName) {
-                    displayName = lastName.trim();
-                }
+              const firstName = userInfo.profile?.first_name || '';
+              const lastName = userInfo.profile?.last_name || '';
+              if (firstName && lastName) {
+                displayName = `${firstName.trim()} ${lastName.trim()}`;
+              } else if (firstName) {
+                displayName = firstName.trim();
+              } else if (lastName) {
+                displayName = lastName.trim();
+              }
             }
             setUserName(displayName);
 
             const imagePath = userInfo.profile?.doctor_image;
             if (imagePath && imagePath.trim() !== '') {
-              // Handle both absolute paths (from older records) and relative paths
               if (imagePath.startsWith('C:') || imagePath.startsWith('/') || imagePath.startsWith('\\')) {
-                // For absolute paths, extract just the filename
                 const fileName = imagePath.split(/[\\\/]/).pop();
                 setProfileImageUri(`${BASE_SERVER_URL}/uploads/${fileName}`);
               } else {
-                // For proper relative paths
                 setProfileImageUri(`${BASE_SERVER_URL}${imagePath.replace(/\\/g, '/')}`);
               }
             } else {
               setProfileImageUri(undefined);
             }
-
           }
         } catch (error) {
           console.error("Failed to fetch doctor info from storage", error);
           setUserName('Doctor'); 
-          setProfileImageUri(undefined); // Reset on error
+          setProfileImageUri(undefined);
         }
       };
 
       fetchUserInfo();
 
       return () => {
-        // console.log("DoctorProfileTabScreen unfocused");
+        // Cleanup if needed
       };
     }, [])
   );
@@ -75,140 +102,298 @@ export default function DoctorProfileTabScreen() { // Renommé pour indiquer que
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userInfo');
       console.log("User token and info removed, logging out doctor.");
-      router.replace('/(doctor)/auth'); // MISE À JOUR: vers l'auth médecin
+      router.replace('/(doctor)/auth');
     } catch (error) {
       console.error("Failed to logout doctor", error);
-      router.replace('/(doctor)/auth'); // MISE À JOUR: vers l'auth médecin
+      router.replace('/(doctor)/auth');
     }
   };
 
   const goToEditProfile = () => {
     console.log("Navigate to Edit Doctor Profile");
-    router.push('/doctor/profile/edit'); // Mise à jour: redirection vers le chemin sans parenthèses
+    router.push('/doctor/profile/edit');
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.headerTitle}>My Profile</Text>
+  const goToAvailability = () => {
+    router.push('/doctor/availability');
+  };
 
-      <View style={styles.profileInfoContainer}>
-        <View style={styles.profileIconPlaceholder}>
+  const menuItems = [
+    {
+      id: 'edit-profile',
+      title: 'Edit Profile',
+      description: 'Update your personal information',
+      icon: 'person-outline',
+      iconBackground: COLORS.primary,
+      onPress: goToEditProfile,
+    },
+    {
+      id: 'availability',
+      title: 'Set Availability Slots',
+      description: 'Manage your consultation schedule',
+      icon: 'calendar-outline',
+      iconBackground: COLORS.success,
+      onPress: goToAvailability,
+    },
+  ];
+
+  const renderProfileHeader = () => (
+    <View style={styles.profileContainer}>
+      <View style={styles.profileRow}>
+        <View style={styles.profileImageContainer}>
           {profileImageUri ? (
             <Image source={{ uri: profileImageUri }} style={styles.profileImage} />
           ) : (
-            <FontAwesome name="user-o" size={50} color={DARK_BLUE_THEME} />
+            <View style={styles.profileImagePlaceholder}>
+              <Ionicons name="person" size={32} color={COLORS.white} />
+            </View>
           )}
         </View>
         
-        <View style={styles.profileTextContainer}>
-          <Text style={styles.greetingText}>Hi, {userName}</Text>
+        <View style={styles.profileInfo}>
+          <Text style={styles.userName} numberOfLines={1} ellipsizeMode="tail">
+            Dr. {userName}
+          </Text>
           <Text style={styles.welcomeText}>Welcome to Tabeebou.com</Text>
         </View>
       </View>
-
-      <TouchableOpacity style={styles.settingsButton} onPress={goToEditProfile}>
-        <FontAwesome name="cog" size={24} color={DARK_BLUE_THEME} style={styles.settingsIcon} />
-        <Text style={styles.settingsButtonText}>Edit Profile</Text>
-        <Ionicons name="chevron-forward" size={22} color={DARK_BLUE_THEME} />
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.settingsButton} 
-        onPress={() => router.push('/doctor/availability')}
-      >
-        <FontAwesome name="calendar" size={24} color={DARK_BLUE_THEME} style={styles.settingsIcon} />
-        <Text style={styles.settingsButtonText}>Set Availability Slots</Text>
-        <Ionicons name="chevron-forward" size={22} color={DARK_BLUE_THEME} />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </TouchableOpacity>
     </View>
+  );
+
+  const renderMenuItem = (item: any) => (
+    <TouchableOpacity
+      key={item.id}
+      style={styles.menuItem}
+      onPress={item.onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.menuItemContent}>
+        <View style={[styles.menuIconContainer, { backgroundColor: `${item.iconBackground}15` }]}>
+          <Ionicons 
+            name={item.icon as any} 
+            size={24} 
+            color={item.iconBackground} 
+          />
+        </View>
+        
+        <View style={styles.menuTextContainer}>
+          <Text style={styles.menuItemTitle}>{item.title}</Text>
+          <Text style={styles.menuItemDescription}>{item.description}</Text>
+        </View>
+        
+        <View style={styles.menuArrowContainer}>
+          <Ionicons 
+            name="chevron-forward" 
+            size={20} 
+            color={COLORS.gray400} 
+          />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      
+      <ScrollView 
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Profile</Text>
+          <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
+        </View>
+
+        {renderProfileHeader()}
+
+        <View style={styles.menuContainer}>
+          <Text style={styles.sectionTitle}>Account Settings</Text>
+          
+          <View style={styles.menuList}>
+            {menuItems.map(renderMenuItem)}
+          </View>
+        </View>
+
+        <View style={styles.logoutContainer}>
+          <TouchableOpacity 
+            style={styles.logoutButton} 
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" size={20} color={COLORS.white} />
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: 50, 
+    backgroundColor: COLORS.background,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: DARK_BLUE_THEME, 
-    textAlign: 'left',
-    marginBottom: 40,
-    alignSelf: 'flex-start',
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.gray900,
+    marginBottom: 4,
   },
-  profileInfoContainer: {
+  headerSubtitle: {
+    fontSize: 16,
+    color: COLORS.gray500,
+  },
+  profileContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    marginHorizontal: 24,
+    marginBottom: 32,
+    padding: 24,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
   },
-  profileIconPlaceholder: {
+  profileImageContainer: {
+    marginRight: 20,
+    position: 'relative',
+  },
+  profileImage: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FFFFFF', 
-    marginRight: 20,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  profileImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: DARK_BLUE_THEME,
-    overflow: 'hidden', // Important to clip the Image to borderRadius
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  profileImage: { // Style for the actual profile image
-    width: '100%',
-    height: '100%',
-    // borderRadius is handled by the parent View with overflow: hidden
+  profileInfo: {
+    flex: 1,
+    justifyContent: 'center',
   },
-  profileTextContainer: {
-    flexDirection: 'column',
-  },
-  greetingText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: DARK_BLUE_THEME, 
+  userName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.gray900,
+    marginBottom: 4,
   },
   welcomeText: {
     fontSize: 14,
-    color: DARK_BLUE_THEME,
+    color: COLORS.gray500,
   },
-  settingsButton: {
+  menuContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.gray700,
+    marginBottom: 16,
+  },
+  menuList: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  menuItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    marginBottom: 20,
+    padding: 20,
   },
-  settingsIcon: {
-    marginRight: 15,
+  menuIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
-  settingsButtonText: {
-    fontSize: 18,
-    color: LIGHT_BLUE_ACCENT,
+  menuTextContainer: {
     flex: 1,
   },
-  settingsArrow: {
-    fontSize: 18,
-    color: DARK_BLUE_THEME,
+  menuItemTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: COLORS.gray900,
+    marginBottom: 2,
+  },
+  menuItemDescription: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    lineHeight: 18,
+  },
+  menuArrowContainer: {
+    padding: 4,
+  },
+  logoutContainer: {
+    paddingHorizontal: 24,
+    marginTop: 16,
   },
   logoutButton: {
-    alignSelf: 'center',
-    marginTop: 50,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    backgroundColor: LIGHT_BLUE_ACCENT,
-    borderRadius: 8,
-    minWidth: '50%',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.danger,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    shadowColor: COLORS.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   logoutButtonText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  }
-}); 
+    fontSize: 17,
+    fontWeight: '600',
+    color: COLORS.white,
+    marginLeft: 8,
+  },
+});

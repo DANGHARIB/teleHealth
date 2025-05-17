@@ -252,8 +252,8 @@ export default function DoctorAppointmentScreen() {
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Patient';
   };
 
-  // Update appointment status
-  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'completed' | 'cancelled') => {
+  // Update appointment status (utilisé uniquement pour reprogrammation et autres changements de statut)
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'cancelled') => {
     try {
       await doctorAPI.updateAppointmentStatus(appointmentId, { status: newStatus });
       
@@ -267,38 +267,8 @@ export default function DoctorAppointmentScreen() {
     }
   };
   
-  // Confirm appointment and generate Zoom link
-  const confirmAppointment = async (appointmentId: string) => {
-    try {
-      setLoading(true);
-      const updatedAppointment = await doctorAPI.confirmAppointment(appointmentId);
-      
-      setAppointments(prevAppointments => 
-        prevAppointments.map(app => 
-          app._id === appointmentId ? {
-            ...app,
-            status: 'confirmed',
-            sessionLink: updatedAppointment.sessionLink
-          } : app
-        )
-      );
-      
-      Alert.alert(
-        "Appointment Confirmed",
-        "The appointment has been confirmed and a consultation link has been created."
-      );
-      
-      setLoading(false);
-    } catch (err) {
-      console.error('Error confirming appointment:', err);
-      setLoading(false);
-      Alert.alert(
-        "Error",
-        "Unable to confirm the appointment. Please try again."
-      );
-    }
-  };
-  
+  // Les rendez-vous sont automatiquement confirmés après paiement
+
   // Open reschedule modal
   const openRescheduleModal = async (appointment: Appointment) => {
     setSelectedAppointment(appointment);
@@ -568,23 +538,12 @@ export default function DoctorAppointmentScreen() {
   // Get status configuration
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'pending':
-        return {
-          color: COLORS.warning,
-          text: 'Pending',
-          icon: 'time-outline'
-        };
+      case 'scheduled':
       case 'confirmed':
         return {
           color: COLORS.primary,
           text: 'Confirmed',
           icon: 'checkmark-circle-outline'
-        };
-      case 'completed':
-        return {
-          color: COLORS.success,
-          text: 'Completed',
-          icon: 'checkmark-circle'
         };
       case 'cancelled':
         return {
@@ -600,9 +559,9 @@ export default function DoctorAppointmentScreen() {
         };
       default:
         return {
-          color: COLORS.primary,
-          text: 'Scheduled',
-          icon: 'calendar'
+          color: COLORS.warning,
+          text: 'Pending',
+          icon: 'time-outline'
         };
     }
   };
@@ -706,35 +665,17 @@ export default function DoctorAppointmentScreen() {
                 </TouchableOpacity>
               )}
               
-              {appointment.status === 'pending' && (
+              {['confirmed', 'scheduled'].includes(appointment.status) && (
                 <TouchableOpacity 
-                  style={[styles.actionButton, styles.successButton]}
-                  onPress={() => confirmAppointment(appointment._id)}
-                >
-                  <Ionicons name="checkmark" size={16} color={COLORS.white} />
-                  <ThemedText style={styles.buttonText}>Confirm</ThemedText>
-                </TouchableOpacity>
-              )}
-              
-              {(appointment.status === 'pending' || appointment.status === 'confirmed') && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.secondaryButton]}
+                  style={[styles.actionButton, styles.rescheduleButton]}
                   onPress={() => openRescheduleModal(appointment)}
                 >
-                  <Ionicons name="repeat" size={16} color={COLORS.primary} />
-                  <ThemedText style={[styles.buttonText, styles.secondaryButtonText]}>R</ThemedText>
+                  <Ionicons name="calendar-outline" size={16} color={COLORS.white} />
+                  <ThemedText style={styles.buttonText}>Reschedule</ThemedText>
                 </TouchableOpacity>
               )}
               
-              {appointment.status === 'confirmed' && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.successButton]}
-                  onPress={() => updateAppointmentStatus(appointment._id, 'completed')}
-                >
-                  <Ionicons name="checkmark-done" size={16} color={COLORS.white} />
-                  <ThemedText style={styles.buttonText}>Complete</ThemedText>
-                </TouchableOpacity>
-              )}
+
             </View>
           </View>
         </View>
@@ -782,9 +723,9 @@ export default function DoctorAppointmentScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <ThemedText style={styles.statNumber}>
-              {getTodayAppointments().filter(app => app.status === 'pending').length}
+              {getTodayAppointments().filter(app => ['scheduled', 'confirmed'].includes(app.status)).length}
             </ThemedText>
-            <ThemedText style={styles.statLabel}>Pending confirmations</ThemedText>
+            <ThemedText style={styles.statLabel}>Confirmed appointments</ThemedText>
           </View>
         </View>
       </View>
@@ -1107,6 +1048,11 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     paddingHorizontal: 0,
+  },
+  rescheduleButton: {
+    backgroundColor: COLORS.purple,
+    paddingHorizontal: 14,
+    borderRadius: 18,
   },
   buttonText: {
     color: COLORS.white,
