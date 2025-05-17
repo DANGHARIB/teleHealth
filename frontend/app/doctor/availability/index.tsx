@@ -1,13 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { 
+  StyleSheet, 
+  View, 
+  ActivityIndicator, 
+  TouchableOpacity, 
+  Alert, 
+  SafeAreaView,
+  RefreshControl,
+  ScrollView,
+  Animated,
+  Platform
+} from 'react-native';
 import { router, Stack, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
-import fr from 'date-fns/locale/fr';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { format, parseISO, isToday, isTomorrow, isAfter } from 'date-fns';
+import * as Haptics from 'expo-haptics';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI } from '@/services/api';
+import { DARK_BLUE_THEME, LIGHT_BLUE_ACCENT } from '@/constants/Colors';
 
 type Availability = {
   _id: string;
@@ -20,15 +31,30 @@ type Availability = {
 export default function AvailabilityScreen() {
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
-  // Fonction pour charger les disponibilités
-  const fetchAvailabilities = useCallback(async () => {
+  const animateIn = useCallback(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+  
+  // Function to load availabilities
+  const fetchAvailabilities = useCallback(async (showRefreshing = false) => {
     try {
-      setLoading(true);
+      if (showRefreshing) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
       const data = await doctorAPI.getMyAvailability();
       
-      // Trier les disponibilités par date et heure
+      // Sort availabilities by date and time
       const sortedData = [...data].sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
@@ -37,64 +63,105 @@ export default function AvailabilityScreen() {
       });
       
       setAvailabilities(sortedData);
-      setLoading(false);
+      fadeAnim.setValue(0);
+      animateIn();
+      
+      if (showRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     } catch (err) {
-      console.error('Erreur lors du chargement des disponibilités:', err);
-      setError('Impossible de charger vos disponibilités');
-      setLoading(false);
+      console.error('Error loading availabilities:', err);
+      setError('Unable to load your availabilities');
+      if (showRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [animateIn, fadeAnim]);
   
-  // Charger les disponibilités au chargement initial et à chaque retour sur la page
+  const onRefresh = useCallback(() => {
+    fetchAvailabilities(true);
+    // Provide haptic feedback on refresh
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [fetchAvailabilities]);
+  
+  // Load availabilities on initial load and each time we return to the page
   useFocusEffect(
     useCallback(() => {
       fetchAvailabilities();
       return () => {
-        // Nettoyage optionnel
+        // Optional cleanup
       };
     }, [fetchAvailabilities])
   );
   
-  // Supprimer une disponibilité
+  // Delete an availability
   const handleDeleteAvailability = async (id: string) => {
     try {
-      // Trouver la disponibilité pour l'afficher dans l'alerte
+      // Find the availability to display in the alert
       const availability = availabilities.find(a => a._id === id);
       if (!availability) return;
       
-      const formattedDate = format(parseISO(availability.date), 'dd MMMM yyyy', { locale: fr });
+      const formattedDate = format(parseISO(availability.date), 'MMMM dd, yyyy');
+      
+      // Provide haptic feedback before showing the alert
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
       
       Alert.alert(
         'Confirmation',
-        `Voulez-vous supprimer cette disponibilité du ${formattedDate} de ${availability.startTime} à ${availability.endTime} ?`,
+        `Do you want to delete this availability on ${formattedDate} from ${availability.startTime} to ${availability.endTime}?`,
         [
           {
-            text: 'Annuler',
+            text: 'Cancel',
             style: 'cancel'
           },
           {
-            text: 'Supprimer',
+            text: 'Delete',
             style: 'destructive',
             onPress: async () => {
               setLoading(true);
               await doctorAPI.deleteAvailability(id);
               
-              // Mettre à jour la liste
+              // Provide success haptic feedback
+              if (Platform.OS === 'ios') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+              
+              // Update the list
               fetchAvailabilities();
               
-              Alert.alert('Succès', 'Disponibilité supprimée avec succès');
+              Alert.alert('Success', 'Availability successfully deleted');
             }
           }
         ]
       );
     } catch (err) {
-      console.error('Erreur lors de la suppression de la disponibilité:', err);
-      Alert.alert('Erreur', 'Impossible de supprimer cette disponibilité');
+      console.error('Error deleting availability:', err);
+      Alert.alert('Error', 'Unable to delete this availability');
       setLoading(false);
     }
   };
   
-  // Grouper les disponibilités par jour pour l'affichage
+  // Format the date header in a user-friendly way
+  const formatDateHeader = (dateString: string) => {
+    const date = parseISO(dateString);
+    if (isToday(date)) {
+      return 'Today';
+    } else if (isTomorrow(date)) {
+      return 'Tomorrow';
+    } else {
+      return format(date, 'EEEE, MMMM dd, yyyy');
+    }
+  };
+  
+  // Group availabilities by day for display
   const groupedAvailabilities = availabilities.reduce((groups, availability) => {
     const date = format(parseISO(availability.date), 'yyyy-MM-dd');
     if (!groups[date]) {
@@ -104,89 +171,182 @@ export default function AvailabilityScreen() {
     return groups;
   }, {} as Record<string, Availability[]>);
   
-  // Convertir les dates groupées en tableau pour l'affichage
+  // Convert grouped dates to array for display
   const dateGroups = Object.keys(groupedAvailabilities).sort();
+  
+  // Get future availability count
+  const futureAvailabilitiesCount = availabilities.filter(availability => {
+    const availabilityDate = parseISO(availability.date);
+    
+    // Si c'est déjà réservé, ne pas compter
+    if (availability.isBooked) return false;
+    
+    // Si c'est une date future, compter
+    if (isAfter(availabilityDate, new Date())) return true;
+    
+    // Si c'est aujourd'hui, vérifier si l'heure est passée ou non
+    if (isToday(availabilityDate)) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      
+      const [availStartHour, availStartMinute] = availability.startTime.split(':').map(Number);
+      
+      // Convertir en minutes pour faciliter la comparaison
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
+      const availStartTimeInMinutes = availStartHour * 60 + availStartMinute;
+      
+      // Ne compter que si l'heure de début n'est pas encore passée
+      return availStartTimeInMinutes > currentTimeInMinutes;
+    }
+    
+    // Si c'est dans le passé, ne pas compter
+    return false;
+  }).length;
+  
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <FontAwesome name="calendar-o" size={70} color={LIGHT_BLUE_ACCENT} />
+      <ThemedText style={styles.emptyText}>No availability defined</ThemedText>
+      <ThemedText style={styles.emptySubtext}>
+        Add your first availability slots by clicking the button below
+      </ThemedText>
+      <View style={styles.emptyStateSteps}>
+        <View style={styles.emptyStateStep}>
+          <View style={styles.stepCircle}><ThemedText style={styles.stepNumber}>1</ThemedText></View>
+          <ThemedText style={styles.stepText}>Click "Add Availability Slots"</ThemedText>
+        </View>
+        <View style={styles.emptyStateStep}>
+          <View style={styles.stepCircle}><ThemedText style={styles.stepNumber}>2</ThemedText></View>
+          <ThemedText style={styles.stepText}>Select dates and times</ThemedText>
+        </View>
+        <View style={styles.emptyStateStep}>
+          <View style={styles.stepCircle}><ThemedText style={styles.stepNumber}>3</ThemedText></View>
+          <ThemedText style={styles.stepText}>Save to make yourself available</ThemedText>
+        </View>
+      </View>
+    </View>
+  );
   
   return (
     <>
       <Stack.Screen 
         options={{
-          headerTitle: 'Mes Disponibilités',
           headerShown: true,
-          headerBackTitle: 'Retour',
+          headerBackTitle: 'Back',
+          headerTitle: '',
           headerStyle: {
             backgroundColor: '#fff',
-          },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 24,
-            color: '#14104B'
           },
         }} 
       />
       
-      <ThemedView style={styles.container}>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => router.push('/doctor/availability/create')}
-        >
-          <Ionicons name="add-circle" size={24} color="#fff" style={styles.addIcon} />
-          <ThemedText style={styles.addButtonText}>Ajouter des disponibilités</ThemedText>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <ThemedText style={styles.pageTitle}>Availability</ThemedText>
+          {!loading && availabilities.length > 0 && (
+            <View style={styles.stats}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statValue}>{futureAvailabilitiesCount}</ThemedText>
+                <ThemedText style={styles.statLabel}>Available Slots</ThemedText>
+              </View>
+            </View>
+          )}
+        </View>
         
         {loading ? (
-          <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={DARK_BLUE_THEME} style={styles.loader} />
+            <ThemedText style={styles.loadingText}>Loading your schedule...</ThemedText>
+          </View>
         ) : error ? (
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <View style={styles.errorContainer}>
+            <MaterialIcons name="error-outline" size={40} color="#F44336" />
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchAvailabilities()}>
+              <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+            </TouchableOpacity>
+          </View>
         ) : availabilities.length === 0 ? (
-          <ThemedView style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={64} color="#ccc" />
-            <ThemedText style={styles.emptyText}>Aucune disponibilité définie</ThemedText>
-            <ThemedText style={styles.emptySubtext}>
-              Cliquez sur le bouton ci-dessus pour ajouter vos premières disponibilités
-            </ThemedText>
-          </ThemedView>
+          renderEmptyState()
         ) : (
-          <>
-            <ThemedText style={styles.sectionTitle}>Vos créneaux disponibles</ThemedText>
-            
-            {dateGroups.map(dateString => (
-              <View key={dateString} style={styles.dateGroup}>
-                <ThemedText style={styles.dateHeader}>
-                  {format(parseISO(dateString), 'EEEE dd MMMM yyyy', { locale: fr })}
-                </ThemedText>
-                
-                {groupedAvailabilities[dateString].map(availability => (
-                  <ThemedView key={availability._id} style={[
-                    styles.slotCard,
-                    availability.isBooked && styles.bookedSlot
-                  ]}>
-                    <View style={styles.slotInfo}>
-                      <ThemedText style={styles.timeText}>
-                        {availability.startTime} - {availability.endTime}
-                      </ThemedText>
-                      {availability.isBooked && (
-                        <ThemedView style={styles.bookedBadge}>
-                          <ThemedText style={styles.bookedText}>Réservé</ThemedText>
-                        </ThemedView>
+          <ScrollView 
+            style={styles.contentContainer}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[DARK_BLUE_THEME]}
+                tintColor={DARK_BLUE_THEME}
+              />
+            }
+          >
+            <Animated.View style={{ opacity: fadeAnim }}>
+              {dateGroups.map(dateString => (
+                <View key={dateString} style={styles.dateGroup}>
+                  <View style={styles.dateHeaderContainer}>
+                    <View style={styles.dateHeaderLine} />
+                    <ThemedText style={styles.dateHeader}>
+                      {formatDateHeader(dateString)}
+                    </ThemedText>
+                    <View style={styles.dateHeaderLine} />
+                  </View>
+                  
+                  {groupedAvailabilities[dateString].map(availability => (
+                    <View key={availability._id} style={[
+                      styles.slotCard,
+                      availability.isBooked && styles.bookedSlot
+                    ]}>
+                      <View style={styles.slotInfo}>
+                        <View style={styles.timeContainer}>
+                          <ThemedText style={styles.timeText}>
+                            {availability.startTime} - {availability.endTime}
+                          </ThemedText>
+                          {isToday(parseISO(availability.date)) && (
+                            <View style={styles.todayBadge}>
+                              <ThemedText style={styles.todayText}>Today</ThemedText>
+                            </View>
+                          )}
+                        </View>
+                        {availability.isBooked && (
+                          <View style={styles.bookedBadge}>
+                            <MaterialIcons name="event-busy" size={12} color={LIGHT_BLUE_ACCENT} style={styles.bookedIcon} />
+                            <ThemedText style={styles.bookedText}>Booked</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {!availability.isBooked && (
+                        <TouchableOpacity 
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteAvailability(availability._id)}
+                        >
+                          <FontAwesome name="trash-o" size={18} color={DARK_BLUE_THEME} />
+                        </TouchableOpacity>
                       )}
                     </View>
-                    
-                    {!availability.isBooked && (
-                      <TouchableOpacity 
-                        style={styles.deleteButton}
-                        onPress={() => handleDeleteAvailability(availability._id)}
-                      >
-                        <Ionicons name="trash-outline" size={20} color="#e53935" />
-                      </TouchableOpacity>
-                    )}
-                  </ThemedView>
-                ))}
-              </View>
-            ))}
-          </>
+                  ))}
+                </View>
+              ))}
+            </Animated.View>
+          </ScrollView>
         )}
-      </ThemedView>
+        
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+            router.push('/doctor/availability/create');
+          }}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="calendar-plus-o" size={20} color="#fff" style={styles.addIcon} />
+          <ThemedText style={styles.addButtonText}>Add Availability Slots</ThemedText>
+        </TouchableOpacity>
+      </SafeAreaView>
     </>
   );
 }
@@ -194,34 +354,104 @@ export default function AvailabilityScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff',
+    paddingTop: 0,
+    position: 'relative',
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: DARK_BLUE_THEME,
+    marginBottom: 8,
+  },
+  stats: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: LIGHT_BLUE_ACCENT,
+    marginRight: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 95,
+    paddingTop: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loader: {
-    marginTop: 30,
+    marginBottom: 16,
+  },
+  loadingText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   errorText: {
-    color: 'red',
+    color: '#F44336',
     textAlign: 'center',
-    marginTop: 30,
+    marginTop: 16,
+    marginBottom: 24,
     fontSize: 16,
+  },
+  retryButton: {
+    backgroundColor: DARK_BLUE_THEME,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
   },
   addButton: {
     flexDirection: 'row',
-    backgroundColor: '#4a90e2',
-    borderRadius: 8,
+    backgroundColor: LIGHT_BLUE_ACCENT,
+    borderRadius: 10,
     padding: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    position: 'absolute',
+    bottom: 35,
+    left: 20,
+    right: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 4,
   },
   addIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   addButtonText: {
     color: '#fff',
@@ -232,77 +462,143 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -50,
+    marginTop: -40,
+    paddingHorizontal: 20,
+    paddingBottom: 75,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     marginTop: 16,
-    color: '#666',
+    color: DARK_BLUE_THEME,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 15,
+    color: '#666',
     textAlign: 'center',
     marginTop: 8,
-    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  emptyStateSteps: {
+    width: '100%',
+    marginTop: 10,
+    alignItems: 'flex-start',
+  },
+  emptyStateStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  stepCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: LIGHT_BLUE_ACCENT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  stepNumber: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  stepText: {
+    fontSize: 15,
+    color: '#444',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#14104B',
+    marginBottom: 12,
+    color: DARK_BLUE_THEME,
   },
   dateGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  dateHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  dateHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e0e0e0',
   },
   dateHeader: {
     fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-    paddingLeft: 8,
+    fontWeight: '600',
+    paddingHorizontal: 10,
     textTransform: 'capitalize',
+    color: DARK_BLUE_THEME,
   },
   slotCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 8,
-    padding: 16,
+    padding: 12,
     marginBottom: 8,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 1,
     elevation: 1,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
   },
   bookedSlot: {
-    backgroundColor: '#f5f5f5',
-    borderLeftWidth: 4,
-    borderLeftColor: '#4caf50',
+    backgroundColor: '#fafafa',
+    borderLeftWidth: 3,
+    borderLeftColor: LIGHT_BLUE_ACCENT,
   },
   slotInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   timeText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
+    color: DARK_BLUE_THEME,
+  },
+  todayBadge: {
+    backgroundColor: '#e3f2fd',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  todayText: {
+    color: '#2196F3',
+    fontSize: 10,
+    fontWeight: '600',
   },
   bookedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#e8f5e9',
     borderRadius: 4,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginLeft: 10,
+    paddingVertical: 3,
+  },
+  bookedIcon: {
+    marginRight: 4,
   },
   bookedText: {
-    color: '#4caf50',
+    color: LIGHT_BLUE_ACCENT,
     fontSize: 12,
     fontWeight: '500',
   },
   deleteButton: {
     padding: 8,
+    marginLeft: 4,
   },
 }); 

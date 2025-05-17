@@ -186,6 +186,104 @@ exports.createBatchAvailability = async (req, res) => {
       return res.status(404).json({ message: 'Profil de médecin non trouvé' });
     }
     
+    // Vérifier les doublons dans la requête
+    const uniqueTimeSlots = new Set();
+    const duplicatesInRequest = availabilities.filter(item => {
+      const slotKey = `${item.date}-${item.startTime}-${item.endTime}`;
+      if (uniqueTimeSlots.has(slotKey)) {
+        return true;
+      }
+      uniqueTimeSlots.add(slotKey);
+      return false;
+    });
+    
+    if (duplicatesInRequest.length > 0) {
+      return res.status(400).json({ 
+        message: 'Des créneaux horaires en double ont été détectés dans votre demande' 
+      });
+    }
+    
+    // Vérifier que les disponibilités ne sont pas dans le passé
+    const now = new Date();
+    const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+    
+    const pastAvailabilities = availabilities.filter(item => {
+      // Vérifier si la date est dans le passé
+      if (item.date < today) {
+        return true;
+      }
+      
+      // Si c'est aujourd'hui, vérifier si l'heure est déjà passée
+      if (item.date === today) {
+        const startTimeInMinutes = timeToMinutes(item.startTime);
+        return startTimeInMinutes <= currentTimeInMinutes;
+      }
+      
+      return false;
+    });
+    
+    if (pastAvailabilities.length > 0) {
+      return res.status(400).json({
+        message: 'Impossible de créer des disponibilités dans le passé',
+        pastAvailabilities
+      });
+    }
+    
+    // Vérifier si des disponibilités existent déjà pour ces créneaux
+    const datesToCheck = [...new Set(availabilities.map(item => item.date))];
+    
+    const existingAvailabilities = await Availability.find({
+      doctor: doctor._id,
+      date: { $in: datesToCheck }
+    });
+    
+    // Vérifier les conflits avec les disponibilités existantes
+    const conflicts = [];
+    
+    for (const item of availabilities) {
+      const conflictsFound = existingAvailabilities.filter(existing => {
+        const sameDate = new Date(existing.date).toISOString().split('T')[0] === item.date;
+        const sameTimeSlot = existing.startTime === item.startTime && existing.endTime === item.endTime;
+        
+        if (sameDate && sameTimeSlot) {
+          return true;
+        }
+        
+        // Vérifier également les chevauchements
+        if (sameDate) {
+          const itemStart = timeToMinutes(item.startTime);
+          const itemEnd = timeToMinutes(item.endTime);
+          const existingStart = timeToMinutes(existing.startTime);
+          const existingEnd = timeToMinutes(existing.endTime);
+          
+          // Vérifier si le nouveau créneau chevauche un créneau existant
+          if ((itemStart < existingEnd && itemEnd > existingStart)) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      if (conflictsFound.length > 0) {
+        conflicts.push({
+          date: item.date,
+          startTime: item.startTime,
+          endTime: item.endTime
+        });
+      }
+    }
+    
+    if (conflicts.length > 0) {
+      return res.status(400).json({ 
+        message: 'Certains créneaux horaires chevauchent des disponibilités déjà définies',
+        conflicts 
+      });
+    }
+    
     const createdAvailabilities = [];
     
     for (const item of availabilities) {
@@ -210,4 +308,10 @@ exports.createBatchAvailability = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Fonction utilitaire pour convertir l'heure (format HH:MM) en minutes
+const timeToMinutes = (timeString) => {
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return hours * 60 + minutes;
 }; 

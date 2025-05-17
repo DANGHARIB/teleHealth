@@ -21,7 +21,8 @@ const VerifyScreen = () => {
   const inputRefs = useRef([]);
 
   useEffect(() => {
-    if (inputRefs.current[0]) {
+    // Only focus the first input on initial mount
+    if (inputRefs.current[0] && otpCode.every(digit => digit === '')) {
       inputRefs.current[0].focus();
     }
     
@@ -50,13 +51,17 @@ const VerifyScreen = () => {
     newOtp[index] = value;
     setOtpCode(newOtp);
     if (value && index < 3 && inputRefs.current[index + 1]) {
-      inputRefs.current[index + 1].focus();
+      setTimeout(() => {
+        inputRefs.current[index + 1].focus();
+      }, 10);
     }
   };
 
   const handleKeyPress = (index, e) => {
     if (e.nativeEvent.key === 'Backspace' && !otpCode[index] && index > 0) {
-      inputRefs.current[index - 1].focus();
+      setTimeout(() => {
+        inputRefs.current[index - 1].focus();
+      }, 10);
     }
   };
 
@@ -139,7 +144,9 @@ const VerifyScreen = () => {
       
       // Focus on first input
       if (inputRefs.current[0]) {
-        inputRefs.current[0].focus();
+        setTimeout(() => {
+          inputRefs.current[0].focus();
+        }, 50);
       }
       
       Alert.alert("Success", "A new verification code has been sent to your email address.");
@@ -171,6 +178,7 @@ const VerifyScreen = () => {
               value={otpCode[index]}
               onChangeText={(value) => handleOtpChange(index, value)}
               onKeyPress={(e) => handleKeyPress(index, e)}
+              blurOnSubmit={false}
             />
           ))}
         </View>
