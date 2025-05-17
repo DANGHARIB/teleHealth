@@ -3,6 +3,7 @@ const Availability = require('../models/Availability');
 const Doctor = require('../models/Doctor');
 const Patient = require('../models/Patient');
 const notificationService = require('../services/notificationService');
+const paymentService = require('../services/paymentService');
 
 // @desc    Créer un nouveau rendez-vous
 // @route   POST /api/appointments
@@ -17,13 +18,19 @@ exports.createAppointment = async (req, res) => {
       return res.status(404).json({ message: 'Médecin non trouvé' });
     }
     
-    // Vérifier si la disponibilité existe et n'est pas déjà réservée
+    // Vérifier si la disponibilité existe
     const availability = await Availability.findById(availabilityId);
     if (!availability) {
       return res.status(404).json({ message: 'Disponibilité non trouvée' });
     }
     
-    if (availability.isBooked) {
+    // Vérifier si la disponibilité est déjà réservée pour un rendez-vous actif (non annulé)
+    const existingActiveAppointment = await Appointment.findOne({
+      availability: availabilityId,
+      status: { $nin: ['cancelled'] } // Exclure les rendez-vous annulés
+    });
+    
+    if (existingActiveAppointment) {
       return res.status(400).json({ message: 'Ce créneau est déjà réservé' });
     }
 
@@ -312,7 +319,13 @@ exports.rescheduleAppointment = async (req, res) => {
       return res.status(404).json({ message: 'Nouveau créneau de disponibilité non trouvé' });
     }
     
-    if (newAvailability.isBooked) {
+    // Vérifier si la disponibilité est déjà réservée pour un rendez-vous actif (non annulé)
+    const existingActiveAppointment = await Appointment.findOne({
+      availability: availabilityId,
+      status: { $nin: ['cancelled'] } // Exclure les rendez-vous annulés
+    });
+    
+    if (existingActiveAppointment) {
       return res.status(400).json({ message: 'Ce créneau est déjà réservé' });
     }
     
@@ -394,6 +407,18 @@ exports.cancelAppointment = async (req, res) => {
 
     // Mettre à jour le statut du rendez-vous
     appointment.status = 'cancelled';
+    
+    // Traiter le remboursement si le rendez-vous a été payé
+    if (appointment.paymentStatus === 'completed') {
+      try {
+        // Utiliser le service de remboursement partiel (80%)
+        await paymentService.processPartialRefund(appointmentId);
+      } catch (refundError) {
+        console.error('Erreur lors du remboursement partiel:', refundError);
+        // Continuer avec l'annulation même si le remboursement échoue
+      }
+    }
+    
     await appointment.save();
 
     // Libérer le créneau de disponibilité
@@ -403,7 +428,10 @@ exports.cancelAppointment = async (req, res) => {
     // Envoyer une notification au médecin
     await notificationService.notifyAppointmentCancelled(appointment);
 
-    res.status(200).json({ message: 'Rendez-vous annulé avec succès' });
+    res.status(200).json({ 
+      message: 'Rendez-vous annulé avec succès',
+      paymentStatus: appointment.paymentStatus
+    });
   } catch (error) {
     console.error('Erreur lors de l\'annulation du rendez-vous:', error);
     res.status(500).json({ message: 'Erreur serveur lors de l\'annulation du rendez-vous' });

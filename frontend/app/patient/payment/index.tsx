@@ -93,7 +93,7 @@ export default function PaymentScreen() {
       Alert.alert(
         'Paiement réussi',
         'Votre paiement a été traité avec succès.',
-        [{ text: 'OK', onPress: () => router.push('/patient/appointment') }]
+        [{ text: 'OK', onPress: () => router.push('/(patient)/(tabs)/payments') }]
       );
     } catch (error) {
       console.error('Erreur lors du paiement:', error);

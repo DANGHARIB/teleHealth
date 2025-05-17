@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, Alert, Linking, Modal } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -37,6 +37,11 @@ export default function AppointmentScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [dateOptions, setDateOptions] = useState<Date[]>([]);
+  
+  // État pour le modal d'annulation
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
+  const [appointmentPrice, setAppointmentPrice] = useState<number>(0);
 
   // Générer les options de date (7 jours)
   useEffect(() => {
@@ -65,48 +70,54 @@ export default function AppointmentScreen() {
     fetchAppointments();
   }, []);
 
+  // Afficher le modal de confirmation d'annulation
+  const showCancelConfirmation = (appointmentId: string, price: number) => {
+    setAppointmentToCancel(appointmentId);
+    setAppointmentPrice(price);
+    setCancelModalVisible(true);
+  };
+
   // Annuler un rendez-vous
   const cancelAppointment = async (appointmentId: string) => {
     try {
-      // Confirmation de l'annulation
-      Alert.alert(
-        "Confirmation",
-        "Êtes-vous sûr de vouloir annuler ce rendez-vous ?",
-        [
-          {
-            text: "Non",
-            style: "cancel"
-          },
-          {
-            text: "Oui",
-            onPress: async () => {
-              setLoading(true);
-              
-              try {
-                // Appel à l'API pour annuler le rendez-vous
-                await patientAPI.cancelAppointment(appointmentId);
-                
-                // Mise à jour de la liste des rendez-vous
-                setAppointments(prevAppointments => 
-                  prevAppointments.map(app => 
-                    app._id === appointmentId ? { ...app, status: 'cancelled' } : app
-                  )
-                );
-                
-                setLoading(false);
-                Alert.alert("Succès", "Le rendez-vous a été annulé avec succès");
-              } catch (error) {
-                console.error('Erreur lors de l\'annulation du rendez-vous:', error);
-                setLoading(false);
-                Alert.alert("Erreur", "Impossible d'annuler le rendez-vous. Veuillez réessayer.");
-              }
-            }
+      setLoading(true);
+      
+      // Appel à l'API pour annuler le rendez-vous
+      await patientAPI.cancelAppointment(appointmentId);
+      
+      // Mise à jour de la liste des rendez-vous
+      setAppointments(prevAppointments => 
+        prevAppointments.map(app => {
+          if (app._id === appointmentId) {
+            // Si le rendez-vous a été payé, le marquer comme remboursé
+            // Sinon, juste le marquer comme annulé et conserver son statut de paiement
+            return { 
+              ...app, 
+              status: 'cancelled',
+              paymentStatus: app.paymentStatus === 'completed' ? 'refunded' : app.paymentStatus
+            };
           }
-        ]
+          return app;
+        })
       );
-    } catch (error) {
-      console.error('Erreur lors de la confirmation d\'annulation:', error);
-      Alert.alert("Erreur", "Une erreur est survenue. Veuillez réessayer.");
+      
+      setLoading(false);
+      setCancelModalVisible(false);
+      
+      // Afficher un message différent selon le statut de paiement
+      const refundMessage = appointmentPrice > 0 
+        ? `Vous serez remboursé à hauteur de ${(appointmentPrice * 0.8).toFixed(2)}€ (80%). Une pénalité de ${(appointmentPrice * 0.2).toFixed(2)}€ (20%) sera conservée.` 
+        : '';
+        
+      Alert.alert(
+        "Annulation confirmée", 
+        `Le rendez-vous a été annulé avec succès. ${refundMessage}`
+      );
+    } catch (err) {
+      console.error('Erreur lors de l\'annulation du rendez-vous:', err);
+      setLoading(false);
+      setCancelModalVisible(false);
+      Alert.alert("Erreur", "Impossible d'annuler le rendez-vous. Veuillez réessayer.");
     }
   };
 
@@ -258,7 +269,7 @@ export default function AppointmentScreen() {
                 "Impossible d'ouvrir le lien de consultation. Veuillez copier le lien manuellement."
               );
             }
-          } catch (error) {
+          } catch (err) {
             Alert.alert(
               "Erreur",
               "Impossible d'ouvrir le lien de consultation."
@@ -300,23 +311,23 @@ export default function AppointmentScreen() {
                 </TouchableOpacity>
               )}
               
-              {appointment.paymentStatus === 'pending' && (
+              {appointment.status === 'cancelled' && (
                 <TouchableOpacity 
-                  style={[styles.actionButton, styles.payButton]}
+                  style={[styles.actionButton, styles.rescheduleButton]}
                   onPress={() => router.push({
-                    pathname: '/patient/payment',
-                    params: { appointmentId: appointment._id }
+                    pathname: '/patient/doctor',
+                    params: { doctorId: appointment.doctor._id }
                   })}
                 >
-                  <Ionicons name="card-outline" size={16} color="#FFFFFF" />
-                  <ThemedText style={styles.buttonText}>Payer</ThemedText>
+                  <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+                  <ThemedText style={styles.buttonText}>Reprogrammer</ThemedText>
                 </TouchableOpacity>
               )}
               
               {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'scheduled') && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.cancelButton]}
-                  onPress={() => cancelAppointment(appointment._id)}
+                  onPress={() => showCancelConfirmation(appointment._id, appointment.price)}
                 >
                   <Ionicons name="close-outline" size={16} color="#FFFFFF" />
                   <ThemedText style={styles.buttonText}>Annuler</ThemedText>
@@ -327,6 +338,80 @@ export default function AppointmentScreen() {
         </View>
       );
     });
+  };
+
+  // Rendu du modal d'annulation
+  const renderCancelModal = () => {
+    const refundAmount = (appointmentPrice * 0.8).toFixed(2);
+    const penaltyAmount = (appointmentPrice * 0.2).toFixed(2);
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={cancelModalVisible}
+        onRequestClose={() => setCancelModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Confirmation d&apos;annulation</ThemedText>
+              <TouchableOpacity onPress={() => setCancelModalVisible(false)}>
+                <Ionicons name="close-outline" size={24} color="#DC3545" />
+              </TouchableOpacity>
+            </View>
+            
+            <ThemedText style={styles.modalText}>
+              Vous êtes sur le point d&apos;annuler votre rendez-vous.
+            </ThemedText>
+            
+            {appointmentPrice > 0 && (
+              <View style={styles.penaltyContainer}>
+                <ThemedText style={styles.warningText}>
+                  Attention : Une pénalité de 20% s&apos;applique en cas d&apos;annulation.
+                </ThemedText>
+                
+                <View style={styles.refundDetails}>
+                  <ThemedText style={styles.refundText}>
+                    Montant payé: {appointmentPrice}€
+                  </ThemedText>
+                  <ThemedText style={styles.refundText}>
+                    Remboursement (80%): {refundAmount}€
+                  </ThemedText>
+                  <ThemedText style={styles.penaltyText}>
+                    Pénalité retenue (20%): {penaltyAmount}€
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+            
+            <ThemedText style={styles.modalQuestion}>
+              Êtes-vous sûr de vouloir continuer ?
+            </ThemedText>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setCancelModalVisible(false)}
+              >
+                <ThemedText style={styles.buttonText}>Non, retour</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={() => {
+                  if (appointmentToCancel) {
+                    cancelAppointment(appointmentToCancel);
+                  }
+                }}
+              >
+                <ThemedText style={styles.buttonText}>Oui, annuler</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   return (
@@ -346,6 +431,8 @@ export default function AppointmentScreen() {
       <ScrollView style={styles.appointmentsContainer} showsVerticalScrollIndicator={false}>
         {renderAppointments()}
       </ScrollView>
+      
+      {renderCancelModal()}
       
       <View style={styles.navbar}>
         <TouchableOpacity style={styles.navItem}>
@@ -565,4 +652,87 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 4,
   },
+  rescheduleButton: {
+    backgroundColor: '#9C27B0',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0F2057',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  modalQuestion: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  confirmButton: {
+    backgroundColor: '#DC3545',
+  },
+  penaltyContainer: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFA500',
+  },
+  warningText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFA500',
+    marginBottom: 10,
+  },
+  refundDetails: {
+    marginTop: 10,
+  },
+  refundText: {
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  penaltyText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#DC3545',
+    marginTop: 5,
+  }
 }); 

@@ -14,8 +14,7 @@ const appointmentSchema = new mongoose.Schema({
   availability: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Availability',
-    required: true,
-    unique: true
+    required: true
   },
   price: {
     type: Number,

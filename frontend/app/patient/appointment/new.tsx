@@ -172,18 +172,13 @@ export default function BookAppointmentScreen() {
         caseDetails: 'Consultation standard'
       };
 
-      await patientAPI.createAppointment(appointmentData);
+      const createdAppointment = await patientAPI.createAppointment(appointmentData);
       
-      Alert.alert(
-        'Succès',
-        'Votre rendez-vous a été réservé avec succès',
-        [
-          { 
-            text: 'OK', 
-            onPress: () => router.push('/(patient)/(tabs)/appointment')
-          }
-        ]
-      );
+      // Rediriger vers la page de paiement au lieu de la page d'accueil
+      router.push({
+        pathname: '/patient/payment',
+        params: { appointmentId: createdAppointment._id }
+      });
     } catch (err) {
       console.error('Erreur lors de la réservation du rendez-vous:', err);
       Alert.alert('Erreur', 'Impossible de réserver le rendez-vous. Veuillez réessayer.');
