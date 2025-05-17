@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View } from 'react-native';
+import { StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -35,8 +35,8 @@ export default function PatientHomeScreen() {
       setSavedDoctors(data);
       setLoading(false);
     } catch (err) {
-      console.error('Erreur lors du chargement des médecins sauvegardés:', err);
-      setError('Impossible de charger vos médecins favoris');
+      console.error('Error loading saved doctors:', err);
+      setError('Unable to load your favorite doctors');
       setLoading(false);
     }
   }, []);
@@ -48,25 +48,25 @@ export default function PatientHomeScreen() {
       setRecommendedDoctors(data);
       setRecommendedLoading(false);
     } catch (err) {
-      console.error('Erreur lors du chargement des médecins recommandés:', err);
-      setRecommendedError('Impossible de charger les recommandations');
+      console.error('Error loading recommended doctors:', err);
+      setRecommendedError('Unable to load recommendations');
       setRecommendedLoading(false);
     }
   }, []);
 
-  // Charger les données initiales
+  // Initial data loading
   useEffect(() => {
     fetchSavedDoctors();
     fetchRecommendedDoctors();
   }, [fetchSavedDoctors, fetchRecommendedDoctors]);
 
-  // Rafraîchir les données à chaque fois que l'onglet redevient actif
+  // Refresh data when tab becomes active
   useFocusEffect(
     useCallback(() => {
       fetchSavedDoctors();
       fetchRecommendedDoctors();
       return () => {
-        // Nettoyage optionnel
+        // Optional cleanup
       };
     }, [fetchSavedDoctors, fetchRecommendedDoctors])
   );
@@ -99,120 +99,122 @@ export default function PatientHomeScreen() {
         <ThemedText style={styles.doctorSpecialization}>
           {item.specialization || 'General Practitioner'}
         </ThemedText>
-        <ThemedView style={styles.doctorDetails}>
-          <ThemedText style={styles.doctorExperience}>
-            {item.experience} Years exp
-          </ThemedText>
-          {item.price && (
-            <ThemedText style={styles.doctorPrice}>
-              ${item.price.toFixed(2)}/hr
+        <View style={styles.doctorDetails}>
+          <View style={styles.experienceTag}>
+            <ThemedText style={styles.doctorExperience}>
+              {item.experience} yrs exp
             </ThemedText>
+          </View>
+          {item.price && (
+            <View style={styles.priceTag}>
+              <ThemedText style={styles.doctorPrice}>
+                ${item.price.toFixed(0)}/hr
+              </ThemedText>
+            </View>
           )}
-        </ThemedView>
+        </View>
       </ThemedView>
+      <View style={styles.arrowContainer}>
+        <Ionicons name="chevron-forward" size={24} color="#A1CEDC" />
+      </View>
     </TouchableOpacity>
   );
 
+  const renderEmptyState = (message: string) => (
+    <ThemedView style={styles.emptyStateContainer}>
+      <Ionicons name="medical-outline" size={48} color="#A1CEDC" />
+      <ThemedText style={styles.emptyStateText}>{message}</ThemedText>
+    </ThemedView>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Bienvenue!</ThemedText>
-        <HelloWave />
+    <ThemedView style={styles.container}>
+      <ThemedView style={styles.header}>
+        <ThemedText type="title" style={styles.headerTitle}>Doctors</ThemedText>
       </ThemedView>
+      
+      <FlatList
+        data={[]}
+        ListHeaderComponent={
+          <>
+            {/* Recommended Doctors Section */}
+            <ThemedView style={styles.sectionContainer}>
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Recommended for you
+              </ThemedText>
+              
+              {recommendedLoading ? (
+                <ActivityIndicator size="large" color="#A1CEDC" style={styles.loader} />
+              ) : recommendedError ? (
+                <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
+              ) : recommendedDoctors.length === 0 ? (
+                renderEmptyState('Complete your assessment to get personalized recommendations.')
+              ) : (
+                <FlatList
+                  data={recommendedDoctors}
+                  renderItem={renderDoctorItem}
+                  keyExtractor={(item) => `recommended-${item._id}`}
+                  horizontal={false}
+                  showsVerticalScrollIndicator={false}
+                  scrollEnabled={false}
+                />
+              )}
+            </ThemedView>
 
-      {/* Médecins recommandés */}
-      <ThemedView style={styles.sectionContainer}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Recommandés pour vous
-        </ThemedText>
-        
-        {recommendedLoading ? (
-          <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-        ) : recommendedError ? (
-          <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
-        ) : recommendedDoctors.length === 0 ? (
-          <ThemedText style={styles.noResultsText}>
-            Complétez votre évaluation pour obtenir des recommandations personnalisées.
-          </ThemedText>
-        ) : (
-          <FlatList
-            data={recommendedDoctors}
-            renderItem={renderDoctorItem}
-            keyExtractor={(item) => `recommended-${item._id}`}
-            horizontal={false}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={false}
-          />
-        )}
-      </ThemedView>
-
-      {/* Médecins favoris */}
-      <ThemedView style={styles.sectionContainer}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Vos médecins favoris
-        </ThemedText>
-        
-        {loading ? (
-          <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-        ) : error ? (
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
-        ) : savedDoctors.length === 0 ? (
-          <ThemedText style={styles.noResultsText}>
-            Vous n&apos;avez aucun médecin favori. Explorez la section &quot;Search&quot; pour trouver des médecins.
-          </ThemedText>
-        ) : (
-          <FlatList
-            data={savedDoctors}
-            renderItem={renderDoctorItem}
-            keyExtractor={(item) => `saved-${item._id}`}
-            horizontal={false}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={false}
-          />
-        )}
-      </ThemedView>
-
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Besoin d&apos;aide?</ThemedText>
-        <ThemedText>
-          Utilisez l&apos;onglet &quot;Search&quot; pour rechercher des médecins et les ajouter à vos favoris.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+            {/* Favorite Doctors Section */}
+            <ThemedView style={styles.sectionContainer}>
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Your favorite doctors
+              </ThemedText>
+              
+              {loading ? (
+                <ActivityIndicator size="large" color="#A1CEDC" style={styles.loader} />
+              ) : error ? (
+                <ThemedText style={styles.errorText}>{error}</ThemedText>
+              ) : savedDoctors.length === 0 ? (
+                renderEmptyState('You don\'t have any favorite doctors yet.')
+              ) : (
+                <FlatList
+                  data={savedDoctors}
+                  renderItem={renderDoctorItem}
+                  keyExtractor={(item) => `saved-${item._id}`}
+                  horizontal={false}
+                  showsVerticalScrollIndicator={false}
+                  scrollEnabled={false}
+                />
+              )}
+            </ThemedView>
+          </>
+        }
+        renderItem={() => null}
+        keyExtractor={() => 'dummy'}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 20,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    marginTop: 20,
+  header: {
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E5EA',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#14104B',
   },
   sectionContainer: {
+    marginTop: 16,
     marginBottom: 20,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 20,
@@ -222,65 +224,99 @@ const styles = StyleSheet.create({
   },
   doctorCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F0F0F5',
   },
   doctorImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    marginRight: 15,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginRight: 16,
   },
   doctorInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   doctorName: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#14104B',
+    marginBottom: 4,
   },
   doctorSpecialization: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    fontSize: 15,
+    color: '#71727A',
+    marginBottom: 8,
   },
   doctorDetails: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  experienceTag: {
+    backgroundColor: '#F0F7FA',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 10,
   },
   doctorExperience: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#4A90E2',
+  },
+  priceTag: {
+    backgroundColor: '#F0F7FA',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   doctorPrice: {
-    fontSize: 14,
-    color: '#4a90e2',
+    fontSize: 13,
+    color: '#4A90E2',
     fontWeight: 'bold',
   },
+  arrowContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   loader: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginVertical: 30,
   },
   errorText: {
-    color: 'red',
+    color: '#FF3B30',
     textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 10,
+    marginVertical: 20,
+    fontSize: 15,
   },
-  noResultsText: {
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#F0F0F5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: '#8E8E93',
     textAlign: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-    color: '#666',
-    fontSize: 16,
+    marginTop: 16,
+    lineHeight: 22,
   },
 }); 
