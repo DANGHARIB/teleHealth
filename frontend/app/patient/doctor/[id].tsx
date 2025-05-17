@@ -240,12 +240,14 @@ export default function DoctorDetailScreen() {
             </TouchableOpacity>
           </View>
           
-          <ThemedView style={styles.noticeContainer}>
-            <Ionicons name="information-circle-outline" size={20} color="#666" style={styles.noticeIcon} />
-            <ThemedText style={styles.noticeText}>
-              Vous devez enregistrer ce médecin avant de pouvoir prendre rendez-vous.
-            </ThemedText>
-          </ThemedView>
+          {!isSaved && (
+            <ThemedView style={styles.noticeContainer}>
+              <Ionicons name="information-circle-outline" size={20} color="#666" style={styles.noticeIcon} />
+              <ThemedText style={styles.noticeText}>
+                Vous devez enregistrer ce médecin avant de pouvoir prendre rendez-vous.
+              </ThemedText>
+            </ThemedView>
+          )}
         </ScrollView>
       ) : (
         <ThemedView style={styles.container}>

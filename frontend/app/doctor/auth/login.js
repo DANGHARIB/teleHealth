@@ -36,8 +36,8 @@ const DoctorLoginScreen = () => {
         
         // Vérification du rôle déjà effectuée dans le backend et retournée, mais une double vérification ici est acceptable
         if (response.data.role === 'Doctor') {
-          // Rediriger vers la racine du groupe (doctor) après connexion réussie
-          router.replace('/(doctor)/(tabs)'); 
+          // Rediriger vers la page de profil du docteur après connexion réussie
+          router.replace('/(doctor)/(tabs)/profile'); 
         } else {
           setError('Access denied. This login is for doctors only.');
           await AsyncStorage.removeItem('userToken');

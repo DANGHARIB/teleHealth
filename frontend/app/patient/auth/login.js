@@ -62,8 +62,8 @@ const LoginScreen = () => {
         const hasCompletedAssessment = userInfoToStore.hasCompletedAssessment === true;
         
         if (hasCompletedAssessment) {
-          // Si l'évaluation est complétée, aller directement aux onglets
-          router.replace('/(patient)/(tabs)');
+          // Si l'évaluation est complétée, aller directement à la page de profil
+          router.replace('/(patient)/(tabs)/profile');
         } else {
           // Si l'évaluation n'est pas complétée, rediriger vers l'écran d'évaluation
           router.replace('/patient/assessment');

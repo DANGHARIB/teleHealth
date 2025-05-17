@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -9,7 +9,8 @@ import {
   Platform,
   SafeAreaView,
   Modal,
-  FlatList
+  FlatList,
+  Animated
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
@@ -33,26 +34,22 @@ const getNextAvailableTime = () => {
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
   
-  // Trouver le prochain créneau disponible en incréments de 15 minutes
+  // Trouver le prochain créneau disponible en incréments de 30 minutes
   let nextAvailableHour = currentHour;
   let nextAvailableMinute = 0;
   
-  // Arrondir à l'intervalle de 15 minutes suivant
-  if (currentMinute < 15) {
-    nextAvailableMinute = 15;
-  } else if (currentMinute < 30) {
+  // Arrondir à l'intervalle de 30 minutes suivant
+  if (currentMinute < 30) {
     nextAvailableMinute = 30;
-  } else if (currentMinute < 45) {
-    nextAvailableMinute = 45;
   } else {
     nextAvailableHour = currentHour + 1;
     nextAvailableMinute = 0;
   }
   
-  // Si on passe à l'heure suivante et que c'est minuit, limiter à 23:45
+  // Si on passe à l'heure suivante et que c'est minuit, limiter à 23:30
   if (nextAvailableHour >= 24) {
     nextAvailableHour = 23;
-    nextAvailableMinute = 45;
+    nextAvailableMinute = 30;
   }
   
   return {
@@ -98,6 +95,32 @@ export default function CreateAvailabilityScreen() {
     return [getInitialTimeSlot()];
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTipTooltip, setShowTipTooltip] = useState(false);
+  
+  // Animation pour l'info-bulle
+  const tooltipOpacity = useRef(new Animated.Value(0)).current;
+  
+  // Reference for the horizontal day scroll
+  const dayScrollRef = useRef<ScrollView>(null);
+  
+  // Effet pour afficher/masquer l'info-bulle
+  useEffect(() => {
+    if (showTipTooltip) {
+      // Animation pour afficher
+      Animated.timing(tooltipOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true
+      }).start();
+    } else {
+      // Animation pour masquer
+      Animated.timing(tooltipOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      }).start();
+    }
+  }, [showTipTooltip]);
   
   // Format date for display
   const formatDateForDisplay = (date: Date) => {
@@ -190,7 +213,14 @@ export default function CreateAvailabilityScreen() {
     }
     
     if (hour === currentHour) {
-      return parseInt(minute) <= currentMinute; // Disable minutes that have passed
+      // For 30-minute intervals: 
+      // If minute is '00' and current time is past the hour, disable
+      // If minute is '30' and current time is past 30 minutes, disable
+      if (minute === '00') {
+        return currentMinute > 0; // Disable if we're past the hour
+      } else if (minute === '30') {
+        return currentMinute >= 30; // Disable if we're at or past 30 minutes
+      }
     }
     
     return true; // Past hour, all minutes are disabled
@@ -218,9 +248,7 @@ export default function CreateAvailabilityScreen() {
       
     // Current hour logic
     const currentMinute = new Date().getMinutes();
-    if (currentMinute < 15) return 1; // Index of '15'
-    if (currentMinute < 30) return 2; // Index of '30'
-    if (currentMinute < 45) return 3; // Index of '45'
+    if (currentMinute < 30) return 1; // Index of '30'
     return -1; // No available minutes in this hour
   };
   
@@ -232,26 +260,22 @@ export default function CreateAvailabilityScreen() {
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       
-      // Trouver le prochain créneau disponible en incréments de 15 minutes
+      // Trouver le prochain créneau disponible en incréments de 30 minutes
       let nextAvailableHour = currentHour;
       let nextAvailableMinute = 0;
       
-      // Arrondir à l'intervalle de 15 minutes suivant
-      if (currentMinute < 15) {
-        nextAvailableMinute = 15;
-      } else if (currentMinute < 30) {
+      // Arrondir à l'intervalle de 30 minutes suivant
+      if (currentMinute < 30) {
         nextAvailableMinute = 30;
-      } else if (currentMinute < 45) {
-        nextAvailableMinute = 45;
       } else {
         nextAvailableHour = currentHour + 1;
         nextAvailableMinute = 0;
       }
       
-      // Si on passe à l'heure suivante et que c'est minuit, limiter à 23:45
+      // Si on passe à l'heure suivante et que c'est minuit, limiter à 23:30
       if (nextAvailableHour >= 24) {
         nextAvailableHour = 23;
-        nextAvailableMinute = 45;
+        nextAvailableMinute = 30;
       }
       
       // Mettre à jour le slot avec la nouvelle heure
@@ -292,15 +316,80 @@ export default function CreateAvailabilityScreen() {
       const newSlots = [...slots];
       
       if (isStart) {
+        // Mise à jour de l'heure de début
         newSlots[index].startTime = formattedTime;
+        
+        // Calcul automatique de l'heure de fin (30 minutes ou 1 heure plus tard)
+        let endHour = parseInt(hour);
+        let endMinute = parseInt(minute);
+        
+        // Par défaut, ajouter 1 heure
+        if (endMinute === 0) {
+          // Si on est à l'heure pile, on peut ajouter 30 minutes
+          endMinute = 30;
+        } else {
+          // Si on est à la demi-heure, on passe à l'heure suivante
+          endHour += 1;
+          endMinute = 0;
+        }
+        
+        // Gérer le cas où on dépasse minuit
+        if (endHour >= 24) {
+          endHour = 23;
+          endMinute = 30;
+        }
+        
+        // Formater et mettre à jour l'heure de fin
+        const formattedEndHour = endHour.toString().padStart(2, '0');
+        const formattedEndMinute = endMinute.toString().padStart(2, '0');
+        newSlots[index].endTime = `${formattedEndHour}:${formattedEndMinute}`;
       } else {
+        // Si on modifie l'heure de fin, simplement mettre à jour sans logique spéciale
         newSlots[index].endTime = formattedTime;
+        
+        // Vérifier que l'heure de fin est après l'heure de début
+        const [startHour, startMinute] = newSlots[index].startTime.split(':').map(Number);
+        const [endHour, endMinute] = formattedTime.split(':').map(Number);
+        
+        const startMinutes = startHour * 60 + startMinute;
+        const endMinutes = endHour * 60 + endMinute;
+        
+        // Si l'heure de fin est avant ou égale à l'heure de début
+        if (endMinutes <= startMinutes) {
+          // Calculer une nouvelle heure de fin valide (30 minutes après le début)
+          let newEndHour = startHour;
+          let newEndMinute = startMinute;
+          
+          if (newEndMinute === 0) {
+            newEndMinute = 30;
+          } else {
+            newEndHour += 1;
+            newEndMinute = 0;
+          }
+          
+          if (newEndHour >= 24) {
+            newEndHour = 23;
+            newEndMinute = 30;
+          }
+          
+          // Mettre à jour avec la nouvelle heure de fin valide
+          const newFormattedEndHour = newEndHour.toString().padStart(2, '0');
+          const newFormattedEndMinute = newEndMinute.toString().padStart(2, '0');
+          newSlots[index].endTime = `${newFormattedEndHour}:${newFormattedEndMinute}`;
+          
+          // Afficher une notification pour informer l'utilisateur
+          if (Platform.OS === 'ios') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }
+          
+          // Informer l'utilisateur via une alerte
+          setTimeout(() => {
+            Alert.alert('Info', 'End time must be after start time. End time has been adjusted automatically.');
+          }, 300);
+        }
       }
       
       setSlots(newSlots);
-      // Nous ne fermons plus le modal ici
-      // setShowTimePickerModal(false);
-      // setCurrentEditingSlot(null);
       
       // Add haptic feedback
       if (Platform.OS === 'ios') {
@@ -419,6 +508,33 @@ export default function CreateAvailabilityScreen() {
   
   // Save availabilities
   const saveAvailabilities = async () => {
+    // Check if any time slot is in the past
+    if (isToday(date)) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      
+      // Check if any slot has a start time in the past
+      const pastSlots = slots.filter(slot => {
+        const [startHour, startMinute] = slot.startTime.split(':').map(Number);
+        
+        // Check if the slot is in the past
+        if (startHour < currentHour) {
+          return true; // Past hour
+        } else if (startHour === currentHour) {
+          // For current hour, check minutes
+          return startMinute === 0 ? currentMinute > 0 : currentMinute >= 30;
+        }
+        
+        return false; // Future time
+      });
+      
+      if (pastSlots.length > 0) {
+        Alert.alert('Error', 'You cannot create availability slots in the past. Please select future time slots.');
+        return;
+      }
+    }
+
     // Validate slots
     const invalidSlots = slots.filter(slot => {
       const startParts = slot.startTime.split(':');
@@ -507,7 +623,7 @@ export default function CreateAvailabilityScreen() {
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
   
   // Generate minutes for the time picker
-  const minutes = ['00', '15', '30', '45'];
+  const minutes = ['00', '30'];
 
   return (
     <>
@@ -544,6 +660,7 @@ export default function CreateAvailabilityScreen() {
             
             {/* Next 7 days calendar view */}
             <ScrollView 
+              ref={dayScrollRef}
               horizontal 
               showsHorizontalScrollIndicator={false}
               style={styles.daysContainer}
@@ -566,6 +683,15 @@ export default function CreateAvailabilityScreen() {
                     ]}
                     onPress={() => {
                       setDate(dayDate);
+                      
+                      // Scroll to center the selected day
+                      if (dayScrollRef.current) {
+                        // Calculate position to scroll to (card width + margin)
+                        const cardWidth = 70; // 60px width + 10px margin
+                        const scrollPosition = i * cardWidth - 20; // Subtract offset to center
+                        dayScrollRef.current.scrollTo({ x: scrollPosition, animated: true });
+                      }
+                      
                       if (Platform.OS === 'ios') {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }
@@ -672,10 +798,51 @@ export default function CreateAvailabilityScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <ThemedText style={styles.sectionTitle}>Time Slots</ThemedText>
-              <TouchableOpacity style={styles.addSlotButton} onPress={addSlot}>
-                <FontAwesome name="plus-circle" size={24} color={LIGHT_BLUE_ACCENT} />
-              </TouchableOpacity>
+              <View style={styles.addSlotSection}>
+                <TouchableOpacity 
+                  style={styles.infoButton} 
+                  onPress={() => setShowTipTooltip(!showTipTooltip)}
+                >
+                  <FontAwesome name="question-circle" size={18} color={DARK_BLUE_THEME} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.addSlotButton} onPress={addSlot}>
+                  <FontAwesome name="plus-circle" size={24} color={LIGHT_BLUE_ACCENT} />
+                </TouchableOpacity>
+              </View>
             </View>
+            
+            {/* Tooltip d'information */}
+             {showTipTooltip && (
+               <Animated.View 
+                 style={[
+                   styles.tooltipContainer,
+                   { opacity: tooltipOpacity }
+                 ]}
+               >
+                 <View style={styles.tooltipArrow} />
+                 <ThemedText style={styles.tooltipTitle}>Availability Guidelines:</ThemedText>
+                 <View style={styles.tooltipItem}>
+                   <View style={styles.bulletPoint} />
+                   <ThemedText style={styles.tooltipText}>Appointments are scheduled in 30-minute slots by default</ThemedText>
+                 </View>
+                 <View style={styles.tooltipItem}>
+                   <View style={styles.bulletPoint} />
+                   <ThemedText style={styles.tooltipText}>Create multiple slots to set your working hours for the day</ThemedText>
+                 </View>
+                 <View style={styles.tooltipItem}>
+                   <View style={styles.bulletPoint} />
+                   <ThemedText style={styles.tooltipText}>Use separate slots for morning/afternoon or if you take breaks</ThemedText>
+                 </View>
+                 <TouchableOpacity
+                   style={styles.tooltipCloseButton}
+                   onPress={() => {
+                     setShowTipTooltip(false);
+                   }}
+                 >
+                   <ThemedText style={styles.tooltipCloseText}>Got it</ThemedText>
+                 </TouchableOpacity>
+               </Animated.View>
+             )}
             
             <View style={styles.timeSlotList}>
               {slots.map((slot, index) => (
@@ -1346,5 +1513,84 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  addSlotSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoButton: {
+    padding: 6,
+    marginRight: 12,
+  },
+  
+  // Tooltip styles
+  tooltipContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    position: 'relative',
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    top: -10,
+    right: 40,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tooltipTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: DARK_BLUE_THEME,
+    marginBottom: 10,
+  },
+  tooltipItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  bulletPoint: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: LIGHT_BLUE_ACCENT,
+    marginTop: 6,
+    marginRight: 8,
+  },
+  tooltipText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  tooltipCloseButton: {
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: LIGHT_BLUE_ACCENT + '20',
+    borderRadius: 6,
+  },
+  tooltipCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: LIGHT_BLUE_ACCENT,
   },
 }); 
