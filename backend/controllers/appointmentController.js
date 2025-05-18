@@ -2,8 +2,11 @@ const Appointment = require("../models/Appointment");
 const Availability = require("../models/Availability");
 const Doctor = require("../models/Doctor");
 const Patient = require("../models/Patient");
+const User = require("../models/User");
 const notificationService = require("../services/notificationService");
 const paymentService = require("../services/paymentService");
+const { sendAppointmentZoomLink } = require("../services/emailService");
+const logger = require("../config/logger");
 
 /**
  * Helper function to get all availability IDs for the same day for a doctor
@@ -410,11 +413,67 @@ exports.updateAppointmentStatus = async (req, res) => {
 
     appointment.status = status || appointment.status;
 
+    // Si un lien de session est fourni ou si le statut est mis à "scheduled" et qu'il n'y a pas de lien
     if (sessionLink) {
       appointment.sessionLink = sessionLink;
+    } else if (status === "scheduled" && !appointment.sessionLink) {
+      // Générer automatiquement un lien Zoom si passage au statut "scheduled"
+      const zoomId = Math.random().toString(36).substring(2, 10);
+      appointment.sessionLink = `https://zoom.us/j/${zoomId}`;
     }
 
     const updatedAppointment = await appointment.save();
+
+    // Si le rendez-vous est passé à "scheduled" ou "confirmed" et a un lien de session, 
+    // envoyer le lien par email
+    if (
+      (status === "scheduled" || status === "confirmed") && 
+      updatedAppointment.sessionLink && 
+      updatedAppointment.paymentStatus === "completed"
+    ) {
+      try {
+        // Récupérer les informations complètes du rendez-vous
+        const appointmentWithDetails = await Appointment.findById(updatedAppointment._id)
+          .populate('availability')
+          .populate({
+            path: 'doctor',
+            populate: { path: 'user', select: 'email' }
+          })
+          .populate({
+            path: 'patient',
+            populate: { path: 'user', select: 'email' }
+          });
+        
+        if (appointmentWithDetails && 
+            appointmentWithDetails.doctor && 
+            appointmentWithDetails.doctor.user && 
+            appointmentWithDetails.patient && 
+            appointmentWithDetails.patient.user) {
+          
+          const doctorEmail = appointmentWithDetails.doctor.user.email;
+          const patientEmail = appointmentWithDetails.patient.user.email;
+          
+          // Formater la date et l'heure du rendez-vous
+          const appointmentDate = new Date(appointmentWithDetails.availability.date).toLocaleDateString('fr-FR');
+          const appointmentTime = appointmentWithDetails.slotStartTime;
+          
+          // Envoyer les emails
+          await sendAppointmentZoomLink(
+            appointmentWithDetails,
+            doctorEmail,
+            patientEmail,
+            updatedAppointment.sessionLink,
+            appointmentDate,
+            appointmentTime
+          );
+          
+          logger.info(`Lien Zoom envoyé par email pour le rendez-vous ${updatedAppointment._id}`);
+        }
+      } catch (emailError) {
+        logger.error(`Erreur lors de l'envoi du lien Zoom par email: ${emailError.message}`);
+        // On continue même si l'envoi d'email échoue
+      }
+    }
 
     res.json(updatedAppointment);
   } catch (error) {

@@ -2,7 +2,10 @@ const Payment = require('../models/Payment');
 const Appointment = require('../models/Appointment');
 const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
+const User = require('../models/User');
 const notificationService = require('../services/notificationService');
+const { sendAppointmentZoomLink } = require('../services/emailService');
+const logger = require('../config/logger');
 
 // @desc    Créer un nouveau paiement (automatiquement complété)
 // @route   POST /api/payments
@@ -36,9 +39,14 @@ exports.createPayment = async (req, res) => {
       status: 'completed'
     });
     
-    // Mettre à jour le statut du rendez-vous et du paiement
+    // Générer un lien Zoom aléatoire pour la consultation
+    const zoomId = Math.random().toString(36).substring(2, 10);
+    const zoomLink = `https://zoom.us/j/${zoomId}`;
+    
+    // Mettre à jour le statut du rendez-vous, du paiement et le lien de session
     appointment.paymentStatus = 'completed';
     appointment.status = 'confirmed';
+    appointment.sessionLink = zoomLink;
     await appointment.save();
     
     // Sauvegarder le paiement
@@ -46,6 +54,50 @@ exports.createPayment = async (req, res) => {
     
     // Envoyer une notification au médecin pour le paiement reçu
     await notificationService.notifyPaymentReceived(createdPayment);
+    
+    // Envoyer le lien Zoom par email au médecin et au patient
+    try {
+      // Récupérer les infos du rendez-vous
+      const appointmentWithDetails = await Appointment.findById(appointmentId)
+        .populate('availability')
+        .populate({
+          path: 'doctor',
+          populate: { path: 'user', select: 'email' }
+        })
+        .populate({
+          path: 'patient',
+          populate: { path: 'user', select: 'email' }
+        });
+      
+      if (appointmentWithDetails && 
+          appointmentWithDetails.doctor && 
+          appointmentWithDetails.doctor.user && 
+          appointmentWithDetails.patient && 
+          appointmentWithDetails.patient.user) {
+        
+        const doctorEmail = appointmentWithDetails.doctor.user.email;
+        const patientEmail = appointmentWithDetails.patient.user.email;
+        
+        // Formater la date et l'heure du rendez-vous
+        const appointmentDate = new Date(appointmentWithDetails.availability.date).toLocaleDateString('fr-FR');
+        const appointmentTime = appointmentWithDetails.slotStartTime;
+        
+        // Envoyer les emails
+        await sendAppointmentZoomLink(
+          appointmentWithDetails,
+          doctorEmail,
+          patientEmail,
+          zoomLink,
+          appointmentDate,
+          appointmentTime
+        );
+        
+        logger.info(`Lien Zoom envoyé par email pour le rendez-vous ${appointmentId}`);
+      }
+    } catch (emailError) {
+      logger.error(`Erreur lors de l'envoi du lien Zoom par email: ${emailError.message}`);
+      // On continue même si l'envoi d'email échoue
+    }
     
     res.status(201).json(createdPayment);
   } catch (error) {

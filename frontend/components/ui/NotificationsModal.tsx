@@ -135,6 +135,16 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
       loadNotifications();
     }
   }, [visible]);
+
+  // Log notifications when they change
+  useEffect(() => {
+    console.log('NotificationsModal - Notifications updated:', 
+      notifications ? `${notifications.length} items` : 'none');
+    
+    if (notifications && notifications.length > 0) {
+      console.log('NotificationsModal - First notification:', notifications[0]._id);
+    }
+  }, [notifications]);
   
   // Load notifications from backend
   const loadNotifications = async () => {
@@ -166,7 +176,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
   
   // Handle notification press
   const handleNotificationPress = async (notification: Notification) => {
-    console.log('NotificationsModal - Notification pressed:', notification._id);
+    console.log('NotificationsModal - Notification pressed:', notification);
     try {
       // Mark as read
       await markNotificationAsRead(notification._id);
@@ -182,8 +192,24 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
           const isAuthenticated = !!userInfo;
           const userRole = userInfo?.role || '';
           
-          processNotification(navigation, notification.data, isAuthenticated, userRole);
+          console.log('NotificationsModal - Processing with navigation, userRole:', userRole);
+          console.log('NotificationsModal - Notification data:', notification.data);
+          
+          // Utiliser soit data, soit la notification elle-même si data n'existe pas
+          const notificationData = notification.data || { 
+            type: notification.type,
+            appointmentId: undefined,
+            doctorId: undefined,
+            patientId: undefined,
+            notificationId: notification._id
+          };
+          
+          processNotification(navigation, notificationData, isAuthenticated, userRole);
+        } else {
+          console.log('NotificationsModal - No user info found in storage');
         }
+      } else {
+        console.log('NotificationsModal - Cannot process: processNotification or navigation missing');
       }
     } catch (error) {
       console.error('Error processing notification:', error);
@@ -263,10 +289,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
       visible={visible}
       onRequestClose={onClose}
     >
-      <Pressable 
-        style={styles.modalOverlay} 
-        onPress={onClose}
-      >
+      <View style={styles.modalOverlay}>
         <View 
           style={[
             styles.modalContent, 
@@ -334,7 +357,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
               onScroll={({ nativeEvent }) => handleScrollEnd(nativeEvent)}
               scrollEventThrottle={400}
             >
-              {notifications.map(notification => (
+              {notifications.map((notification: Notification) => (
                 <NotificationCard
                   key={notification._id}
                   notification={notification}
@@ -368,8 +391,16 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
               </TouchableOpacity>
             </View>
           )}
+          
+          {/* Bouton de fermeture en bas */}
+          <TouchableOpacity
+            style={[styles.bottomCloseButton, { backgroundColor: colors.primary }]}
+            onPress={onClose}
+          >
+            <Text style={styles.bottomCloseButtonText}>Fermer</Text>
+          </TouchableOpacity>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 };
@@ -383,7 +414,7 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: height * 0.7,
+    height: height * 0.7,
     paddingTop: 16,
     paddingBottom: 24,
     shadowColor: '#000',
@@ -427,6 +458,7 @@ const styles = StyleSheet.create({
   },
   notificationsList: {
     flex: 1,
+    maxHeight: height * 0.55,
   },
   notificationsContainer: {
     paddingHorizontal: 16,
@@ -517,6 +549,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  bottomCloseButton: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomCloseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

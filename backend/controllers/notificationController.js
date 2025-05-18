@@ -12,6 +12,7 @@ const notificationService = require('../services/notificationService');
 // @access  Private
 exports.getUserNotifications = async (req, res) => {
   try {
+    console.log('Récupération des notifications pour', req.user._id);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
@@ -33,12 +34,21 @@ exports.getUserNotifications = async (req, res) => {
     // Obtenir le nombre total de notifications pour la pagination
     const totalNotifications = await Notification.countDocuments(query);
     
+    // Obtenir le nombre de notifications non lues
+    const unreadCount = await Notification.countDocuments({ 
+      recipient: req.user._id,
+      read: false
+    });
+    
+    console.log(`${notifications.length} notifications récupérées, ${unreadCount} non lues`);
+    
     res.status(200).json({
       success: true,
       count: notifications.length,
       total: totalNotifications,
       totalPages: Math.ceil(totalNotifications / limit),
       currentPage: page,
+      unreadCount,
       data: notifications
     });
   } catch (error) {

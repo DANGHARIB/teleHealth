@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext } from 'react';
+import React, { useState, useCallback, useContext, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const [userName, setUserName] = useState('Patient');
   const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  const { notificationQueue, sendTestNotification } = useContext(NotificationContext);
+  const { notificationQueue, sendTestNotification, notifications, fetchNotifications, unreadCount, fetchUnreadCount } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -90,6 +90,22 @@ export default function ProfileScreen() {
       };
     }, [])
   );
+
+  // Charger les notifications au démarrage
+  useEffect(() => {
+    console.log('ProfileScreen - Loading initial notifications');
+    fetchNotifications(1, 20);
+    fetchUnreadCount();
+  }, [fetchNotifications, fetchUnreadCount]);
+
+  // Actualiser les notifications lorsque le modal est ouvert
+  useEffect(() => {
+    if (notificationModalVisible) {
+      console.log('ProfileScreen - Modal opened, refreshing notifications');
+      fetchNotifications(1, 20);
+      fetchUnreadCount();
+    }
+  }, [notificationModalVisible, fetchNotifications, fetchUnreadCount]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -224,6 +240,18 @@ export default function ProfileScreen() {
     }
   };
 
+  // Ouvrir le modal de notifications 
+  const handleOpenNotificationsModal = () => {
+    console.log('ProfileScreen - Opening notifications modal, unreadCount:', unreadCount);
+    setNotificationModalVisible(true);
+  };
+
+  // Fermer le modal de notifications 
+  const handleCloseNotificationsModal = () => {
+    console.log('ProfileScreen - Closing notifications modal');
+    setNotificationModalVisible(false);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -240,10 +268,8 @@ export default function ProfileScreen() {
           </View>
           
           <NotificationIcon 
-            onPress={() => setNotificationModalVisible(true)}
-            unreadCount={notificationQueue.length}
-            style={styles.notificationIcon}
-            color={COLORS.white}
+            onPress={handleOpenNotificationsModal}
+            unreadCount={unreadCount}
           />
         </View>
 
@@ -280,9 +306,9 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
       
-      <NotificationsModal 
-        visible={notificationModalVisible} 
-        onClose={() => setNotificationModalVisible(false)} 
+      <NotificationsModal
+        visible={notificationModalVisible}
+        onClose={handleCloseNotificationsModal}
         navigation={router}
       />
     </SafeAreaView>

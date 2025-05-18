@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext } from 'react';
+import React, { useState, useCallback, useContext, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -48,10 +48,10 @@ const COLORS = {
 
 export default function DoctorProfileTabScreen() {
   const router = useRouter();
-  const [userName, setUserName] = useState('Doctor');
+  const [docName, setDocName] = useState('Dr.');
   const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  const { notificationQueue } = useContext(NotificationContext);
+  const { notificationQueue, notifications, fetchNotifications, unreadCount, fetchUnreadCount } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,7 +76,7 @@ export default function DoctorProfileTabScreen() {
                 displayName = lastName.trim();
               }
             }
-            setUserName(displayName);
+            setDocName(displayName);
 
             const imagePath = userInfo.profile?.doctor_image;
             if (imagePath && imagePath.trim() !== '') {
@@ -92,7 +92,7 @@ export default function DoctorProfileTabScreen() {
           }
         } catch (error) {
           console.error("Failed to fetch doctor info from storage", error);
-          setUserName('Doctor'); 
+          setDocName('Doctor'); 
           setProfileImageUri(undefined);
         }
       };
@@ -104,6 +104,34 @@ export default function DoctorProfileTabScreen() {
       };
     }, [])
   );
+
+  // Charger les notifications au démarrage
+  useEffect(() => {
+    console.log('DoctorProfileScreen - Loading initial notifications');
+    fetchNotifications(1, 20);
+    fetchUnreadCount();
+  }, [fetchNotifications, fetchUnreadCount]);
+
+  // Actualiser les notifications lorsque le modal est ouvert
+  useEffect(() => {
+    if (notificationModalVisible) {
+      console.log('DoctorProfileScreen - Modal opened, refreshing notifications');
+      fetchNotifications(1, 20);
+      fetchUnreadCount();
+    }
+  }, [notificationModalVisible, fetchNotifications, fetchUnreadCount]);
+
+  // Ouvrir le modal de notifications
+  const handleOpenNotificationsModal = () => {
+    console.log('DoctorProfileScreen - Opening notifications modal, unreadCount:', unreadCount);
+    setNotificationModalVisible(true);
+  };
+
+  // Fermer le modal de notifications 
+  const handleCloseNotificationsModal = () => {
+    console.log('DoctorProfileScreen - Closing notifications modal');
+    setNotificationModalVisible(false);
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -176,9 +204,16 @@ export default function DoctorProfileTabScreen() {
         
         <View style={styles.profileInfo}>
           <Text style={styles.userName} numberOfLines={1} ellipsizeMode="tail">
-            Dr. {userName}
+            Dr. {docName}
           </Text>
           <Text style={styles.welcomeText}>Welcome to Tabeebou.com</Text>
+          
+          <NotificationIcon 
+            onPress={handleOpenNotificationsModal}
+            unreadCount={unreadCount}
+            style={styles.notificationIcon}
+            color={COLORS.white}
+          />
         </View>
       </View>
     </View>
@@ -230,13 +265,6 @@ export default function DoctorProfileTabScreen() {
             <Text style={styles.headerTitle}>My Profile</Text>
             <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
           </View>
-          
-          <NotificationIcon 
-            onPress={() => setNotificationModalVisible(true)}
-            unreadCount={notificationQueue.length}
-            style={styles.notificationIcon}
-            color={COLORS.white}
-          />
         </View>
 
         {renderProfileHeader()}
@@ -261,9 +289,9 @@ export default function DoctorProfileTabScreen() {
         </View>
       </ScrollView>
       
-      <NotificationsModal 
-        visible={notificationModalVisible} 
-        onClose={() => setNotificationModalVisible(false)} 
+      <NotificationsModal
+        visible={notificationModalVisible}
+        onClose={handleCloseNotificationsModal}
         navigation={router}
       />
     </SafeAreaView>

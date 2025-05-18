@@ -113,7 +113,7 @@ export default function PaymentScreen() {
       setSavedPaymentMethods(methods);
       
       // Sélectionner la méthode par défaut s'il y en a une
-      const defaultMethod = methods.find(m => m.isDefault);
+      const defaultMethod = methods.find((m: PaymentMethod) => m.isDefault);
       if (defaultMethod) {
         setSelectedSavedMethod(defaultMethod._id);
         setSelectedMethod(defaultMethod.type);
@@ -137,7 +137,12 @@ export default function PaymentScreen() {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Préparer les données de paiement
-      let paymentData = {
+      let paymentData: {
+        appointmentId: string;
+        paymentMethod: string;
+        amount: number;
+        savedPaymentMethodId?: string;
+      } = {
         appointmentId: appointment._id,
         paymentMethod: selectedMethod,
         amount: appointment.price
@@ -145,10 +150,7 @@ export default function PaymentScreen() {
       
       // Si une méthode sauvegardée est sélectionnée, ajouter son ID
       if (selectedSavedMethod) {
-        paymentData = {
-          ...paymentData,
-          savedPaymentMethodId: selectedSavedMethod
-        };
+        paymentData.savedPaymentMethodId = selectedSavedMethod;
       }
       
       // Appel à l'API pour créer le paiement
@@ -179,7 +181,7 @@ export default function PaymentScreen() {
       return (
         <View style={styles.noSavedMethodsContainer}>
           <ThemedText style={styles.noSavedMethodsText}>
-            Vous n'avez pas encore de méthode de paiement sauvegardée
+            Vous n&apos;avez pas encore de méthode de paiement sauvegardée
           </ThemedText>
           <TouchableOpacity 
             style={styles.addPaymentMethodButton}
@@ -271,44 +273,6 @@ export default function PaymentScreen() {
     }
   };
   
-  // Rendu des méthodes de paiement standards (si pas de méthode sauvegardée sélectionnée)
-  const renderPaymentMethods = () => {
-    if (selectedSavedMethod) return null;
-    
-    const methods = [
-      { id: 'card', icon: 'card-outline', label: 'Carte bancaire' },
-      { id: 'paypal', icon: 'logo-paypal', label: 'PayPal' },
-      { id: 'apple_pay', icon: 'logo-apple', label: 'Apple Pay' },
-      { id: 'google_pay', icon: 'logo-google', label: 'Google Pay' }
-    ];
-    
-    return (
-      <View style={styles.paymentMethods}>
-        {methods.map(method => (
-          <TouchableOpacity
-            key={method.id}
-            style={[
-              styles.paymentMethodItem,
-              selectedMethod === method.id && styles.selectedPaymentMethod
-            ]}
-            onPress={() => setSelectedMethod(method.id)}
-          >
-            <View style={styles.paymentMethodIcon}>
-              <Ionicons 
-                name={method.icon as any} 
-                size={24} 
-                color={selectedMethod === method.id ? '#FFFFFF' : '#0F2057'} 
-              />
-            </View>
-            <ThemedText style={selectedMethod === method.id ? styles.selectedMethodText : styles.methodText}>
-              {method.label}
-            </ThemedText>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-  
   if (loading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -377,22 +341,24 @@ export default function PaymentScreen() {
         
         {/* Afficher les méthodes de paiement sauvegardées */}
         {renderSavedPaymentMethods()}
-        
-        {/* Afficher les méthodes de paiement standards si aucune méthode sauvegardée n'est sélectionnée */}
-        {renderPaymentMethods()}
       </ScrollView>
       
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={styles.payButton}
+          style={[
+            styles.payButton,
+            savedPaymentMethods.length === 0 && styles.disabledButton
+          ]}
           onPress={processPayment}
-          disabled={processingPayment}
+          disabled={processingPayment || savedPaymentMethods.length === 0}
         >
           {processingPayment ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <ThemedText style={styles.payButtonText}>
-              Payer {appointment?.price || 28} €
+              {savedPaymentMethods.length === 0 
+                ? "Ajoutez une méthode de paiement pour continuer" 
+                : `Payer ${appointment?.price || 28} €`}
             </ThemedText>
           )}
         </TouchableOpacity>
@@ -541,6 +507,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  disabledButton: {
+    backgroundColor: '#ACC2E4',
   },
   // Styles pour les méthodes de paiement sauvegardées
   methodsLoader: {

@@ -50,26 +50,40 @@ export const NotificationProvider = ({ children }) => {
 
   // Récupérer les notifications depuis le backend
   const fetchNotifications = useCallback(async (page = 1, limit = 20) => {
-    console.log('NotificationContext - Fetching notifications from backend');
+    console.log('NotificationContext - Fetching notifications from backend, page:', page, 'limit:', limit);
     setIsLoading(true);
     setError(null);
     
     try {
       // Récupérer les notifications depuis l'API
       const response = await notificationsAPI.getNotifications(page, limit);
-      console.log('NotificationContext - Notifications fetched:', response.data.length);
+      console.log('NotificationContext - API Response:', response);
+      
+      // Vérifier la structure de la réponse et extraire les données correctement
+      const notificationData = response.data?.data || response.data || [];
+      console.log('NotificationContext - Notifications extracted:', notificationData.length);
       
       // Si c'est la première page, remplacer les notifications, sinon ajouter à la liste existante
       if (page === 1) {
-        setNotifications(response.data || []);
+        setNotifications(notificationData);
       } else {
-        setNotifications(prev => [...prev, ...(response.data || [])]);
+        setNotifications(prev => [...prev, ...notificationData]);
       }
       
       // Enregistrer les notifications dans le stockage local
-      saveNotificationsToStorage(response.data || []);
+      await saveNotificationsToStorage(notificationData);
       
-      return response;
+      // Mettre à jour le compteur de notifications non lues
+      if (response.data?.unreadCount !== undefined) {
+        setUnreadCount(response.data.unreadCount);
+      } else {
+        fetchUnreadCount();
+      }
+      
+      return {
+        ...response,
+        data: notificationData
+      };
     } catch (error) {
       console.error('Erreur lors de la récupération des notifications:', error);
       setError(error.message || 'Impossible de récupérer les notifications');
@@ -84,7 +98,7 @@ export const NotificationProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [fetchUnreadCount]);
 
   // Récupérer le nombre de notifications non lues
   const fetchUnreadCount = useCallback(async () => {

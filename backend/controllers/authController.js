@@ -3,6 +3,7 @@ const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
+const { sendOtpEmail } = require('../services/emailService');
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -68,7 +69,14 @@ exports.register = async (req, res) => {
       }
     }
 
-    // TODO: Envoyer le code OTP par email
+    // Envoyer le code OTP par email
+    try {
+      await sendOtpEmail(email, otpCode);
+      logger.info(`Code OTP envoyé par email à ${email}`);
+    } catch (emailError) {
+      logger.error(`Erreur lors de l'envoi de l'email OTP à ${email}: ${emailError.message}`);
+      // On continue même si l'envoi d'email échoue
+    }
     logger.info(`Utilisateur ${email} inscrit avec succès, OTP: ${otpCode}`);
 
     if (user) {
@@ -230,7 +238,14 @@ exports.resendOTP = async (req, res) => {
     user.otp_code = otpCode;
     await user.save();
 
-    // TODO: Envoyer le code OTP par email
+    // Envoyer le code OTP par email
+    try {
+      await sendOtpEmail(email, otpCode);
+      logger.info(`Nouveau code OTP envoyé par email à ${email}`);
+    } catch (emailError) {
+      logger.error(`Erreur lors de l'envoi de l'email OTP à ${email}: ${emailError.message}`);
+      // On continue même si l'envoi d'email échoue
+    }
     logger.info(`Nouveau code OTP envoyé à l'utilisateur ${email}`);
 
     res.json({ message: 'Code OTP renvoyé avec succès' });
