@@ -142,7 +142,7 @@ exports.createAppointment = async (req, res) => {
         { paymentStatus: "completed" }, // Rendez-vous payés
         { 
           paymentStatus: "pending", 
-          createdAt: { $gt: new Date(Date.now() - 30 * 60 * 1000) } // Rendez-vous en attente depuis moins de 30 minutes
+          createdAt: { $gt: new Date(Date.now() - 15 * 60 * 1000) } // Rendez-vous en attente depuis moins de 15 minutes (réduit de 30 à 15)
         }
       ]
     });
@@ -176,23 +176,26 @@ exports.createAppointment = async (req, res) => {
       paymentStatus: "pending",
     });
 
-    // Mark the specific 30-minute availability slot as booked
-    // This assumes 'availabilityId' refers to a specific 30-min slot.
+    // NE PAS marquer le créneau comme réservé ici, cela sera fait lors du paiement
+    // Le créneau ne sera réservé qu'après confirmation du paiement
+    // On supprime cette partie du code:
+    /*
     const specificAvailabilitySlot = await Availability.findById(availabilityId);
     if (!specificAvailabilitySlot) {
-      // This should ideally not happen if previous checks passed, but as a safeguard:
       console.log("❌ Erreur critique: Le créneau de disponibilité spécifique n'a pas été trouvé avant de le marquer comme réservé:", availabilityId);
       return res.status(500).json({ message: "Erreur lors de la mise à jour de la disponibilité." });
     }
     specificAvailabilitySlot.isBooked = true;
     await specificAvailabilitySlot.save();
     console.log("✅ Créneau de disponibilité spécifique marqué comme réservé:", availabilityId);
+    */
 
     const createdAppointment = await appointment.save();
     console.log("✅ Rendez-vous (créneau de 30 min) créé avec succès:", {
       id: createdAppointment._id,
       date: new Date(availability.date).toLocaleDateString("fr-FR"),
       creneauReserve: `${createdAppointment.slotStartTime} - ${createdAppointment.slotEndTime}`,
+      statut: "pending - en attente de paiement", // Ajout pour clarifier le statut
     });
 
     await notificationService.notifyAppointmentCreated(createdAppointment);

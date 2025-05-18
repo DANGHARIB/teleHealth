@@ -5,6 +5,9 @@ const morgan = require('morgan');
 const path = require('path');
 const connectDB = require('./config/db');
 const logger = require('./config/logger');
+const mongoose = require('mongoose');
+const cron = require('node-cron');
+const { exec } = require('child_process');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -72,6 +75,24 @@ app.use((err, req, res, next) => {
 
 // Port et démarrage du serveur
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  logger.info(`Serveur en cours d'exécution sur le port ${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`Serveur en cours d'exécution sur le port ${PORT}`);
+  logger.info(`Serveur démarré sur le port ${PORT}`);
+});
+
+// Programmer la tâche de nettoyage des rendez-vous non payés
+// Exécution toutes les 10 minutes
+cron.schedule('*/10 * * * *', () => {
+  logger.info('Lancement du nettoyage des rendez-vous non payés');
+  exec('node scripts/cleanupUnpaidAppointments.js', (error, stdout, stderr) => {
+    if (error) {
+      logger.error(`Erreur d'exécution du script de nettoyage: ${error.message}`);
+      return;
+    }
+    if (stderr) {
+      logger.error(`Erreur dans le script de nettoyage: ${stderr}`);
+      return;
+    }
+    logger.info(`Résultat du nettoyage: ${stdout}`);
+  });
 }); 

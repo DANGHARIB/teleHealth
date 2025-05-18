@@ -44,7 +44,7 @@ const appointmentSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'completed', 'refunded'],
+    enum: ['pending', 'completed', 'refunded', 'cancelled'],
     default: 'pending' // Changé de 'completed' à 'pending'
   },
   caseDetails: {

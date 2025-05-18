@@ -6,6 +6,7 @@ const User = require('../models/User');
 const notificationService = require('../services/notificationService');
 const { sendAppointmentZoomLink } = require('../services/emailService');
 const logger = require('../config/logger');
+const Availability = require('../models/Availability');
 
 // @desc    Créer un nouveau paiement (automatiquement complété)
 // @route   POST /api/payments
@@ -48,6 +49,16 @@ exports.createPayment = async (req, res) => {
     appointment.status = 'confirmed';
     appointment.sessionLink = zoomLink;
     await appointment.save();
+    
+    // MAINTENANT marquer le créneau spécifique comme réservé (après paiement)
+    const availability = await Availability.findById(appointment.availability);
+    if (availability) {
+      availability.isBooked = true;
+      await availability.save();
+      logger.info(`Créneau de disponibilité spécifique ${appointment.availability} marqué comme réservé après paiement`);
+    } else {
+      logger.error(`Disponibilité ${appointment.availability} non trouvée lors du paiement`);
+    }
     
     // Sauvegarder le paiement
     const createdPayment = await payment.save();
