@@ -1,41 +1,66 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  ScrollView, 
-  View, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import React, { useState, useEffect, useRef } from "react";
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
   Alert,
   StatusBar,
   Dimensions,
-  SafeAreaView
-} from 'react-native';
-import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { 
-  format, 
-  addDays, 
-  parseISO, 
-  isToday, 
-  isTomorrow, 
-  isFuture, 
-  startOfWeek, 
-  endOfWeek, 
-  addWeeks, 
-  subWeeks, 
+  SafeAreaView,
+} from "react-native";
+import { Image } from "expo-image";
+import { Stack, useLocalSearchParams, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  format,
+  addDays,
+  parseISO,
+  isToday,
+  isTomorrow,
+  isFuture,
+  startOfWeek,
+  endOfWeek,
+  addWeeks,
+  subWeeks,
   isSameWeek,
   isBefore,
   addMinutes,
-  parse
-} from 'date-fns';
-import { enUS } from 'date-fns/locale';
+  parse,
+} from "date-fns";
+import { enUS } from "date-fns/locale";
+import Constants from "expo-constants";
 
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { doctorAPI, patientAPI } from '@/services/api';
+import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
+import { doctorAPI, patientAPI } from "@/services/api";
 
-const { width } = Dimensions.get('window');
+// API URL constants
+const API_URL =
+  Constants.expoConfig?.extra?.apiUrl || "http://localhost:3000/api";
+const BASE_SERVER_URL = API_URL.replace("/api", "");
+
+// Helper function to convert image paths into proper URLs
+const getImageUrl = (imagePath: string | undefined): string | undefined => {
+  if (!imagePath || imagePath.trim() === "") return undefined;
+
+  // Handle both absolute paths (from older records) and relative paths
+  if (
+    imagePath.startsWith("C:") ||
+    imagePath.startsWith("/") ||
+    imagePath.startsWith("\\")
+  ) {
+    // For absolute paths, extract just the filename
+    const fileName = imagePath.split(/[\\\/]/).pop();
+    return `${BASE_SERVER_URL}/uploads/${fileName}`;
+  } else {
+    // For proper relative paths
+    return `${BASE_SERVER_URL}${imagePath.replace(/\\/g, "/")}`;
+  }
+};
+
+const { width } = Dimensions.get("window");
 
 // Constants for scroll calculation
 const DATE_OPTION_WIDTH = 56;
@@ -44,26 +69,26 @@ const DATE_SELECTOR_PADDING = 16;
 const APPOINTMENT_DURATION = 30; // Appointment duration in minutes
 
 const COLORS = {
-  primary: '#2563EB',
-  primaryLight: '#3B82F6',
-  primaryDark: '#1D4ED8',
-  secondary: '#F8FAFC',
-  accent: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  success: '#22C55E',
-  purple: '#8B5CF6',
-  gray100: '#F1F5F9',
-  gray200: '#E2E8F0',
-  gray300: '#CBD5E1',
-  gray400: '#94A3B8',
-  gray500: '#64748B',
-  gray600: '#475569',
-  gray700: '#334155',
-  gray800: '#1E293B',
-  gray900: '#0F172A',
-  white: '#FFFFFF',
-  background: '#FAFBFE',
+  primary: "#7AA7CC",
+  primaryLight: "#8FB5D5",
+  primaryDark: "#6999BE",
+  secondary: "#F8FAFC",
+  accent: "#7AA7CC", // Same as primary, used for consistency with [id].tsx
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  success: "#22C55E",
+  purple: "#8B5CF6",
+  gray100: "#F1F5F9",
+  gray200: "#E2E8F0",
+  gray300: "#CBD5E1",
+  gray400: "#94A3B8",
+  gray500: "#64748B",
+  gray600: "#475569",
+  gray700: "#334155",
+  gray800: "#1E293B",
+  gray900: "#090F47", // Dark navy for text, inspired by [id].tsx
+  white: "#FFFFFF",
+  background: "#FAFBFE",
 };
 
 // Types
@@ -96,7 +121,7 @@ type DateOption = {
 
 // Function to convert time in HH:MM format to minutes
 const timeToMinutes = (timeString: string): number => {
-  const [hours, minutes] = timeString.split(':').map(Number);
+  const [hours, minutes] = timeString.split(":").map(Number);
   return hours * 60 + minutes;
 };
 
@@ -104,7 +129,7 @@ const timeToMinutes = (timeString: string): number => {
 const minutesToTime = (minutes: number): string => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 };
 
 export default function BookAppointmentScreen() {
@@ -112,16 +137,16 @@ export default function BookAppointmentScreen() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [availableDates, setAvailableDates] = useState<DateOption[]>([]);
-  
+
   // Week navigation
   const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
   const [dateOptions, setDateOptions] = useState<Date[]>([]);
-  
+
   // Ref for date selector ScrollView
   const dateScrollViewRef = useRef<ScrollView>(null);
 
@@ -133,7 +158,7 @@ export default function BookAppointmentScreen() {
     const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Start on Monday
     const dates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     setDateOptions(dates);
-    
+
     // Check which dates have availabilities
     checkAvailableDates(dates);
   }, [currentWeek]);
@@ -141,33 +166,33 @@ export default function BookAppointmentScreen() {
   // Check which dates of the week have availabilities
   const checkAvailableDates = async (dates: Date[]) => {
     if (!doctorId) return;
-    
+
     try {
       setLoadingAvailableDates(true);
-      
+
       // Extract formatted dates for the API
-      const formattedDates = dates.map(date => format(date, 'yyyy-MM-dd'));
-      
+      const formattedDates = dates.map((date) => format(date, "yyyy-MM-dd"));
+
       // Retrieve availabilities for the entire week in a single request
       // Note: this would require a backend update to accept an array of dates
       // For now, we'll make one call per day, but group them in Promise.all
-      const availabilitiesPromises = formattedDates.map(date => 
-        patientAPI.getDoctorAvailability(doctorId as string, date)
+      const availabilitiesPromises = formattedDates.map((date) =>
+        patientAPI.getDoctorAvailability(doctorId as string, date),
       );
-      
+
       const availabilitiesResults = await Promise.all(availabilitiesPromises);
-      
+
       const availableDatesOptions: DateOption[] = dates.map((date, index) => ({
         date,
         formattedDate: formattedDates[index],
-        dayName: format(date, 'EEE', { locale: enUS }),
-        dayNumber: format(date, 'd'),
-        hasAvailabilities: availabilitiesResults[index].length > 0
+        dayName: format(date, "EEE", { locale: enUS }),
+        dayNumber: format(date, "d"),
+        hasAvailabilities: availabilitiesResults[index].length > 0,
       }));
-      
+
       setAvailableDates(availableDatesOptions);
     } catch (err) {
-      console.error('Error checking available dates:', err);
+      console.error("Error checking available dates:", err);
     } finally {
       setLoadingAvailableDates(false);
     }
@@ -178,18 +203,18 @@ export default function BookAppointmentScreen() {
     const fetchDoctorDetails = async () => {
       try {
         if (!doctorId) return;
-        
+
         setLoading(true);
         const doctorData = await doctorAPI.getDoctorById(doctorId as string);
         setDoctor(doctorData);
-        
+
         // Once doctor details are loaded, load slots for the selected date
-        await fetchAvailabilities(format(selectedDate, 'yyyy-MM-dd'));
-        
+        await fetchAvailabilities(format(selectedDate, "yyyy-MM-dd"));
+
         setLoading(false);
       } catch (err) {
-        console.error('Error loading doctor details:', err);
-        setError('Unable to load doctor details');
+        console.error("Error loading doctor details:", err);
+        setError("Unable to load doctor details");
         setLoading(false);
       }
     };
@@ -202,14 +227,17 @@ export default function BookAppointmentScreen() {
     try {
       setLoadingSlots(true);
       setSelectedTimeSlot(null); // Reset selection when date changes
-      
+
       // This API call will now return an array of TimeSlot objects
-      const timeSlotsData = await patientAPI.getDoctorAvailability(doctorId as string, date);
+      const timeSlotsData = await patientAPI.getDoctorAvailability(
+        doctorId as string,
+        date,
+      );
       setTimeSlots(timeSlotsData);
-      
+
       setLoadingSlots(false);
     } catch (err) {
-      console.error('Error loading time slots:', err);
+      console.error("Error loading time slots:", err);
       setTimeSlots([]); // Clear slots on error
       setLoadingSlots(false);
     }
@@ -219,12 +247,15 @@ export default function BookAppointmentScreen() {
   const goToPreviousWeek = () => {
     const newWeek = subWeeks(currentWeek, 1);
     const today = new Date();
-    
+
     // Don't allow navigation before the current week
-    if (isBefore(newWeek, today) && !isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
+    if (
+      isBefore(newWeek, today) &&
+      !isSameWeek(newWeek, today, { weekStartsOn: 1 })
+    ) {
       return;
     }
-    
+
     // Check if the new week is the current week
     if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
       // For the current week, select today
@@ -241,7 +272,7 @@ export default function BookAppointmentScreen() {
   const goToNextWeek = () => {
     const newWeek = addWeeks(currentWeek, 1);
     const today = new Date();
-    
+
     // Check if the new week is the current week
     if (isSameWeek(newWeek, today, { weekStartsOn: 1 })) {
       // For the current week, select today
@@ -264,17 +295,21 @@ export default function BookAppointmentScreen() {
 
   // Auto-scroll to selected date
   const scrollToSelectedDate = (targetDate: Date) => {
-    const selectedIndex = dateOptions.findIndex(date => 
-      format(date, 'yyyy-MM-dd') === format(targetDate, 'yyyy-MM-dd')
+    const selectedIndex = dateOptions.findIndex(
+      (date) => format(date, "yyyy-MM-dd") === format(targetDate, "yyyy-MM-dd"),
     );
-    
+
     if (selectedIndex > -1 && dateScrollViewRef.current) {
       // Calculate scroll position to center the selected date or show upcoming days
-      const scrollX = Math.max(0, selectedIndex * (DATE_OPTION_WIDTH + DATE_OPTION_MARGIN) - DATE_SELECTOR_PADDING);
-      
+      const scrollX = Math.max(
+        0,
+        selectedIndex * (DATE_OPTION_WIDTH + DATE_OPTION_MARGIN) -
+          DATE_SELECTOR_PADDING,
+      );
+
       dateScrollViewRef.current.scrollTo({
         x: scrollX,
-        animated: true
+        animated: true,
       });
     }
   };
@@ -283,7 +318,7 @@ export default function BookAppointmentScreen() {
   const handleDateSelection = (date: Date) => {
     setSelectedDate(date);
     // Retrieve availabilities for the new date
-    fetchAvailabilities(format(date, 'yyyy-MM-dd'));
+    fetchAvailabilities(format(date, "yyyy-MM-dd"));
     scrollToSelectedDate(date);
   };
 
@@ -313,33 +348,34 @@ export default function BookAppointmentScreen() {
   // Format time for display with time range (e.g., 8:00-8:30 AM)
   const formatTimeForDisplay = (startTime: string, endTime: string): string => {
     const formatSingleTime = (time: string): string => {
-      const [hours, minutes] = time.split(':');
+      const [hours, minutes] = time.split(":");
       let formattedHours = parseInt(hours);
-      const ampm = formattedHours >= 12 ? 'PM' : 'AM';
-      
+      const ampm = formattedHours >= 12 ? "PM" : "AM";
+
       if (formattedHours > 12) {
         formattedHours -= 12;
       } else if (formattedHours === 0) {
         formattedHours = 12;
       }
-      
+
       return `${formattedHours}:${minutes}`;
     };
 
     const startFormatted = formatSingleTime(startTime);
     const endFormatted = formatSingleTime(endTime);
-    
+
     // If both times are in the same period (AM/PM), only show AM/PM once
-    const startHour = parseInt(startTime.split(':')[0]);
-    const endHour = parseInt(endTime.split(':')[0]);
-    const samePeriod = (startHour < 12 && endHour < 12) || (startHour >= 12 && endHour >= 12);
-    
+    const startHour = parseInt(startTime.split(":")[0]);
+    const endHour = parseInt(endTime.split(":")[0]);
+    const samePeriod =
+      (startHour < 12 && endHour < 12) || (startHour >= 12 && endHour >= 12);
+
     if (samePeriod) {
-      const period = endHour >= 12 ? 'PM' : 'AM';
+      const period = endHour >= 12 ? "PM" : "AM";
       return `${startFormatted}-${endFormatted} ${period}`;
     } else {
-      const startPeriod = startHour >= 12 ? 'PM' : 'AM';
-      const endPeriod = endHour >= 12 ? 'PM' : 'AM';
+      const startPeriod = startHour >= 12 ? "PM" : "AM";
+      const endPeriod = endHour >= 12 ? "PM" : "AM";
       return `${startFormatted} ${startPeriod}-${endFormatted} ${endPeriod}`;
     }
   };
@@ -347,15 +383,20 @@ export default function BookAppointmentScreen() {
   // Book the appointment
   const handleBookAppointment = async () => {
     if (!selectedTimeSlot || !doctorId || !doctor) {
-      Alert.alert('Error', 'Please select a date and time, or doctor details are missing.');
+      Alert.alert(
+        "Error",
+        "Please select a date and time, or doctor details are missing.",
+      );
       return;
     }
 
     try {
-      const selectedSlot = timeSlots.find(slot => slot._id === selectedTimeSlot);
-      
+      const selectedSlot = timeSlots.find(
+        (slot) => slot._id === selectedTimeSlot,
+      );
+
       if (!selectedSlot) {
-        Alert.alert('Error', 'Selected time slot not found.');
+        Alert.alert("Error", "Selected time slot not found.");
         return;
       }
 
@@ -366,86 +407,106 @@ export default function BookAppointmentScreen() {
         slotEndTime: selectedSlot.endTime,
         price: doctor.price || 28,
         duration: APPOINTMENT_DURATION,
-        caseDetails: 'Standard consultation'
+        caseDetails: "Standard consultation",
       };
 
-      const createdAppointment = await patientAPI.createAppointment(appointmentData);
-      
+      const createdAppointment =
+        await patientAPI.createAppointment(appointmentData);
+
       router.push({
-        pathname: '/patient/payment',
-        params: { appointmentId: createdAppointment._id }
+        pathname: "/patient/payment",
+        params: { appointmentId: createdAppointment._id },
       });
     } catch (err) {
-      console.error('Error booking appointment:', err);
-      Alert.alert('Error', 'Unable to book appointment. Please try again.');
+      console.error("Error booking appointment:", err);
+      Alert.alert("Error", "Unable to book appointment. Please try again.");
     }
   };
 
   // Get default image if doctor's image is not available
-  const getDefaultImage = () => require('@/assets/images/icon.png');
-  
+  const getDefaultImage = () => require("@/assets/images/icon.png");
+
   // Get doctor's full name
   const getDoctorName = (doctor: Doctor) => {
     if (doctor.full_name) return doctor.full_name;
-    return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim();
+    return `${doctor.first_name || ""} ${doctor.last_name || ""}`.trim();
   };
 
   // Render rating stars
   const renderRatingStars = (rating: number = 4) => {
     const stars = [];
     const maxStars = 5;
-    
+
     for (let i = 1; i <= maxStars; i++) {
       stars.push(
-        <Ionicons 
-          key={i} 
-          name={i <= rating ? "star" : "star-outline"} 
-          size={20} 
-          color="#FFD700" 
-        />
+        <Ionicons
+          key={i}
+          name={i <= rating ? "star" : "star-outline"}
+          size={20}
+          color="#FFD700"
+        />,
       );
     }
-    
+
     return <View style={styles.ratingContainer}>{stars}</View>;
   };
 
   // Check if current week is this week
-  const isCurrentWeek = isSameWeek(currentWeek, new Date(), { weekStartsOn: 1 });
+  const isCurrentWeek = isSameWeek(currentWeek, new Date(), {
+    weekStartsOn: 1,
+  });
 
   // Render week navigation header
   const renderWeekNavigation = () => {
     const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
-    const weekRange = `${format(weekStart, 'MMM dd')} - ${format(weekEnd, 'MMM dd, yyyy')}`;
+    const weekRange = `${format(weekStart, "MMM dd")} - ${format(
+      weekEnd,
+      "MMM dd, yyyy",
+    )}`;
+
+    const isPrevDisabled = 
+      isBefore(subWeeks(currentWeek, 1), new Date()) &&
+      !isSameWeek(subWeeks(currentWeek, 1), new Date(), { weekStartsOn: 1 });
 
     return (
       <View style={styles.weekNavigationContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
             styles.weekNavButton,
-            isBefore(subWeeks(currentWeek, 1), new Date()) && 
-            !isSameWeek(subWeeks(currentWeek, 1), new Date(), { weekStartsOn: 1 }) && 
-            styles.disabledButton
-          ]} 
+            isPrevDisabled && styles.disabledButton,
+          ]}
           onPress={goToPreviousWeek}
-          disabled={isBefore(subWeeks(currentWeek, 1), new Date()) && 
-                  !isSameWeek(subWeeks(currentWeek, 1), new Date(), { weekStartsOn: 1 })}
+          disabled={isPrevDisabled}
         >
-          <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
+          <Ionicons 
+            name="chevron-back" 
+            size={20} 
+            color={isPrevDisabled ? COLORS.gray300 : COLORS.primary} 
+          />
         </TouchableOpacity>
-        
+
         <View style={styles.weekInfo}>
-          <TouchableOpacity style={styles.weekRangeButton} onPress={goToCurrentWeek}>
-            <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+          <TouchableOpacity
+            style={styles.weekRangeButton}
+            onPress={goToCurrentWeek}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color={COLORS.primary}
+            />
             <ThemedText style={styles.weekRangeText}>{weekRange}</ThemedText>
             {!isCurrentWeek && (
               <View style={styles.currentWeekIndicator}>
-                <ThemedText style={styles.currentWeekText}>Current Week</ThemedText>
+                <ThemedText style={styles.currentWeekText}>
+                  Current Week
+                </ThemedText>
               </View>
             )}
           </TouchableOpacity>
         </View>
-        
+
         <TouchableOpacity style={styles.weekNavButton} onPress={goToNextWeek}>
           <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
         </TouchableOpacity>
@@ -465,46 +526,54 @@ export default function BookAppointmentScreen() {
             </ThemedText>
           </View>
         ) : (
-          <ScrollView 
+          <ScrollView
             ref={dateScrollViewRef}
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
+            horizontal
+            showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.dateSelector}
           >
             {dateOptions.map((date, index) => {
-              const isSelected = format(selectedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
-              const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-              
+              const isSelected =
+                format(selectedDate, "yyyy-MM-dd") ===
+                format(date, "yyyy-MM-dd");
+              const isToday =
+                format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+
               // Check if this date has availabilities
               const dateOption = availableDates.find(
-                d => format(d.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+                (d) =>
+                  format(d.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd"),
               );
               const hasAvailabilities = dateOption?.hasAvailabilities || false;
-              
+
               return (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.dateOption,
                     isSelected && styles.selectedDateOption,
-                    !hasAvailabilities && styles.unavailableDateOption
+                    !hasAvailabilities && styles.unavailableDateOption,
                   ]}
                   onPress={() => hasAvailabilities && handleDateSelection(date)}
                   disabled={!hasAvailabilities}
                 >
-                  <ThemedText style={[
-                    styles.dayName,
-                    isSelected && styles.selectedDateText,
-                    !hasAvailabilities && styles.unavailableDateText
-                  ]}>
-                    {format(date, 'EEE', { locale: enUS })}
+                  <ThemedText
+                    style={[
+                      styles.dayName,
+                      isSelected && styles.selectedDateText,
+                      !hasAvailabilities && styles.unavailableDateText,
+                    ]}
+                  >
+                    {format(date, "EEE", { locale: enUS })}
                   </ThemedText>
-                  <ThemedText style={[
-                    styles.dayNumber,
-                    isSelected && styles.selectedDateText,
-                    !hasAvailabilities && styles.unavailableDateText
-                  ]}>
-                    {format(date, 'dd')}
+                  <ThemedText
+                    style={[
+                      styles.dayNumber,
+                      isSelected && styles.selectedDateText,
+                      !hasAvailabilities && styles.unavailableDateText,
+                    ]}
+                  >
+                    {format(date, "dd")}
                   </ThemedText>
                   {isToday && !isSelected && (
                     <View style={styles.todayIndicator} />
@@ -526,9 +595,15 @@ export default function BookAppointmentScreen() {
   // Render time slots grid
   const renderTimeSlots = () => {
     if (loadingSlots) {
-      return <ActivityIndicator size="small" color={COLORS.primary} style={styles.slotLoader} />;
+      return (
+        <ActivityIndicator
+          size="small"
+          color={COLORS.primary}
+          style={styles.slotLoader}
+        />
+      );
     }
-    
+
     if (timeSlots.length === 0) {
       return (
         <ThemedText style={styles.noSlotsText}>
@@ -536,30 +611,32 @@ export default function BookAppointmentScreen() {
         </ThemedText>
       );
     }
-    
+
     // Group slots by time of day
-    const morningSlots = timeSlots.filter(slot => {
-      const hour = parseInt(slot.startTime.split(':')[0]);
+    const morningSlots = timeSlots.filter((slot) => {
+      const hour = parseInt(slot.startTime.split(":")[0]);
       return hour < 12;
     });
-    
-    const afternoonSlots = timeSlots.filter(slot => {
-      const hour = parseInt(slot.startTime.split(':')[0]);
+
+    const afternoonSlots = timeSlots.filter((slot) => {
+      const hour = parseInt(slot.startTime.split(":")[0]);
       return hour >= 12 && hour < 17;
     });
-    
-    const eveningSlots = timeSlots.filter(slot => {
-      const hour = parseInt(slot.startTime.split(':')[0]);
+
+    const eveningSlots = timeSlots.filter((slot) => {
+      const hour = parseInt(slot.startTime.split(":")[0]);
       return hour >= 17;
     });
-    
+
     return (
       <View style={styles.timeSlotsContainer}>
         {morningSlots.length > 0 && (
           <View style={styles.timeSlotSection}>
             <View style={styles.timeSlotSectionHeader}>
               <Ionicons name="sunny-outline" size={18} color={COLORS.warning} />
-              <ThemedText style={styles.timeSlotSectionTitle}>Morning</ThemedText>
+              <ThemedText style={styles.timeSlotSectionTitle}>
+                Morning
+              </ThemedText>
             </View>
             <View style={styles.timeGrid}>
               {morningSlots.map((slot, index) => (
@@ -568,16 +645,19 @@ export default function BookAppointmentScreen() {
                   style={[
                     styles.timeSlot,
                     selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot
+                    !slot.available && styles.unavailableTimeSlot,
                   ]}
                   onPress={() => slot.available && handleTimeSlotSelect(slot)}
                   disabled={!slot.available}
                 >
-                  <ThemedText 
+                  {selectedTimeSlot === slot._id && (
+                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
+                  )}
+                  <ThemedText
                     style={[
                       styles.timeText,
                       selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText
+                      !slot.available && styles.unavailableTimeText,
                     ]}
                   >
                     {formatTimeForDisplay(slot.startTime, slot.endTime)}
@@ -587,12 +667,18 @@ export default function BookAppointmentScreen() {
             </View>
           </View>
         )}
-        
+
         {afternoonSlots.length > 0 && (
           <View style={styles.timeSlotSection}>
             <View style={styles.timeSlotSectionHeader}>
-              <Ionicons name="partly-sunny-outline" size={18} color={COLORS.primary} />
-              <ThemedText style={styles.timeSlotSectionTitle}>Afternoon</ThemedText>
+              <Ionicons
+                name="partly-sunny-outline"
+                size={18}
+                color={COLORS.primary}
+              />
+              <ThemedText style={styles.timeSlotSectionTitle}>
+                Afternoon
+              </ThemedText>
             </View>
             <View style={styles.timeGrid}>
               {afternoonSlots.map((slot, index) => (
@@ -601,16 +687,19 @@ export default function BookAppointmentScreen() {
                   style={[
                     styles.timeSlot,
                     selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot
+                    !slot.available && styles.unavailableTimeSlot,
                   ]}
                   onPress={() => slot.available && handleTimeSlotSelect(slot)}
                   disabled={!slot.available}
                 >
-                  <ThemedText 
+                  {selectedTimeSlot === slot._id && (
+                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
+                  )}
+                  <ThemedText
                     style={[
                       styles.timeText,
                       selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText
+                      !slot.available && styles.unavailableTimeText,
                     ]}
                   >
                     {formatTimeForDisplay(slot.startTime, slot.endTime)}
@@ -620,12 +709,14 @@ export default function BookAppointmentScreen() {
             </View>
           </View>
         )}
-        
+
         {eveningSlots.length > 0 && (
           <View style={styles.timeSlotSection}>
             <View style={styles.timeSlotSectionHeader}>
               <Ionicons name="moon-outline" size={18} color={COLORS.purple} />
-              <ThemedText style={styles.timeSlotSectionTitle}>Evening</ThemedText>
+              <ThemedText style={styles.timeSlotSectionTitle}>
+                Evening
+              </ThemedText>
             </View>
             <View style={styles.timeGrid}>
               {eveningSlots.map((slot, index) => (
@@ -634,16 +725,19 @@ export default function BookAppointmentScreen() {
                   style={[
                     styles.timeSlot,
                     selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot
+                    !slot.available && styles.unavailableTimeSlot,
                   ]}
                   onPress={() => slot.available && handleTimeSlotSelect(slot)}
                   disabled={!slot.available}
                 >
-                  <ThemedText 
+                  {selectedTimeSlot === slot._id && (
+                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
+                  )}
+                  <ThemedText
                     style={[
                       styles.timeText,
                       selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText
+                      !slot.available && styles.unavailableTimeText,
                     ]}
                   >
                     {formatTimeForDisplay(slot.startTime, slot.endTime)}
@@ -659,24 +753,28 @@ export default function BookAppointmentScreen() {
 
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
-          headerTitle: 'Book Appointment',
+          headerTitle: "Book Appointment",
           headerShown: true,
-          headerBackTitle: 'Back',
+          headerBackTitle: "Back",
           headerStyle: {
-            backgroundColor: '#fff',
+            backgroundColor: COLORS.white,
           },
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: "bold",
             fontSize: 20,
-            color: '#14104B'
+            color: COLORS.gray900,
           },
-        }} 
+        }}
       />
-      
+
       {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+          style={styles.loader}
+        />
       ) : error ? (
         <ThemedView style={styles.container}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -687,24 +785,28 @@ export default function BookAppointmentScreen() {
           <ThemedView style={styles.doctorCard}>
             <View style={styles.doctorProfile}>
               <Image
-                source={doctor.doctor_image ? { uri: doctor.doctor_image } : getDefaultImage()}
+                source={
+                  doctor.doctor_image
+                    ? { uri: getImageUrl(doctor.doctor_image) }
+                    : getDefaultImage()
+                }
                 style={styles.doctorImage}
                 contentFit="cover"
               />
-              
+
               <View style={styles.doctorInfo}>
                 <ThemedText type="title" style={styles.doctorName}>
                   Dr. {getDoctorName(doctor)}
                 </ThemedText>
-                
+
                 {renderRatingStars(doctor.rating)}
-                
+
                 <ThemedText style={styles.priceText}>
-                  ${doctor.price ? doctor.price.toFixed(2) : '28.00'} / session
+                  ${doctor.price ? doctor.price.toFixed(2) : "28.00"} / session
                 </ThemedText>
               </View>
             </View>
-            
+
             <ThemedText style={styles.experienceText}>
               {doctor.experience} years of experience
             </ThemedText>
@@ -712,7 +814,7 @@ export default function BookAppointmentScreen() {
 
           {/* Week navigation */}
           {renderWeekNavigation()}
-          
+
           {/* Date selection */}
           {renderDateSelector()}
 
@@ -721,15 +823,15 @@ export default function BookAppointmentScreen() {
             <ThemedText type="title" style={styles.sectionTitle}>
               Choose a time
             </ThemedText>
-            
+
             {renderTimeSlots()}
           </ThemedView>
 
           {/* Book button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.bookButton,
-              (!selectedDate || !selectedTimeSlot) && styles.disabledButton
+              (!selectedDate || !selectedTimeSlot) && styles.disabledButton,
             ]}
             onPress={handleBookAppointment}
             disabled={!selectedDate || !selectedTimeSlot}
@@ -755,22 +857,22 @@ const styles = StyleSheet.create({
   },
   loader: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   slotLoader: {
     margin: 20,
   },
   errorText: {
     color: COLORS.danger,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 30,
     fontSize: 16,
   },
   doctorCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
     margin: 16,
     shadowColor: COLORS.gray900,
     shadowOffset: { width: 0, height: 2 },
@@ -779,33 +881,34 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   doctorProfile: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 15,
   },
   doctorInfo: {
     flex: 1,
     marginLeft: 15,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   doctorImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#F4F4F4",
   },
   doctorName: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.gray900,
     marginBottom: 5,
   },
   ratingContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 5,
   },
   priceText: {
     fontSize: 18,
     color: COLORS.primary,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   experienceText: {
     fontSize: 16,
@@ -813,8 +916,8 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: COLORS.white,
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
     margin: 16,
     marginTop: 16,
     shadowColor: COLORS.gray900,
@@ -824,16 +927,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 15,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: "bold",
     color: COLORS.gray900,
-    marginBottom: 15,
+    marginBottom: 10,
   },
   timeSlotsContainer: {
     marginTop: 5,
@@ -842,8 +945,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   timeSlotSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 10,
     paddingBottom: 5,
     borderBottomWidth: 1,
@@ -851,29 +954,36 @@ const styles = StyleSheet.create({
   },
   timeSlotSectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.gray800,
     marginLeft: 8,
   },
   timeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginTop: 5,
   },
   timeSlot: {
-    width: '31%',
+    width: "31%",
     backgroundColor: COLORS.gray100,
     borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    alignItems: 'center',
+    padding: 18,
+    marginBottom: 12,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.gray200,
+    justifyContent: 'center',
+    minHeight: 60,
   },
   selectedTimeSlot: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryDark,
+    borderColor: COLORS.primaryDark,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   unavailableTimeSlot: {
     backgroundColor: COLORS.gray200,
@@ -881,31 +991,32 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   timeText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.gray800,
-    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.gray700,
+    textAlign: "center",
   },
   selectedTimeText: {
     color: COLORS.white,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   unavailableTimeText: {
-    color: COLORS.gray500,
+    color: COLORS.gray400,
+    textDecorationLine: 'line-through',
   },
   noSlotsText: {
-    textAlign: 'center',
+    textAlign: "center",
     color: COLORS.gray500,
     marginVertical: 20,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   bookButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 18,
+    borderRadius: 10,
+    padding: 14,
     margin: 16,
     marginTop: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   disabledButton: {
     backgroundColor: COLORS.gray400,
@@ -913,13 +1024,13 @@ const styles = StyleSheet.create({
   bookButtonText: {
     color: COLORS.white,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   // Styles for week navigation and date selection
   weekNavigationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 16,
     backgroundColor: COLORS.white,
@@ -937,31 +1048,31 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: `${COLORS.primary}10`,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   weekInfo: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     marginHorizontal: 16,
   },
   weekRangeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: `${COLORS.primary}05`,
-    position: 'relative',
+    position: "relative",
   },
   weekRangeText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.gray800,
     marginLeft: 8,
   },
   currentWeekIndicator: {
-    position: 'absolute',
+    position: "absolute",
     right: -8,
     top: -8,
     backgroundColor: COLORS.accent,
@@ -971,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   currentWeekText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.white,
   },
   dateSelectorContainer: {
@@ -994,10 +1105,10 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 16,
     backgroundColor: COLORS.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: DATE_OPTION_MARGIN,
-    position: 'relative',
+    position: "relative",
   },
   selectedDateOption: {
     backgroundColor: COLORS.primary,
@@ -1013,9 +1124,9 @@ const styles = StyleSheet.create({
   },
   dayName: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.gray500,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginBottom: 4,
   },
   selectedDateText: {
@@ -1026,11 +1137,11 @@ const styles = StyleSheet.create({
   },
   dayNumber: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.gray700,
   },
   todayIndicator: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 6,
     width: 5,
     height: 5,
@@ -1038,24 +1149,29 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   noAvailabilityIndicator: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
     width: 16,
     height: 16,
     borderRadius: 8,
     backgroundColor: COLORS.gray400,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   dateLoaderContainer: {
     paddingVertical: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   dateLoaderText: {
     marginTop: 8,
     fontSize: 14,
     color: COLORS.gray600,
+  },
+  selectedIcon: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
   },
 });
