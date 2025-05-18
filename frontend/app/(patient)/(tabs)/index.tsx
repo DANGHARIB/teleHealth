@@ -3,10 +3,30 @@ import { Image } from 'expo-image';
 import { StyleSheet, ActivityIndicator, TouchableOpacity, FlatList, View, ScrollView } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { patientAPI } from '@/services/api';
+
+// API URL constants
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+const BASE_SERVER_URL = API_URL.replace('/api', '');
+
+// Helper function to convert image paths into proper URLs
+const getImageUrl = (imagePath: string | undefined): string | undefined => {
+  if (!imagePath || imagePath.trim() === '') return undefined;
+  
+  // Handle both absolute paths (from older records) and relative paths
+  if (imagePath.startsWith('C:') || imagePath.startsWith('/') || imagePath.startsWith('\\')) {
+    // For absolute paths, extract just the filename
+    const fileName = imagePath.split(/[\\\/]/).pop();
+    return `${BASE_SERVER_URL}/uploads/${fileName}`;
+  } else {
+    // For proper relative paths
+    return `${BASE_SERVER_URL}${imagePath.replace(/\\/g, '/')}`;
+  }
+};
 
 // App theme colors
 const COLORS = {
@@ -130,7 +150,7 @@ export default function PatientHomeScreen() {
       activeOpacity={0.8}
     >
       <Image
-        source={item.doctor_image ? { uri: item.doctor_image } : getDefaultImage()}
+        source={item.doctor_image ? { uri: getImageUrl(item.doctor_image) } : getDefaultImage()}
         style={styles.doctorImage}
         contentFit="cover"
         transition={300}
