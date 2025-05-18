@@ -62,6 +62,12 @@ const appointmentSchema = new mongoose.Schema({
 appointmentSchema.index({ doctor: 1, createdAt: -1 });
 appointmentSchema.index({ patient: 1, createdAt: -1 });
 
+// Explicitly define a NON-unique index on availability
+appointmentSchema.index({ availability: 1 }, { unique: false });
+
+// Create a compound index for doctor + patient + date to ensure one appointment per day per patient per doctor
+appointmentSchema.index({ doctor: 1, patient: 1, "availability": 1 }, { unique: true });
+
 const Appointment = mongoose.model('Appointment', appointmentSchema);
 
 module.exports = Appointment; 

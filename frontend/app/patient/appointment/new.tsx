@@ -383,17 +383,12 @@ export default function BookAppointmentScreen() {
   // Book the appointment
   const handleBookAppointment = async () => {
     if (!selectedTimeSlot || !doctorId || !doctor) {
-      Alert.alert(
-        "Error",
-        "Please select a date and time, or doctor details are missing.",
-      );
+      Alert.alert("Error", "Please select a date and time, or doctor details are missing.");
       return;
     }
 
     try {
-      const selectedSlot = timeSlots.find(
-        (slot) => slot._id === selectedTimeSlot,
-      );
+      const selectedSlot = timeSlots.find((slot) => slot._id === selectedTimeSlot);
 
       if (!selectedSlot) {
         Alert.alert("Error", "Selected time slot not found.");
@@ -410,16 +405,72 @@ export default function BookAppointmentScreen() {
         caseDetails: "Standard consultation",
       };
 
-      const createdAppointment =
-        await patientAPI.createAppointment(appointmentData);
+      const createdAppointment = await patientAPI.createAppointment(appointmentData);
 
       router.push({
         pathname: "/patient/payment",
         params: { appointmentId: createdAppointment._id },
       });
-    } catch (err) {
-      console.error("Error booking appointment:", err);
-      Alert.alert("Error", "Unable to book appointment. Please try again.");
+    } catch (err: any) { // Type err as any to safely access potential properties
+      let coreMessage = "An unexpected error occurred.";
+      let isHandledError = false;
+
+      // Attempt to extract the message from common error structures
+      if (err && err.message && typeof err.message === 'string') {
+        // Covers cases where err is { message: "actual string" } or an Error instance
+        coreMessage = err.message;
+      } else if (typeof err === 'string') {
+        // Covers cases where err itself is the message string
+        coreMessage = err;
+      } else if (typeof err === 'object' && err !== null) {
+        // Fallback for other object structures, stringify it
+        coreMessage = JSON.stringify(err);
+      }
+
+      // Log the raw error details in development for debugging, but not for specifically handled user errors if we want to suppress the toast for them.
+      // The toast is likely triggered by console.error in dev environments.
+
+      // Now check the coreMessage for specific known error strings
+      if (coreMessage.includes("Vous avez déjà un rendez-vous avec ce médecin pour cette date")) {
+        Alert.alert(
+          "Appointment Already Booked",
+          "You already have an appointment with this doctor on the selected date. Please choose a different date or doctor.",
+          [{ text: "OK", style: "default" }]
+        );
+        isHandledError = true;
+      } else if (coreMessage.includes("Ce créneau spécifique de 30 minutes est déjà réservé")) {
+        Alert.alert(
+          "Time Slot Unavailable",
+          "This time slot is no longer available. Please select a different time.",
+          [{ text: "OK", style: "default" }]
+        );
+        isHandledError = true;
+      } else if (
+        coreMessage.includes("Erreur serveur lors de la création du rendez-vous") ||
+        coreMessage.includes("duplicate") || // General duplicate error
+        coreMessage.includes("already booked") // General already booked error
+      ) {
+        Alert.alert(
+          "Booking Conflict",
+          "There was an issue with your booking. This time may no longer be available or you might already have a booking. Please try a different time slot or date.",
+          [{ text: "OK", style: "default" }]
+        );
+        isHandledError = true;
+      } else {
+        Alert.alert(
+          "Booking Failed",
+          "Unable to book appointment. Please try again or choose a different time slot.",
+          [{ text: "OK", style: "default" }]
+        );
+      }
+
+      // Only use console.error for unhandled/unexpected errors in development
+      if (!isHandledError && process.env.NODE_ENV !== 'production') {
+        console.error("Error booking appointment (unhandled):", err);
+      } else if (isHandledError && process.env.NODE_ENV !== 'production') {
+        // For handled errors, use console.log if you still want to see them in dev without the aggressive red toast
+        console.log("Handled booking error:", coreMessage, "Raw error:", err);
+      }
     }
   };
 
