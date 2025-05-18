@@ -1,0 +1,25 @@
+const express = require('express');
+const router = express.Router();
+const { 
+  getUserNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  clearAllNotifications,
+  createTestNotification
+} = require('../controllers/notificationController');
+const { protect, admin } = require('../middlewares/authMiddleware');
+
+// Routes protégées pour tous les utilisateurs authentifiés
+router.get('/', protect, getUserNotifications);
+router.get('/unread-count', protect, getUnreadCount);
+router.put('/:id/read', protect, markAsRead);
+router.put('/read-all', protect, markAllAsRead);
+router.delete('/:id', protect, deleteNotification);
+router.delete('/clear-all', protect, clearAllNotifications);
+
+// Routes protégées pour les admins seulement
+router.post('/test', protect, admin, createTestNotification);
+
+module.exports = router; 

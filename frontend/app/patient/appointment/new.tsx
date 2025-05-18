@@ -133,7 +133,7 @@ const minutesToTime = (minutes: number): string => {
 };
 
 export default function BookAppointmentScreen() {
-  const { doctorId } = useLocalSearchParams();
+  const { doctorId, appointmentIdToReschedule } = useLocalSearchParams< { doctorId: string; appointmentIdToReschedule?: string }>();
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -395,22 +395,61 @@ export default function BookAppointmentScreen() {
         return;
       }
 
-      const appointmentData = {
-        doctorId: doctorId,
-        availabilityId: selectedSlot.availabilityId,
-        slotStartTime: selectedSlot.startTime,
-        slotEndTime: selectedSlot.endTime,
-        price: doctor.price || 28,
-        duration: APPOINTMENT_DURATION,
-        caseDetails: "Standard consultation",
-      };
+      if (appointmentIdToReschedule) {
+        // This is a reschedule request
+        const rescheduleData = {
+          newAvailabilityId: selectedSlot.availabilityId, // The ID of the general availability block
+          newSlotStartTime: selectedSlot.startTime,
+          newSlotEndTime: selectedSlot.endTime,
+          price: doctor.price || 28, // Price might need re-evaluation or carry-over
+          duration: APPOINTMENT_DURATION,
+        };
+        
+        console.log("Attempting to reschedule appointment:", appointmentIdToReschedule, "with data:", rescheduleData);
+        const rescheduledAppointment = await patientAPI.rescheduleAppointment(appointmentIdToReschedule as string, rescheduleData);
+        
+        Alert.alert(
+          "Appointment Rescheduled",
+          `Your appointment has been successfully rescheduled for ${format(selectedDate, "MMM dd, yyyy")} at ${formatTimeForDisplay(selectedSlot.startTime, selectedSlot.endTime)}. Payment status remains unchanged.`,
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace('/(patient)/(tabs)/appointment'), // Navigate to appointments list
+            },
+          ]
+        );
 
-      const createdAppointment = await patientAPI.createAppointment(appointmentData);
+      } else {
+        // This is a new booking
+        const appointmentData = {
+          doctorId: doctorId,
+          availabilityId: selectedSlot.availabilityId,
+          slotStartTime: selectedSlot.startTime,
+          slotEndTime: selectedSlot.endTime,
+          price: doctor.price || 28,
+          duration: APPOINTMENT_DURATION,
+          caseDetails: "Standard consultation",
+        };
 
-      router.push({
-        pathname: "/patient/payment",
-        params: { appointmentId: createdAppointment._id },
-      });
+        const createdAppointment = await patientAPI.createAppointment(appointmentData);
+
+        // Informer l'utilisateur qu'il doit finaliser le paiement
+        Alert.alert(
+          "Réservation en attente",
+          "Votre réservation est en attente de paiement. Veuillez finaliser le paiement pour confirmer votre rendez-vous.",
+          [
+            { 
+              text: "Continuer vers le paiement", 
+              onPress: () => {
+                router.push({
+                  pathname: "/patient/payment",
+                  params: { appointmentId: createdAppointment._id },
+                });
+              } 
+            }
+          ]
+        );
+      }
     } catch (err: any) { // Type err as any to safely access potential properties
       let coreMessage = "An unexpected error occurred.";
       let isHandledError = false;
@@ -888,7 +927,7 @@ export default function BookAppointmentScreen() {
             disabled={!selectedDate || !selectedTimeSlot}
           >
             <ThemedText style={styles.bookButtonText}>
-              Book Appointment
+              {appointmentIdToReschedule ? "Reschedule Appointment" : "Book Appointment"}
             </ThemedText>
           </TouchableOpacity>
         </ScrollView>

@@ -219,16 +219,19 @@ export default function AppointmentScreen() {
             },
             {
               text: "Reschedule",
-              onPress: () => {
-                // Rediriger vers la page de reprogrammation
-                const appointment = appointments.find(app => app._id === appointmentId);
-                if (appointment) {
-                  router.push({
-                    pathname: '/patient/doctor',
-                    params: { doctorId: appointment.doctor._id }
-                  });
+                onPress: () => {
+                  // Rediriger vers la page de reprogrammation
+                  const appointmentToReschedule = appointments.find(app => app._id === appointmentId);
+                  if (appointmentToReschedule) {
+                    router.push({
+                      pathname: '/patient/appointment/new',
+                      params: { 
+                        doctorId: appointmentToReschedule.doctor._id,
+                        appointmentIdToReschedule: appointmentToReschedule._id
+                      }
+                    });
+                  }
                 }
-              }
             }
           ]
         );
@@ -624,8 +627,11 @@ export default function AppointmentScreen() {
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}
                   onPress={() => router.push({
-                    pathname: '/patient/doctor',
-                    params: { doctorId: appointment.doctor._id }
+                    pathname: '/patient/appointment/new',
+                    params: { 
+                      doctorId: appointment.doctor._id,
+                      appointmentIdToReschedule: appointment._id
+                    }
                   })}
                 >
                   <Ionicons name="calendar-outline" size={16} color={COLORS.white} />
@@ -663,6 +669,7 @@ export default function AppointmentScreen() {
         visible={cancelModalVisible}
         onRequestClose={() => setCancelModalVisible(false)}
       >
+        
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1192,4 +1199,4 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     marginTop: 5,
   }
-}); 
+});

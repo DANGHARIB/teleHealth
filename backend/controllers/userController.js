@@ -119,16 +119,21 @@ exports.registerDeviceToken = async (req, res) => {
       return res.status(400).json({ message: 'Token requis' });
     }
     
-    // Dans une application réelle, on stockerait le token dans la base de données
-    // Ici on utilise un service qui stocke le token en mémoire
-    const notificationService = require('../services/notificationService');
-    const success = notificationService.registerDeviceToken(req.user._id, token);
+    // Mise à jour du token dans la base de données
+    const user = await User.findById(req.user._id);
     
-    if (success) {
-      res.status(200).json({ message: 'Token enregistré avec succès' });
-    } else {
-      res.status(500).json({ message: 'Erreur lors de l\'enregistrement du token' });
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
+    
+    user.deviceToken = token;
+    await user.save();
+    
+    // Enregistrer également dans le service de notification (pour la compatibilité actuelle)
+    const notificationService = require('../services/notificationService');
+    notificationService.registerDeviceToken(req.user._id, token);
+    
+    res.status(200).json({ message: 'Token enregistré avec succès' });
   } catch (error) {
     console.error('Erreur lors de l\'enregistrement du token d\'appareil:', error);
     res.status(500).json({ message: 'Erreur serveur' });

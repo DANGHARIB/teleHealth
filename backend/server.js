@@ -51,6 +51,9 @@ app.use('/api/questions', require('./routes/questions'));
 app.use('/api/appointments', require('./routes/appointments'));
 app.use('/api/availability', require('./routes/availability'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/cron', require('./routes/cron'));
+app.use('/api/payment-methods', require('./routes/paymentMethods'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // Gestion des erreurs 404
 app.use((req, res) => {

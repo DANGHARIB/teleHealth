@@ -36,7 +36,10 @@ exports.createPayment = async (req, res) => {
       status: 'completed'
     });
     
-    // Le rendez-vous est déjà marqué comme payé par défaut
+    // Mettre à jour le statut du rendez-vous et du paiement
+    appointment.paymentStatus = 'completed';
+    appointment.status = 'confirmed';
+    await appointment.save();
     
     // Sauvegarder le paiement
     const createdPayment = await payment.save();

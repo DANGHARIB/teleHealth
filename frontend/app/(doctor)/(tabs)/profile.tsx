@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useContext } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -8,12 +8,16 @@ import {
   SafeAreaView, 
   StatusBar,
   ScrollView,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { NotificationContext } from '../../../contexts/NotificationContext';
+import { NotificationIcon } from '../../../components/ui/NotificationIcon';
+import { NotificationsModal } from '../../../components/ui/NotificationsModal';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 const BASE_SERVER_URL = API_URL.replace('/api', '');
@@ -46,6 +50,8 @@ export default function DoctorProfileTabScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState('Doctor');
   const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const { notificationQueue } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -220,8 +226,17 @@ export default function DoctorProfileTabScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Profile</Text>
-          <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>My Profile</Text>
+            <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
+          </View>
+          
+          <NotificationIcon 
+            onPress={() => setNotificationModalVisible(true)}
+            unreadCount={notificationQueue.length}
+            style={styles.notificationIcon}
+            color={COLORS.white}
+          />
         </View>
 
         {renderProfileHeader()}
@@ -245,6 +260,12 @@ export default function DoctorProfileTabScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      <NotificationsModal 
+        visible={notificationModalVisible} 
+        onClose={() => setNotificationModalVisible(false)} 
+        navigation={router}
+      />
     </SafeAreaView>
   );
 }
@@ -261,9 +282,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 32,
+  },
+  headerTitleContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -413,5 +440,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.white,
     marginLeft: 8,
+  },
+  notificationIcon: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 50,
+    padding: 8,
+    marginLeft: 10
   },
 });

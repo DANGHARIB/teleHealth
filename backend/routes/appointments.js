@@ -8,7 +8,8 @@ const {
   getAppointmentById,
   updateAppointmentStatus,
   cancelAppointment,
-  rescheduleAppointment
+  requestAppointmentReschedule,
+  patientRescheduleAppointment // Add new controller function
 } = require('../controllers/appointmentController');
 const { protect, admin, doctor, patient } = require('../middlewares/authMiddleware');
 
@@ -22,14 +23,15 @@ router.delete('/:id', protect, cancelAppointment);
 // Routes protégées pour les patients
 router.post('/', protect, patient, createAppointment);
 router.get('/patient/me', protect, patient, getPatientAppointments);
+router.put('/:appointmentId/patient-reschedule', protect, patient, patientRescheduleAppointment); // New route for patient reschedule
 
 // Routes protégées pour les médecins
 router.get('/doctor/me', protect, doctor, getDoctorAppointments);
 router.put('/:id/status', protect, doctor, updateAppointmentStatus);
 // La route de confirmation a été supprimée car les rendez-vous sont confirmés automatiquement après paiement
-router.put('/:id/reschedule', protect, doctor, rescheduleAppointment);
+router.post('/:id/request-reschedule', protect, doctor, requestAppointmentReschedule);
 
 // Route d'annulation pour les patients
 router.put('/:id/cancel', protect, patient, cancelAppointment);
 
-module.exports = router; 
+module.exports = router;

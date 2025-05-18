@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  deviceToken: {
+    type: String,
+    default: null
+  },
   hasCompletedAssessment: {
     type: Boolean,
     default: false

@@ -4,11 +4,15 @@ const {
   getUsers, 
   getUserById, 
   updateUser, 
-  deleteUser 
+  deleteUser,
+  registerDeviceToken
 } = require('../controllers/userController');
 const { protect, admin } = require('../middlewares/authMiddleware');
 
-// Toutes les routes sont protégées par l'authentification et le rôle admin
+// Route pour enregistrer le token d'appareil (accessible à tous les utilisateurs authentifiés)
+router.post('/device-token', protect, registerDeviceToken);
+
+// Toutes les routes suivantes sont protégées par l'authentification et le rôle admin
 router.use(protect, admin);
 
 router.route('/')

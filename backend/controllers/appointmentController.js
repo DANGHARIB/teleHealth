@@ -115,6 +115,7 @@ exports.createAppointment = async (req, res) => {
       patient: patient._id,
       "availability": { $in: await getAvailabilitiesForSameDay(availability.date, doctorId) },
       status: { $nin: ["cancelled", "rejected"] },
+      paymentStatus: "completed" // Ne compte que les rendez-vous payés
     });
 
     if (existingAppointmentForPatient) {
@@ -134,6 +135,13 @@ exports.createAppointment = async (req, res) => {
       availability: availabilityId,
       slotStartTime: slotStartTime,
       status: { $nin: ["cancelled", "rejected"] },
+      $or: [
+        { paymentStatus: "completed" }, // Rendez-vous payés
+        { 
+          paymentStatus: "pending", 
+          createdAt: { $gt: new Date(Date.now() - 30 * 60 * 1000) } // Rendez-vous en attente depuis moins de 30 minutes
+        }
+      ]
     });
 
     if (existingAppointmentForSlot) {
@@ -161,13 +169,21 @@ exports.createAppointment = async (req, res) => {
       price: price || 28,
       duration: duration || 30,
       caseDetails: caseDetails || "Consultation standard",
-      status: "confirmed",
-      paymentStatus: "completed",
+      status: "pending",
+      paymentStatus: "pending",
     });
 
-    // NE PAS FAIRE : availability.isBooked = true;
-    // NE PAS FAIRE : await availability.save();
-    // La réservation d'un créneau de 30 min ne rend pas toute la plage indisponible.
+    // Mark the specific 30-minute availability slot as booked
+    // This assumes 'availabilityId' refers to a specific 30-min slot.
+    const specificAvailabilitySlot = await Availability.findById(availabilityId);
+    if (!specificAvailabilitySlot) {
+      // This should ideally not happen if previous checks passed, but as a safeguard:
+      console.log("❌ Erreur critique: Le créneau de disponibilité spécifique n'a pas été trouvé avant de le marquer comme réservé:", availabilityId);
+      return res.status(500).json({ message: "Erreur lors de la mise à jour de la disponibilité." });
+    }
+    specificAvailabilitySlot.isBooked = true;
+    await specificAvailabilitySlot.save();
+    console.log("✅ Créneau de disponibilité spécifique marqué comme réservé:", availabilityId);
 
     const createdAppointment = await appointment.save();
     console.log("✅ Rendez-vous (créneau de 30 min) créé avec succès:", {
@@ -406,108 +422,158 @@ exports.updateAppointmentStatus = async (req, res) => {
   }
 };
 
-// @desc    Reprogrammer un rendez-vous
-// @route   PUT /api/appointments/:id/reschedule
+// @desc    Demander une reprogrammation de rendez-vous (par le médecin)
+// @route   POST /api/appointments/:id/request-reschedule
 // @access  Private/Doctor
-exports.rescheduleAppointment = async (req, res) => {
+exports.requestAppointmentReschedule = async (req, res) => {
   try {
-    const { availabilityId } = req.body;
-    if (!availabilityId) {
-      return res
-        .status(400)
-        .json({
-          message: "Veuillez fournir un nouveau créneau de disponibilité",
-        });
-    }
-
-    // Trouver le rendez-vous à reprogrammer d'abord
+    // Trouver le rendez-vous 
     const appointment = await Appointment.findById(req.params.id);
+    
     if (!appointment) {
       return res.status(404).json({ message: "Rendez-vous non trouvé" });
     }
-
-    // Si c'est le même créneau, ne rien faire
-    if (appointment.availability.toString() === availabilityId) {
-      return res
-        .status(400)
-        .json({
-          message: "Ce créneau est déjà sélectionné pour ce rendez-vous",
-        });
-    }
-
+    
     // Vérifier les autorisations
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor || doctor._id.toString() !== appointment.doctor.toString()) {
-      return res
-        .status(403)
-        .json({ message: "Non autorisé à reprogrammer ce rendez-vous" });
+      return res.status(403).json({ message: "Non autorisé à demander la reprogrammation de ce rendez-vous" });
+    }
+    
+    // Mettre à jour le statut du rendez-vous pour indiquer qu'une reprogrammation est demandée
+    appointment.status = "reschedule_requested";
+    await appointment.save();
+    
+    // Envoyer une notification au patient
+    await notificationService.notifyRescheduleRequest(appointment._id);
+    
+    res.status(200).json({ 
+      message: "Demande de reprogrammation envoyée avec succès", 
+      appointment 
+    });
+  } catch (error) {
+    console.error("Erreur lors de la demande de reprogrammation:", error);
+    res.status(500).json({ 
+      message: "Erreur serveur lors de la demande de reprogrammation" 
+    });
+  }
+};
+
+// @desc    Reprogrammer un rendez-vous par le patient
+// @route   PUT /api/appointments/:id/patient-reschedule
+// @access  Private/Patient
+exports.patientRescheduleAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params; // ID of the appointment to reschedule
+    const {
+      newAvailabilityId, // ID of the new general availability block
+      newSlotStartTime,  // New specific 30-min start time
+      newSlotEndTime,    // New specific 30-min end time
+      // price and duration might be carried over or re-confirmed from doctor's profile/new availability
+    } = req.body;
+
+    console.log("===== DÉBUT REPROGRAMMATION PAR PATIENT =====");
+    console.log("Appointment ID à reprogrammer:", appointmentId);
+    console.log("Nouvelles données de slot:", JSON.stringify({ newAvailabilityId, newSlotStartTime, newSlotEndTime }, null, 2));
+
+    if (!newAvailabilityId || !newSlotStartTime || !newSlotEndTime) {
+      console.log("❌ Données du nouveau créneau manquantes");
+      return res.status(400).json({ message: "Les détails du nouveau créneau sont requis." });
     }
 
-    // Vérifier si la nouvelle disponibilité existe
-    const newAvailability = await Availability.findById(availabilityId);
+    const patient = await Patient.findOne({ user: req.user._id });
+    if (!patient) {
+      console.log("❌ Patient non trouvé pour l'utilisateur:", req.user._id);
+      return res.status(404).json({ message: "Patient non trouvé." });
+    }
+    console.log("✅ Patient identifié:", patient._id);
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      console.log("❌ Rendez-vous non trouvé:", appointmentId);
+      return res.status(404).json({ message: "Rendez-vous non trouvé." });
+    }
+    console.log("✅ Rendez-vous trouvé:", appointment._id, "Status actuel:", appointment.status);
+
+    if (appointment.patient.toString() !== patient._id.toString()) {
+      console.log("❌ Accès non autorisé. Patient:", patient._id, "Propriétaire RDV:", appointment.patient);
+      return res.status(403).json({ message: "Non autorisé à modifier ce rendez-vous." });
+    }
+
+    // Vérifier si le nouveau créneau est différent de l'ancien
+    if (appointment.availability.toString() === newAvailabilityId && appointment.slotStartTime === newSlotStartTime) {
+      console.log("❌ Le nouveau créneau est identique à l'ancien.");
+      return res.status(400).json({ message: "Le nouveau créneau choisi est identique à l'actuel." });
+    }
+    
+    const newAvailability = await Availability.findById(newAvailabilityId);
     if (!newAvailability) {
-      return res
-        .status(404)
-        .json({ message: "Nouveau créneau de disponibilité non trouvé" });
+      console.log("❌ Nouvelle plage de disponibilité générale non trouvée:", newAvailabilityId);
+      return res.status(404).json({ message: "Nouvelle plage de disponibilité non trouvée." });
     }
+    console.log("✅ Nouvelle plage de disponibilité générale trouvée:", newAvailabilityId);
 
-    // Vérifier si la disponibilité est déjà réservée pour un autre rendez-vous actif
-    const existingActiveAppointment = await Appointment.findOne({
-      availability: availabilityId,
-      status: { $nin: ["cancelled"] },
-      _id: { $ne: appointment._id }, // Exclure le rendez-vous actuel
+    // Vérifier si le nouveau créneau spécifique est déjà réservé
+    const existingAppointmentForNewSlot = await Appointment.findOne({
+      doctor: appointment.doctor, // Keep the same doctor
+      availability: newAvailabilityId,
+      slotStartTime: newSlotStartTime,
+      status: { $nin: ["cancelled", "rejected"] },
+      _id: { $ne: appointmentId }, // Exclure le rdv actuel en cours de modification
+      $or: [
+        { paymentStatus: "completed" },
+        { paymentStatus: "pending", createdAt: { $gt: new Date(Date.now() - 30 * 60 * 1000) } }
+      ]
     });
 
-    if (existingActiveAppointment) {
-      return res
-        .status(400)
-        .json({
-          message: "Ce créneau est déjà réservé par un autre rendez-vous",
-        });
+    if (existingAppointmentForNewSlot) {
+      console.log("❌ Nouveau créneau spécifique déjà réservé:", {
+        date: new Date(newAvailability.date).toLocaleDateString("fr-FR"),
+        slot: `${newSlotStartTime} - ${newSlotEndTime}`,
+        appointmentId: existingAppointmentForNewSlot._id,
+      });
+      return res.status(400).json({ message: "Ce nouveau créneau spécifique est déjà réservé." });
+    }
+    console.log("✅ Nouveau créneau spécifique disponible.");
+
+    // Conserver l'ancienne date/heure pour la notification et libérer l'ancien créneau
+    const oldAvailabilitySlot = await Availability.findById(appointment.availability);
+    const oldDate = oldAvailabilitySlot ? oldAvailabilitySlot.date : "";
+    const oldTime = appointment.slotStartTime; 
+
+    if (oldAvailabilitySlot) {
+      oldAvailabilitySlot.isBooked = false;
+      await oldAvailabilitySlot.save();
+      console.log("✅ Ancien créneau de disponibilité libéré:", oldAvailabilitySlot._id);
     }
 
-    // Récupérer l'ancienne disponibilité pour les informations de notification
-    const oldAvailability = await Availability.findById(
-      appointment.availability,
-    );
-    const oldDate = oldAvailability ? oldAvailability.date : "";
-    const oldTime = oldAvailability ? oldAvailability.startTime : "";
-
-    // Libérer l'ancien créneau
-    if (oldAvailability) {
-      oldAvailability.isBooked = false;
-      await oldAvailability.save();
-    }
-
-    // Réserver le nouveau créneau
+    // Réserver le nouveau créneau (newAvailability a déjà été récupéré et vérifié)
     newAvailability.isBooked = true;
     await newAvailability.save();
+    console.log("✅ Nouveau créneau de disponibilité marqué comme réservé:", newAvailability._id);
 
     // Mettre à jour le rendez-vous
+    appointment.availability = newAvailabilityId;
+    appointment.slotStartTime = newSlotStartTime;
+    appointment.slotEndTime = newSlotEndTime;
     appointment.status = "rescheduled";
-    appointment.availability = availabilityId;
+    // price and duration could be updated if they change with the new availability, e.g. from doctor's profile
+    // appointment.price = newAvailability.price || appointment.price; // Example if price is on availability
+    // appointment.duration = newAvailability.duration || appointment.duration; // Example
 
-    // Sauvegarder le rendez-vous mis à jour
     const updatedAppointment = await appointment.save();
+    console.log("✅ Rendez-vous reprogrammé avec succès par le patient:", updatedAppointment._id);
 
-    // Envoyer une notification au patient
-    await notificationService.notifyAppointmentRescheduled(
-      updatedAppointment,
-      oldDate,
-      oldTime,
-    );
-
-    // Reprogrammer le rappel 1h avant le rendez-vous
+    // Envoyer des notifications
+    await notificationService.notifyAppointmentRescheduledByPatient(updatedAppointment, oldDate, oldTime);
     await notificationService.scheduleAppointmentReminders(updatedAppointment);
-
+    
+    console.log("===== FIN REPROGRAMMATION PAR PATIENT =====");
     res.status(200).json(updatedAppointment);
+
   } catch (error) {
-    console.error("Erreur lors de la reprogrammation du rendez-vous:", error);
-    res
-      .status(500)
-      .json({
-        message: "Erreur serveur lors de la reprogrammation du rendez-vous",
-      });
+    console.error("❌ Erreur lors de la reprogrammation du rendez-vous par le patient:", error);
+    res.status(500).json({ message: "Erreur serveur lors de la reprogrammation." });
   }
 };
 

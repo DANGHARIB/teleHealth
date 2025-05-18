@@ -142,6 +142,16 @@ export const doctorAPI = {
     }
   },
   
+  // Récupérer un rendez-vous par ID
+  getAppointmentById: async (id) => {
+    try {
+      const response = await api.get(`/appointments/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
   // Récupérer les paiements du médecin
   getPayments: async () => {
     try {
@@ -172,10 +182,10 @@ export const doctorAPI = {
     }
   },
   
-  // Reprogrammer un rendez-vous
-  rescheduleAppointment: async (appointmentId, availabilityId) => {
+  // Demander une reprogrammation d'un rendez-vous (envoie une notification au patient)
+  requestRescheduleAppointment: async (appointmentId) => {
     try {
-      const response = await api.put(`/appointments/${appointmentId}/reschedule`, { availabilityId });
+      const response = await api.post(`/appointments/${appointmentId}/request-reschedule`);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -347,10 +357,61 @@ export const patientAPI = {
     }
   },
 
+  // Reprogrammer un rendez-vous par le patient
+  rescheduleAppointment: async (appointmentId, rescheduleData) => {
+    try {
+      // Note: rescheduleData should contain { newAvailabilityId, newSlotStartTime, newSlotEndTime }
+      const response = await api.put(`/appointments/${appointmentId}/patient-reschedule`, rescheduleData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Récupérer les médecins recommandés
   getRecommendedDoctors: async () => {
     try {
       const response = await api.get('/patients/recommended-doctors');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Récupérer les méthodes de paiement sauvegardées
+  getSavedPaymentMethods: async () => {
+    try {
+      const response = await api.get('/payment-methods');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Ajouter une nouvelle méthode de paiement
+  addPaymentMethod: async (paymentMethodData) => {
+    try {
+      const response = await api.post('/payment-methods', paymentMethodData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Définir une méthode de paiement comme défaut
+  setDefaultPaymentMethod: async (paymentMethodId) => {
+    try {
+      const response = await api.put(`/payment-methods/${paymentMethodId}/default`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Supprimer une méthode de paiement
+  deletePaymentMethod: async (paymentMethodId) => {
+    try {
+      const response = await api.delete(`/payment-methods/${paymentMethodId}`);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -370,4 +431,82 @@ export const testAPI = {
   },
 };
 
-export default api; 
+// API pour les notifications
+export const notificationsAPI = {
+  // Récupérer toutes les notifications de l'utilisateur
+  getNotifications: async (page = 1, limit = 20, readStatus) => {
+    try {
+      let queryParams = `?page=${page}&limit=${limit}`;
+      if (readStatus !== undefined) {
+        queryParams += `&read=${readStatus}`;
+      }
+      
+      const response = await api.get(`/notifications${queryParams}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer le nombre de notifications non lues
+  getUnreadCount: async () => {
+    try {
+      const response = await api.get('/notifications/unread-count');
+      return response.data.count;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Marquer une notification comme lue
+  markAsRead: async (notificationId) => {
+    try {
+      const response = await api.put(`/notifications/${notificationId}/read`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Marquer toutes les notifications comme lues
+  markAllAsRead: async () => {
+    try {
+      const response = await api.put('/notifications/read-all');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Supprimer une notification
+  deleteNotification: async (notificationId) => {
+    try {
+      const response = await api.delete(`/notifications/${notificationId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Supprimer toutes les notifications
+  clearAllNotifications: async () => {
+    try {
+      const response = await api.delete('/notifications/clear-all');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Créer une notification de test (admin uniquement)
+  createTestNotification: async (data) => {
+    try {
+      const response = await api.post('/notifications/test', data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  }
+};
+
+export default api;

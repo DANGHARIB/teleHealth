@@ -6,13 +6,12 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   Alert, 
-  Modal, 
   Linking,
   Dimensions,
   SafeAreaView,
   StatusBar
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { format, addDays, startOfWeek, endOfWeek, addWeeks, subWeeks, isSameWeek } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,10 +32,10 @@ type Appointment = {
   };
   availability: {
     date: string;
-    startTime: string;
-    endTime: string;
   };
-  status: 'scheduled' | 'completed' | 'cancelled' | 'pending' | 'confirmed' | 'rescheduled';
+  slotStartTime: string;
+  slotEndTime: string;
+  status: 'scheduled' | 'completed' | 'cancelled' | 'pending' | 'confirmed' | 'rescheduled' | 'reschedule_requested';
   caseDetails: string;
   sessionLink?: string;
   paymentStatus: 'pending' | 'completed' | 'refunded';
@@ -102,6 +101,7 @@ const DATE_SELECTOR_PADDING = 16;
 
 export default function DoctorAppointmentScreen() {
   const { user } = useAuth() as AuthContextType;
+  const router = useRouter(); // Add useRouter
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -111,13 +111,6 @@ export default function DoctorAppointmentScreen() {
   
   // Ref for date selector ScrollView
   const dateScrollViewRef = useRef<ScrollView>(null);
-  
-  // Reschedule modal states
-  const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
-  const [selectedAvailability, setSelectedAvailability] = useState<string>('');
-  const [loadingAvailabilities, setLoadingAvailabilities] = useState(false);
 
   // Generate date options for the current week
   useEffect(() => {
@@ -310,205 +303,51 @@ export default function DoctorAppointmentScreen() {
   
   // Les rendez-vous sont automatiquement confirmés après paiement
 
-  // Open reschedule modal
-  const openRescheduleModal = async (appointment: Appointment) => {
-    // Vérifier si le rendez-vous peut encore être reprogrammé (J-1)
+  // Navigate to reschedule screen
+  const navigateToReschedule = (appointment: Appointment) => {
     if (!canRescheduleAppointment(appointment.availability.date)) {
       Alert.alert(
-        "Cannot Reschedule",
-        "This appointment can no longer be rescheduled as it is less than 24 hours away."
+        "Impossible de reprogrammer",
+        "Ce rendez-vous ne peut plus être reprogrammé car il est prévu dans moins de 24 heures."
       );
       return;
     }
     
-    setSelectedAppointment(appointment);
-    setLoadingAvailabilities(true);
-    
-    try {
-      const data = await doctorAPI.getMyAvailability();
-      const availableSlots = data.filter((slot: Availability) => !slot.isBooked);
-      
-      setAvailabilities(availableSlots);
-      setRescheduleModalVisible(true);
-      setLoadingAvailabilities(false);
-    } catch (err) {
-      console.error('Error fetching availabilities:', err);
-      setLoadingAvailabilities(false);
-      Alert.alert(
-        "Error",
-        "Unable to fetch your availabilities. Please try again."
-      );
-    }
-  };
-  
-  // Reschedule appointment
-  const rescheduleAppointment = async () => {
-    if (!selectedAppointment || !selectedAvailability) {
-      Alert.alert("Error", "Please select an availability slot.");
-      return;
-    }
-    
-    setLoading(true);
-    
-    try {
-      const response = await doctorAPI.rescheduleAppointment(selectedAppointment._id, selectedAvailability);
-      
-      setRescheduleModalVisible(false);
-      setSelectedAppointment(null);
-      setSelectedAvailability('');
-      
-      // Mise à jour locale des rendez-vous
-      const updatedAppointment = response;
-      
-      if (updatedAppointment) {
-        setAppointments(prevAppointments => 
-          prevAppointments.map(app => 
-            app._id === selectedAppointment._id ? updatedAppointment : app
-          )
-        );
-        
-        Alert.alert(
-          "Success",
-          "The appointment has been successfully rescheduled."
-        );
-      } else {
-        // Rafraîchir la liste des rendez-vous depuis le serveur
-        const data = await doctorAPI.getAppointments();
-        setAppointments(data);
-        
-        Alert.alert(
-          "Success",
-          "The appointment has been rescheduled. The list has been refreshed."
-        );
-      }
-      
-      setLoading(false);
-    } catch (error: any) {
-      console.error('Error rescheduling:', error);
-      setLoading(false);
-      
-      // Obtenir le message d'erreur
-      let errorMessage = 'Unable to reschedule the appointment. Please try again.';
-      
-      if (error.response && error.response.data && error.response.data.message) {
-        errorMessage = error.response.data.message;
-      }
-      
-      Alert.alert(
-        "Error",
-        errorMessage
-      );
-    }
-  };
-  
-  // Render reschedule modal
-  const renderRescheduleModal = () => {
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={rescheduleModalVisible}
-        onRequestClose={() => setRescheduleModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Reschedule Appointment</ThemedText>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setRescheduleModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color={COLORS.gray500} />
-              </TouchableOpacity>
-            </View>
-            
-            {loadingAvailabilities ? (
-              <View style={styles.modalLoadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <ThemedText style={styles.loadingText}>Loading availabilities...</ThemedText>
-              </View>
-            ) : availabilities.length === 0 ? (
-              <View style={styles.noAvailabilityContainer}>
-                <Ionicons name="calendar-outline" size={64} color={COLORS.gray300} />
-                <ThemedText style={styles.noAvailabilityText}>
-                  No availabilities found
-                </ThemedText>
-                <ThemedText style={styles.noAvailabilitySubtext}>
-                  Please create new availability slots first.
-                </ThemedText>
-              </View>
-            ) : (
-              <ScrollView 
-                style={styles.availabilitiesList}
-                showsVerticalScrollIndicator={false}
-              >
-                {availabilities.map((availability) => {
-                  const isSelected = selectedAvailability === availability._id;
-                  const date = format(new Date(availability.date), 'EEEE, MMMM dd', { locale: enUS });
-                  const time = formatTime(availability.startTime);
-                  
-                  return (
-                    <TouchableOpacity
-                      key={availability._id}
-                      style={[
-                        styles.availabilityItem,
-                        isSelected && styles.selectedAvailability
-                      ]}
-                      onPress={() => setSelectedAvailability(availability._id)}
-                    >
-                      <View style={styles.availabilityContent}>
-                        <View style={styles.availabilityInfo}>
-                          <ThemedText style={[
-                            styles.availabilityDate,
-                            isSelected && styles.selectedAvailabilityText
-                          ]}>
-                            {date}
-                          </ThemedText>
-                          <ThemedText style={[
-                            styles.availabilityTime,
-                            isSelected && styles.selectedAvailabilityText
-                          ]}>
-                            {time}
-                          </ThemedText>
-                        </View>
-                        {isSelected && (
-                          <View style={styles.selectedIndicator}>
-                            <Ionicons name="checkmark-circle" size={24} color={COLORS.white} />
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelModalButton}
-                onPress={() => {
-                  setRescheduleModalVisible(false);
-                  setSelectedAppointment(null);
-                  setSelectedAvailability('');
-                }}
-              >
-                <ThemedText style={styles.cancelModalButtonText}>Cancel</ThemedText>
-              </TouchableOpacity>
+    Alert.alert(
+      "Demander une reprogrammation",
+      `Êtes-vous sûr de vouloir demander au patient de reprogrammer son rendez-vous du ${format(new Date(appointment.availability.date), 'dd/MM/yyyy')} à ${appointment.slotStartTime} ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { 
+          text: "Confirmer", 
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await doctorAPI.requestRescheduleAppointment(appointment._id);
               
-              <TouchableOpacity
-                style={[
-                  styles.confirmModalButton,
-                  (!selectedAvailability || loadingAvailabilities) && styles.disabledButton
-                ]}
-                onPress={rescheduleAppointment}
-                disabled={!selectedAvailability || loadingAvailabilities}
-              >
-                <ThemedText style={styles.confirmModalButtonText}>Confirm</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+              // Mettre à jour le statut du rendez-vous localement
+              setAppointments(prevAppointments => 
+                prevAppointments.map(app => 
+                  app._id === appointment._id ? { ...app, status: "reschedule_requested" } : app
+                )
+              );
+              
+              Alert.alert(
+                "Demande envoyée",
+                "Une notification a été envoyée au patient pour lui demander de reprogrammer ce rendez-vous."
+              );
+            } catch (error) {
+              console.error("Erreur lors de la demande de reprogrammation:", error);
+              Alert.alert(
+                "Erreur",
+                "Une erreur est survenue lors de la demande de reprogrammation."
+              );
+            } finally {
+              setLoading(false);
+            }
+          } 
+        }
+      ]
     );
   };
 
@@ -596,25 +435,31 @@ export default function DoctorAppointmentScreen() {
       case 'confirmed':
         return {
           color: COLORS.primary,
-          text: 'Confirmed',
+          text: 'Confirmé',
           icon: 'checkmark-circle-outline'
         };
       case 'cancelled':
         return {
           color: COLORS.danger,
-          text: 'Canceled',
+          text: 'Annulé',
           icon: 'close-circle-outline'
         };
       case 'rescheduled':
         return {
           color: COLORS.purple,
-          text: 'Rescheduled',
+          text: 'Reprogrammé',
           icon: 'calendar-outline'
+        };
+      case 'reschedule_requested':
+        return {
+          color: COLORS.warning,
+          text: 'Reprog. demandée',
+          icon: 'time-outline'
         };
       default:
         return {
           color: COLORS.warning,
-          text: 'Pending',
+          text: 'En attente',
           icon: 'time-outline'
         };
     }
@@ -670,10 +515,15 @@ export default function DoctorAppointmentScreen() {
     }
     
     return filteredAppointments.map((appointment, index) => {
-      const time = formatTime(appointment.availability.startTime);
-      const endTime = formatTime(appointment.availability.endTime);
+      const time = formatTime(appointment.slotStartTime);
+      const endTime = formatTime(appointment.slotEndTime);
       const patient = appointment.patient;
       const statusConfig = getStatusConfig(appointment.status);
+      
+      // Sort appointments by time
+      filteredAppointments.sort((a, b) => {
+        return a.slotStartTime.localeCompare(b.slotStartTime);
+      });
       
       return (
         <View key={appointment._id} style={styles.appointmentItem}>
@@ -724,7 +574,7 @@ export default function DoctorAppointmentScreen() {
                canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}
-                  onPress={() => openRescheduleModal(appointment)}
+                  onPress={() => navigateToReschedule(appointment)}
                 >
                   <Ionicons name="calendar-outline" size={16} color={COLORS.white} />
                   <ThemedText style={styles.buttonText}>Reschedule</ThemedText>
@@ -795,8 +645,6 @@ export default function DoctorAppointmentScreen() {
       >
         {renderAppointments()}
       </ScrollView>
-      
-      {renderRescheduleModal()}
     </SafeAreaView>
   );
 }

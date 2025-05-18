@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthProvider } from '../contexts/AuthContext';
+import { NotificationProvider } from '../contexts/NotificationContext';
 import notificationService from '../services/notificationService';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -12,7 +14,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayoutNavigation() {
   const colorScheme = useColorScheme();
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -53,12 +55,15 @@ export default function RootLayout() {
         const userToken = await AsyncStorage.getItem('userToken');
         const userInfoString = await AsyncStorage.getItem('userInfo');
         
-        const currentTopSegment = segments.length > 0 ? segments[0] : null;
-        const isIndexPage: boolean = currentTopSegment === 'index';
-        const isWelcomePage: boolean = currentTopSegment === 'welcome';
-        const isEmptySegments: boolean = segments.length === 0;
+        // Récupérer le premier segment s'il existe
+        const firstSegment = segments.length > 0 ? segments[0] : '';
+        
+        // Vérifier si on est sur une page initiale
+        const isOnIntroPages = firstSegment === 'index' || 
+                               firstSegment === 'welcome' || 
+                               segments.length === 0;
 
-        if (isIndexPage || isWelcomePage || isEmptySegments) {
+        if (isOnIntroPages) {
           setInitialRoute(undefined); // Pas de redirection automatique si sur les pages initiales
         } else if (userToken && userInfoString) {
           const userInfo = JSON.parse(userInfoString);
@@ -88,39 +93,40 @@ export default function RootLayout() {
   }, [loaded, segments]);
 
  useEffect(() => {
-    if (!authChecked || !loaded) {
+    if (!authChecked || !loaded || !initialRoute) {
       return;
     }
-    if (!initialRoute) return;
 
-    const currentTopSegmentForRedirect = segments.length > 0 ? segments[0] : null;
-    const isAuthFlow = (segments.length > 1 && segments[1] === 'auth');
-
-    const isRedirectIndexPage = currentTopSegmentForRedirect === 'index';
-    const isRedirectWelcomePage = currentTopSegmentForRedirect === 'welcome';
-    const isEmptySegments = segments.length === 0;
-    const isActuallyOnInitialOrPublicPath = isRedirectIndexPage || isRedirectWelcomePage || isEmptySegments;
+    // Récupérer le premier segment s'il existe
+    const firstSegment = segments.length > 0 ? segments[0] : '';
     
-    const inPatientTabs = currentTopSegmentForRedirect === '(patient)' && !isAuthFlow;
-    const inDoctorTabs = currentTopSegmentForRedirect === '(doctor)' && !isAuthFlow;
-    const inDoctorAuth = segments.length > 1 && segments[0] === 'doctor' && segments[1] === 'auth';
-    const inPatientAuth = segments.length > 1 && segments[0] === 'patient' && segments[1] === 'auth';
+    // Vérifier si on a un second segment
+    const secondSegment = segments.length > 1 ? segments[1] : '';
+    const isAuthFlow = secondSegment === 'auth';
 
-    // Désactivons temporairement les redirections automatiques pour débugger le flux
+    // Vérifier si on est sur une page initiale
+    const isOnIntroPages = firstSegment === 'index' || 
+                           firstSegment === 'welcome' || 
+                           segments.length === 0;
+    
+    // Vérifier si on est dans les sections patient ou docteur
+    const inPatientTabs = firstSegment === '(patient)' && !isAuthFlow;
+    const inDoctorTabs = firstSegment === '(doctor)' && !isAuthFlow;
+    
+    // Vérifier si on est dans une page d'authentification
+    const inDoctorAuth = firstSegment === 'doctor' && secondSegment === 'auth';
+    const inPatientAuth = firstSegment === 'patient' && secondSegment === 'auth';
+
     // Si vous êtes dans une page d'authentification, ne redirigez pas
-    if (inDoctorAuth || inPatientAuth) {
-      return;
-    }
-
-    if (isAuthFlow) {
+    if (inDoctorAuth || inPatientAuth || isAuthFlow) {
       return;
     }
 
     // Ces redirections seront réactivées une fois le problème résolu
     /*
-    if (initialRoute === '/(patient)' && !inPatientTabs && !isActuallyOnInitialOrPublicPath) {
+    if (initialRoute === '/(patient)' && !inPatientTabs && !isOnIntroPages) {
       router.replace('/(patient)/(tabs)');
-    } else if (initialRoute === '/(doctor)' && !inDoctorTabs && !isActuallyOnInitialOrPublicPath) {
+    } else if (initialRoute === '/(doctor)' && !inDoctorTabs && !isOnIntroPages) {
       router.replace('/(doctor)/(tabs)');
     } else if (initialRoute === '/' && (inPatientTabs || inDoctorTabs)) {
       router.replace('/');
@@ -140,6 +146,7 @@ export default function RootLayout() {
         {/* Les groupes (patient) et (doctor) auront leurs propres Stack.Screen pour les onglets */}
         {/* On définit ici les écrans accessibles globalement ou avant la redirection */}
         <Stack.Screen name="index" options={{ headerShown: false }} /> 
+        <Stack.Screen name="welcome" options={{ headerShown: false }} />
         <Stack.Screen name="(patient)" options={{ headerShown: false }} />
         <Stack.Screen name="(doctor)" options={{ headerShown: false }} />
         {/* Ajouter ici les écrans d'authentification s'ils ne sont pas dans des groupes spécifiques */}
@@ -149,5 +156,15 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <NotificationProvider>
+        <RootLayoutNavigation />
+      </NotificationProvider>
+    </AuthProvider>
   );
 }

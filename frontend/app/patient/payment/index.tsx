@@ -28,6 +28,18 @@ type Appointment = {
   price: number;
 };
 
+// Type pour les méthodes de paiement sauvegardées
+type PaymentMethod = {
+  _id: string;
+  name: string;
+  type: 'card' | 'paypal' | 'apple_pay' | 'google_pay';
+  lastFourDigits?: string;
+  expiryMonth?: string;
+  expiryYear?: string;
+  cardType?: string;
+  isDefault: boolean;
+};
+
 export default function PaymentScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -37,6 +49,11 @@ export default function PaymentScreen() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [selectedMethod, setSelectedMethod] = useState('card');
+  
+  // Nouveau state pour les méthodes de paiement sauvegardées
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedSavedMethod, setSelectedSavedMethod] = useState<string | null>(null);
+  const [loadingSavedMethods, setLoadingSavedMethods] = useState(false);
   
   // Charger les détails du rendez-vous
   useEffect(() => {
@@ -61,6 +78,9 @@ export default function PaymentScreen() {
         
         setAppointment(foundAppointment);
         setLoading(false);
+        
+        // Charger les méthodes de paiement sauvegardées
+        fetchSavedPaymentMethods();
       } catch (error) {
         console.error('Erreur lors du chargement du rendez-vous:', error);
         Alert.alert('Erreur', 'Impossible de charger les détails du rendez-vous');
@@ -72,6 +92,40 @@ export default function PaymentScreen() {
     fetchAppointmentDetails();
   }, [appointmentId]);
   
+  // Gérer le cas où l'utilisateur quitte la page
+  useEffect(() => {
+    // Fonction de nettoyage exécutée quand le composant est démonté
+    return () => {
+      // Si le processus de paiement n'est pas en cours et que le rendez-vous est toujours en attente
+      if (!processingPayment && appointment && appointment.paymentStatus === 'pending') {
+        // On pourrait ajouter ici une logique côté client pour annuler le rendez-vous
+        // Mais c'est préférable de laisser le backend faire ce nettoyage avec un job périodique
+        console.log('Utilisateur a quitté la page de paiement sans finaliser');
+      }
+    };
+  }, [processingPayment, appointment]);
+  
+  // Charger les méthodes de paiement sauvegardées
+  const fetchSavedPaymentMethods = async () => {
+    try {
+      setLoadingSavedMethods(true);
+      const methods = await patientAPI.getSavedPaymentMethods();
+      setSavedPaymentMethods(methods);
+      
+      // Sélectionner la méthode par défaut s'il y en a une
+      const defaultMethod = methods.find(m => m.isDefault);
+      if (defaultMethod) {
+        setSelectedSavedMethod(defaultMethod._id);
+        setSelectedMethod(defaultMethod.type);
+      }
+      
+      setLoadingSavedMethods(false);
+    } catch (error) {
+      console.error('Erreur lors du chargement des méthodes de paiement:', error);
+      setLoadingSavedMethods(false);
+    }
+  };
+  
   // Traiter le paiement
   const processPayment = async () => {
     if (!appointment) return;
@@ -82,12 +136,23 @@ export default function PaymentScreen() {
       // Simuler un délai de traitement du paiement
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Appel à l'API pour créer le paiement
-      await patientAPI.createPayment({
+      // Préparer les données de paiement
+      let paymentData = {
         appointmentId: appointment._id,
         paymentMethod: selectedMethod,
         amount: appointment.price
-      });
+      };
+      
+      // Si une méthode sauvegardée est sélectionnée, ajouter son ID
+      if (selectedSavedMethod) {
+        paymentData = {
+          ...paymentData,
+          savedPaymentMethodId: selectedSavedMethod
+        };
+      }
+      
+      // Appel à l'API pour créer le paiement
+      await patientAPI.createPayment(paymentData);
       
       setProcessingPayment(false);
       Alert.alert(
@@ -102,8 +167,114 @@ export default function PaymentScreen() {
     }
   };
   
-  // Rendu des méthodes de paiement
+  // Rendu des méthodes de paiement sauvegardées
+  const renderSavedPaymentMethods = () => {
+    if (loadingSavedMethods) {
+      return (
+        <ActivityIndicator size="small" color="#5586CC" style={styles.methodsLoader} />
+      );
+    }
+    
+    if (savedPaymentMethods.length === 0) {
+      return (
+        <View style={styles.noSavedMethodsContainer}>
+          <ThemedText style={styles.noSavedMethodsText}>
+            Vous n'avez pas encore de méthode de paiement sauvegardée
+          </ThemedText>
+          <TouchableOpacity 
+            style={styles.addPaymentMethodButton}
+            onPress={() => router.push('/patient/profile/add-payment-method')}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#5586CC" />
+            <ThemedText style={styles.addPaymentMethodText}>
+              Ajouter une méthode de paiement
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    return (
+      <View style={styles.savedMethodsContainer}>
+        <ThemedText style={styles.savedMethodsTitle}>
+          Vos méthodes de paiement sauvegardées
+        </ThemedText>
+        
+        {savedPaymentMethods.map(method => (
+          <TouchableOpacity
+            key={method._id}
+            style={[
+              styles.savedMethodItem,
+              selectedSavedMethod === method._id && styles.selectedSavedMethod
+            ]}
+            onPress={() => {
+              setSelectedSavedMethod(method._id);
+              setSelectedMethod(method.type);
+            }}
+          >
+            <View style={styles.savedMethodIcon}>
+              <Ionicons 
+                name={getMethodIcon(method.type)} 
+                size={24} 
+                color={selectedSavedMethod === method._id ? '#FFFFFF' : '#0F2057'} 
+              />
+            </View>
+            <View style={styles.savedMethodInfo}>
+              <ThemedText 
+                style={selectedSavedMethod === method._id ? styles.selectedMethodText : styles.methodText}
+              >
+                {method.name}
+              </ThemedText>
+              {method.type === 'card' && method.lastFourDigits && (
+                <ThemedText 
+                  style={[
+                    styles.savedMethodDetails,
+                    selectedSavedMethod === method._id && styles.selectedMethodDetails
+                  ]}
+                >
+                  •••• {method.lastFourDigits} | Exp: {method.expiryMonth}/{method.expiryYear}
+                </ThemedText>
+              )}
+            </View>
+            {method.isDefault && (
+              <View style={styles.defaultBadge}>
+                <ThemedText style={styles.defaultBadgeText}>Par défaut</ThemedText>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+        
+        <TouchableOpacity
+          style={styles.addNewMethodButton}
+          onPress={() => {
+            setSelectedSavedMethod(null);
+            router.push('/patient/profile/add-payment-method');
+          }}
+        >
+          <Ionicons name="add-circle-outline" size={18} color="#5586CC" />
+          <ThemedText style={styles.addNewMethodText}>
+            Utiliser une autre méthode de paiement
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+  
+  // Obtenir l'icône en fonction du type de méthode
+  const getMethodIcon = (type: string) => {
+    switch (type) {
+      case 'card': return 'card-outline';
+      case 'paypal': return 'logo-paypal';
+      case 'apple_pay': return 'logo-apple';
+      case 'google_pay': return 'logo-google';
+      default: return 'card-outline';
+    }
+  };
+  
+  // Rendu des méthodes de paiement standards (si pas de méthode sauvegardée sélectionnée)
   const renderPaymentMethods = () => {
+    if (selectedSavedMethod) return null;
+    
     const methods = [
       { id: 'card', icon: 'card-outline', label: 'Carte bancaire' },
       { id: 'paypal', icon: 'logo-paypal', label: 'PayPal' },
@@ -203,6 +374,11 @@ export default function PaymentScreen() {
         </View>
         
         <ThemedText style={styles.methodsTitle}>Méthode de paiement</ThemedText>
+        
+        {/* Afficher les méthodes de paiement sauvegardées */}
+        {renderSavedPaymentMethods()}
+        
+        {/* Afficher les méthodes de paiement standards si aucune méthode sauvegardée n'est sélectionnée */}
         {renderPaymentMethods()}
       </ScrollView>
       
@@ -365,5 +541,111 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
-  }
+  },
+  // Styles pour les méthodes de paiement sauvegardées
+  methodsLoader: {
+    marginVertical: 20,
+  },
+  savedMethodsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  savedMethodsTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#0F2057',
+    marginBottom: 12,
+  },
+  savedMethodItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#F8F9FA',
+  },
+  selectedSavedMethod: {
+    backgroundColor: '#5586CC',
+  },
+  savedMethodIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  savedMethodInfo: {
+    flex: 1,
+  },
+  savedMethodDetails: {
+    fontSize: 12,
+    color: '#6C757D',
+    marginTop: 2,
+  },
+  selectedMethodDetails: {
+    color: '#E2E8F0',
+  },
+  defaultBadge: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    color: '#22C55E',
+    fontWeight: '500',
+  },
+  addNewMethodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+    marginTop: 8,
+  },
+  addNewMethodText: {
+    fontSize: 14,
+    color: '#5586CC',
+    marginLeft: 8,
+  },
+  noSavedMethodsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  noSavedMethodsText: {
+    fontSize: 14,
+    color: '#6C757D',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  addPaymentMethodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+  },
+  addPaymentMethodText: {
+    fontSize: 14,
+    color: '#5586CC',
+    marginLeft: 8,
+  },
 }); 

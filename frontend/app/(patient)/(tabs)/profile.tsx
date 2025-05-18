@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useContext } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -8,12 +8,16 @@ import {
   SafeAreaView, 
   StatusBar,
   ScrollView,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { NotificationContext } from '../../../contexts/NotificationContext';
+import { NotificationIcon } from '../../../components/ui/NotificationIcon';
+import { NotificationsModal } from '../../../components/ui/NotificationsModal';
 
 const COLORS = {
   primary: '#7AA7CC',
@@ -43,6 +47,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState('Patient');
   const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const { notificationQueue, sendTestNotification } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -118,6 +124,11 @@ export default function ProfileScreen() {
     router.push('/patient/profile/edit');
   };
 
+  const goToPaymentMethods = () => {
+    console.log("Navigate to Payment Methods");
+    router.push('/patient/profile/payment-methods');
+  };
+
   const menuItems = [
     {
       id: 'edit-profile',
@@ -126,6 +137,14 @@ export default function ProfileScreen() {
       icon: 'person-outline',
       iconBackground: COLORS.primary,
       onPress: goToEditProfile,
+    },
+    {
+      id: 'payment-methods',
+      title: 'Payment Methods',
+      description: 'Manage your saved payment methods',
+      icon: 'card-outline',
+      iconBackground: COLORS.purple,
+      onPress: goToPaymentMethods,
     },
   ];
 
@@ -184,6 +203,27 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
+  // Function to send a test notification
+  const handleSendTestNotification = async () => {
+    console.log('Sending test notification...');
+    try {
+      await sendTestNotification(
+        'Test Notification',
+        'This is a test notification to verify the notification system is working.',
+        {
+          type: 'test_notification',
+          message: 'Test notification message',
+          appointmentId: 'test-id-123'
+        }
+      );
+      console.log('Test notification sent successfully');
+      Alert.alert('Success', 'Test notification sent. Check your notifications.');
+    } catch (error) {
+      console.error('Failed to send test notification:', error);
+      Alert.alert('Error', 'Failed to send test notification.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -194,8 +234,17 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Profile</Text>
-          <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>My Profile</Text>
+            <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
+          </View>
+          
+          <NotificationIcon 
+            onPress={() => setNotificationModalVisible(true)}
+            unreadCount={notificationQueue.length}
+            style={styles.notificationIcon}
+            color={COLORS.white}
+          />
         </View>
 
         {renderProfileHeader()}
@@ -218,7 +267,24 @@ export default function ProfileScreen() {
             <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
         </View>
+        
+        <View style={styles.logoutContainer}>
+          <TouchableOpacity 
+            style={[styles.logoutButton, { backgroundColor: COLORS.warning }]} 
+            onPress={handleSendTestNotification}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.white} />
+            <Text style={styles.logoutButtonText}>Test Notification</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+      
+      <NotificationsModal 
+        visible={notificationModalVisible} 
+        onClose={() => setNotificationModalVisible(false)} 
+        navigation={router}
+      />
     </SafeAreaView>
   );
 }
@@ -235,9 +301,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 32,
+  },
+  headerTitleContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -387,5 +459,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.white,
     marginLeft: 8,
+  },
+  notificationIcon: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 50,
+    padding: 8,
+    marginLeft: 10
   },
 }); 

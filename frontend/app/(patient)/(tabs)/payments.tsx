@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Text, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Text, Dimensions, Platform, SafeAreaView, StatusBar, RefreshControl } from 'react-native';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -32,6 +32,10 @@ type Payment = {
   isRefund?: boolean;
   // Original payment ID for refunds
   originalPaymentId?: string;
+  // Additional fields for display and grouping
+  displayAmount?: number;
+  refundDetails?: Payment;
+  isCombined?: boolean;
 };
 
 // Color palette
@@ -64,43 +68,10 @@ const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ||
 export default function PaymentsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-
-  // Load payments
-  useEffect(() => {
-    const fetchPayments = async () => {
-      try {
-        setLoading(true);
-        const data = await patientAPI.getPayments();
-        
-        // Process data to identify refunds and link them to original payments
-        const processedPayments = data.map((payment: Payment) => {
-          // Detect refund by negative amount
-          const isRefund = payment.amount < 0;
-          return {
-            ...payment,
-            isRefund,
-            // Use absolute value for display
-            displayAmount: Math.abs(payment.amount)
-          };
-        });
-        
-        // Group refunds with their original payments to avoid showing duplicates
-        const groupedPayments = groupRefundsWithOriginals(processedPayments);
-        
-        setPayments(groupedPayments);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error loading payments:', err);
-        setError('Unable to load your payment history');
-        setLoading(false);
-      }
-    };
-
-    fetchPayments();
-  }, []);
 
   // Group refunds with original payments to avoid showing two separate cards
   const groupRefundsWithOriginals = (payments: Payment[]) => {
@@ -136,6 +107,59 @@ export default function PaymentsScreen() {
       });
     
     return combinedPayments;
+  };
+  
+  // Fonction de chargement des paiements extraite pour réutilisation
+  const fetchPayments = useCallback(async (showFullLoader = true) => {
+    try {
+      if (showFullLoader) setLoading(true);
+      const data = await patientAPI.getPayments();
+      
+      // Process data to identify refunds and link them to original payments
+      const processedPayments = data.map((payment: Payment) => {
+        // Detect refund by negative amount
+        const isRefund = payment.amount < 0;
+        return {
+          ...payment,
+          isRefund,
+          // Use absolute value for display
+          displayAmount: Math.abs(payment.amount)
+        };
+      });
+      
+      // Group refunds with their original payments to avoid showing duplicates
+      const groupedPayments = groupRefundsWithOriginals(processedPayments);
+      
+      setPayments(groupedPayments);
+      setLoading(false);
+      setRefreshing(false);
+    } catch (err) {
+      console.error('Error loading payments:', err);
+      setError('Unable to load your payment history');
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Chargement initial des paiements
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  // Rechargement des paiements lorsque l'écran est à nouveau actif
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchPayments(false);
+      return () => {
+        // Cleanup si nécessaire
+      };
+    }, [fetchPayments])
+  );
+
+  // Fonction de rafraîchissement manuel (pull-to-refresh)
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPayments(false);
   };
 
   // Filter payments
@@ -628,6 +652,14 @@ export default function PaymentsScreen() {
           style={styles.paymentsContainer} 
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primaryLight]}
+              tintColor={COLORS.primaryLight}
+            />
+          }
         >
           {renderPayments()}
         </ScrollView>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Platform, SafeAreaView, StatusBar } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Platform, SafeAreaView, StatusBar, RefreshControl } from 'react-native';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -72,72 +72,12 @@ type Payment = {
 export default function DoctorFinancialsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  // Load payments
-  useEffect(() => {
-    const fetchPayments = async () => {
-      try {
-        setLoading(true);
-        const data = await doctorAPI.getPayments();
-        
-        console.log('Données brutes des paiements reçues:', data);
-        
-        // Traitement initial des données similaire à celui côté patient
-        const processedPayments = data.map((payment: Payment) => {
-          // Un paiement est un remboursement s'il a un montant négatif
-          const isRefund = payment.amount < 0;
-          return {
-            ...payment,
-            isRefund,
-            displayAmount: Math.abs(payment.amount)
-          };
-        });
-        
-        console.log('Paiements après traitement initial:', processedPayments);
-        
-        // Utiliser exactement la même logique de regroupement que côté patient
-        const groupedPayments = groupRefundsWithOriginals(processedPayments);
-        
-        console.log('Paiements après regroupement:', groupedPayments);
-        
-        setPayments(groupedPayments);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error loading payments:', err);
-        setError('Unable to load your payment history');
-        setLoading(false);
-      }
-    };
-
-    fetchPayments();
-  }, []);
-
-  // Filter payments
-  const getFilteredPayments = () => {
-    if (!activeFilter) return payments;
-    
-    return payments.filter(payment => {
-      if (activeFilter === 'refunds') {
-        return payment.isRefund || payment.status === 'refunded';
-      }
-      if (activeFilter === 'payments') {
-        return !payment.isRefund && payment.status === 'completed';
-      }
-      if (activeFilter === 'monthly') {
-        // Filter by current month
-        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-        const currentDate = new Date();
-        return paymentDate.getMonth() === currentDate.getMonth() && 
-               paymentDate.getFullYear() === currentDate.getFullYear();
-      }
-      return true;
-    });
-  };
-
-  // Group refunds with originals
+  // Group refunds with originals - déclaré avant fetchPayments pour éviter les erreurs
   const groupRefundsWithOriginals = (payments: Payment[]) => {
     console.log('Début du regroupement des remboursements');
     
@@ -179,6 +119,86 @@ export default function DoctorFinancialsScreen() {
     
     console.log('Paiements combinés finaux:', combinedPayments);
     return combinedPayments;
+  };
+
+  // Fonction de chargement des paiements extraite pour réutilisation
+  const fetchPayments = useCallback(async (showFullLoader = true) => {
+    try {
+      if (showFullLoader) setLoading(true);
+      const data = await doctorAPI.getPayments();
+      
+      console.log('Données brutes des paiements reçues:', data);
+      
+      // Traitement initial des données similaire à celui côté patient
+      const processedPayments = data.map((payment: Payment) => {
+        // Un paiement est un remboursement s'il a un montant négatif
+        const isRefund = payment.amount < 0;
+        return {
+          ...payment,
+          isRefund,
+          displayAmount: Math.abs(payment.amount)
+        };
+      });
+      
+      console.log('Paiements après traitement initial:', processedPayments);
+      
+      // Utiliser exactement la même logique de regroupement que côté patient
+      const groupedPayments = groupRefundsWithOriginals(processedPayments);
+      
+      console.log('Paiements après regroupement:', groupedPayments);
+      
+      setPayments(groupedPayments);
+      setLoading(false);
+      setRefreshing(false);
+    } catch (err) {
+      console.error('Error loading payments:', err);
+      setError('Unable to load your payment history');
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Chargement initial des paiements
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  // Rechargement des paiements lorsque l'écran est à nouveau actif
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchPayments(false);
+      return () => {
+        // Cleanup si nécessaire
+      };
+    }, [fetchPayments])
+  );
+
+  // Fonction de rafraîchissement manuel (pull-to-refresh)
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPayments(false);
+  };
+
+  // Filter payments
+  const getFilteredPayments = () => {
+    if (!activeFilter) return payments;
+    
+    return payments.filter(payment => {
+      if (activeFilter === 'refunds') {
+        return payment.isRefund || payment.status === 'refunded';
+      }
+      if (activeFilter === 'payments') {
+        return !payment.isRefund && payment.status === 'completed';
+      }
+      if (activeFilter === 'monthly') {
+        // Filter by current month
+        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+        const currentDate = new Date();
+        return paymentDate.getMonth() === currentDate.getMonth() && 
+               paymentDate.getFullYear() === currentDate.getFullYear();
+      }
+      return true;
+    });
   };
 
   // Calculate monthly summary
@@ -658,6 +678,14 @@ export default function DoctorFinancialsScreen() {
           style={styles.paymentsContainer} 
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primaryLight]}
+              tintColor={COLORS.primaryLight}
+            />
+          }
         >
           {renderPayments()}
         </ScrollView>
