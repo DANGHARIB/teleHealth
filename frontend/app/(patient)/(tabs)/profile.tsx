@@ -270,6 +270,7 @@ export default function ProfileScreen() {
           <NotificationIcon 
             onPress={handleOpenNotificationsModal}
             unreadCount={unreadCount}
+            color={COLORS.darkBlue}
           />
         </View>
 
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   notificationIcon: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.darkBlue,
     borderRadius: 50,
     padding: 8,
     marginLeft: 10

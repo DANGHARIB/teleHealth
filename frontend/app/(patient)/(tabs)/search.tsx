@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI } from '@/services/api';
+import { defaultDoctorImageBase64 } from '@/assets/images/default-doctor';
 
 // API URL constants
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -43,6 +44,7 @@ const COLORS = {
   error: '#EF4444',
   success: '#10B981',
   yellow: '#FFD700',
+  white: '#FFFFFF',
 }
 
 type Doctor = {
@@ -124,7 +126,7 @@ export default function SearchScreen() {
     return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim();
   };
 
-  const getDefaultImage = () => require('@/assets/images/icon.png');
+  const getDefaultImage = () => ({ uri: defaultDoctorImageBase64 });
 
   const renderRatingStars = (rating: number = 4) => {
     const stars = [];
@@ -144,6 +146,52 @@ export default function SearchScreen() {
     
     return <View style={styles.ratingContainer}>{stars}</View>;
   };
+
+  const renderDoctorItem = (doctor: Doctor) => (
+    <TouchableOpacity 
+      key={doctor._id}
+      style={styles.doctorCard}
+      onPress={() => handleExplore(doctor._id)}
+      activeOpacity={0.8}
+    >
+      {doctor.doctor_image ? (
+        <Image
+          source={{ uri: getImageUrl(doctor.doctor_image) }}
+          style={styles.doctorImage}
+          contentFit="cover"
+          transition={300}
+        />
+      ) : (
+        <View style={[styles.doctorImage, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="person" size={32} color={COLORS.white} />
+        </View>
+      )}
+      <View style={styles.doctorInfo}>
+        <ThemedText type="title" style={styles.doctorName}>
+          Dr. {getDoctorName(doctor)}
+        </ThemedText>
+        <ThemedText style={styles.specialization}>
+          {doctor.specialization || 'General Practitioner'}
+        </ThemedText>
+        {renderRatingStars(doctor.rating)}
+        <ThemedText style={styles.doctorExperience}>
+          {doctor.experience} Years experience
+        </ThemedText>
+        <View style={styles.priceContainer}>
+          <Ionicons name="wallet-outline" size={14} color={COLORS.primary} style={styles.priceIcon} />
+          <ThemedText style={styles.priceText}>
+            {doctor.price && doctor.price > 0 ? `$${doctor.price.toFixed(0)}/hr` : 'Price unavailable'}
+          </ThemedText>
+        </View>
+      </View>
+      <TouchableOpacity 
+        style={styles.exploreButton}
+        onPress={() => handleExplore(doctor._id)}
+      >
+        <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -192,45 +240,7 @@ export default function SearchScreen() {
             <ThemedText style={styles.noResultsHint}>Try a different search term or check your connection</ThemedText>
           </View>
         ) : (
-          filteredDoctors.map((doctor) => (
-            <TouchableOpacity 
-              key={doctor._id}
-              style={styles.doctorCard}
-              onPress={() => handleExplore(doctor._id)}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={doctor.doctor_image ? { uri: getImageUrl(doctor.doctor_image) } : getDefaultImage()}
-                style={styles.doctorImage}
-                contentFit="cover"
-                transition={300}
-              />
-              <View style={styles.doctorInfo}>
-                <ThemedText type="title" style={styles.doctorName}>
-                  Dr. {getDoctorName(doctor)}
-                </ThemedText>
-                <ThemedText style={styles.specialization}>
-                  {doctor.specialization || 'General Practitioner'}
-                </ThemedText>
-                {renderRatingStars(doctor.rating)}
-                <ThemedText style={styles.doctorExperience}>
-                  {doctor.experience} Years experience
-                </ThemedText>
-                <View style={styles.priceContainer}>
-                  <Ionicons name="wallet-outline" size={14} color={COLORS.primary} style={styles.priceIcon} />
-                  <ThemedText style={styles.priceText}>
-                    {doctor.price && doctor.price > 0 ? `$${doctor.price.toFixed(0)}/hr` : 'Price unavailable'}
-                  </ThemedText>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.exploreButton}
-                onPress={() => handleExplore(doctor._id)}
-              >
-                <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))
+          filteredDoctors.map((doctor) => renderDoctorItem(doctor))
         )}
       </ScrollView>
     </ThemedView>
@@ -288,7 +298,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   doctorCard: {
     flexDirection: 'row',

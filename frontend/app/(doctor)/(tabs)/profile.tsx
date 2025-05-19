@@ -207,13 +207,6 @@ export default function DoctorProfileTabScreen() {
             Dr. {docName}
           </Text>
           <Text style={styles.welcomeText}>Welcome to Tabeebou.com</Text>
-          
-          <NotificationIcon 
-            onPress={handleOpenNotificationsModal}
-            unreadCount={unreadCount}
-            style={styles.notificationIcon}
-            color={COLORS.white}
-          />
         </View>
       </View>
     </View>
@@ -265,6 +258,12 @@ export default function DoctorProfileTabScreen() {
             <Text style={styles.headerTitle}>My Profile</Text>
             <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
           </View>
+          
+          <NotificationIcon 
+            onPress={handleOpenNotificationsModal}
+            unreadCount={unreadCount}
+            color={COLORS.darkBlue}
+          />
         </View>
 
         {renderProfileHeader()}
@@ -470,7 +469,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   notificationIcon: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.darkBlue,
     borderRadius: 50,
     padding: 8,
     marginLeft: 10

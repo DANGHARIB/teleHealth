@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { doctorAPI, patientAPI } from '@/services/api';
+import { defaultDoctorImageBase64 } from '@/assets/images/default-doctor';
 
 // API URL constants
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -45,6 +46,7 @@ const COLORS = {
   accent: '#7AA7CC',
   saveButton: '#FFFFFF',
   savedButton: '#7AA7CC',
+  white: '#FFFFFF',
 };
 
 // Define doctor data type
@@ -115,7 +117,7 @@ export default function DoctorDetailScreen() {
     }, [checkIfDoctorIsSaved])
   );
 
-  const getDefaultImage = () => require('@/assets/images/icon.png');
+  const getDefaultImage = () => ({ uri: defaultDoctorImageBase64 });
   
   const getDoctorName = (doctor: Doctor) => {
     if (doctor.full_name) return doctor.full_name;
@@ -221,11 +223,17 @@ export default function DoctorDetailScreen() {
           <View style={styles.doctorCardContainer}>
             <ThemedView style={styles.doctorCard}>
               <View style={styles.doctorProfile}>
-                <Image
-                  source={doctor.doctor_image ? { uri: getImageUrl(doctor.doctor_image) } : getDefaultImage()}
-                  style={styles.doctorImage}
-                  contentFit="cover"
-                />
+                {doctor.doctor_image ? (
+                  <Image
+                    source={{ uri: getImageUrl(doctor.doctor_image) }}
+                    style={styles.doctorImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.doctorImage, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="person" size={32} color={COLORS.white} />
+                  </View>
+                )}
                 <View style={styles.doctorInfo}>
                   <ThemedText type="title" style={styles.doctorName}>
                     Dr. {getDoctorName(doctor)}
@@ -274,7 +282,7 @@ export default function DoctorDetailScreen() {
             <ThemedText type="title" style={styles.sectionTitle}>About</ThemedText>
             <ThemedText style={styles.sectionContent}>
               {doctor.about || 
-                'Professional doctor with extensive experience in patient care. Specializes in providing comprehensive medical services and personalized treatment plans for various conditions.'}
+                'A dedicated healthcare professional committed to providing quality medical care. Focused on patient well-being and delivering personalized healthcare services with compassion and expertise.'}
             </ThemedText>
           </ThemedView>
 
@@ -282,7 +290,7 @@ export default function DoctorDetailScreen() {
             <ThemedText type="title" style={styles.sectionTitle}>Education</ThemedText>
             <ThemedText style={styles.sectionContent}>
               {doctor.education || 
-                'M.Sc. - Doctor in psychology from ADR-Centric Juridical University.'}
+                'Graduate of medical studies with relevant specialized training. Continues professional development to stay current with the latest medical advancements.'}
             </ThemedText>
           </ThemedView>
 

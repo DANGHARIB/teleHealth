@@ -2,10 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { format, parseISO } from 'date-fns';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { patientAPI } from '@/services/api';
+
+// App theme colors - matching the rest of the app
+const COLORS = {
+  primary: '#7AA7CC',
+  primaryDark: '#6999BE',
+  secondary: '#F8FAFC',
+  accent: '#7AA7CC',
+  darkNavy: '#090F47',
+  background: '#F8FAFC',
+  cardBackground: '#FFFFFF',
+  error: '#EF4444',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  textLight: '#6B7280',
+  textDark: '#0F172A',
+  gray100: '#F1F5F9',
+  gray200: '#E2E8F0',
+  gray300: '#CBD5E1',
+  gray400: '#94A3B8',
+  gray500: '#64748B',
+  gray600: '#475569',
+  gray700: '#334155',
+  gray800: '#1E293B',
+  white: '#FFFFFF',
+};
 
 // Type pour l'objet appointment
 type Appointment = {
@@ -21,6 +47,8 @@ type Appointment = {
     startTime: string;
     endTime: string;
   };
+  slotStartTime: string; // The specific time slot selected by the patient
+  slotEndTime: string;   // The end time of the selected slot
   status: 'pending' | 'confirmed' | 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
   caseDetails: string;
   sessionLink?: string;
@@ -38,6 +66,23 @@ type PaymentMethod = {
   expiryYear?: string;
   cardType?: string;
   isDefault: boolean;
+};
+
+// Helper function to format time strings
+const formatTimeString = (timeString: string): string => {
+  // Handle common time formats
+  if (timeString.includes('T')) {
+    // If it's an ISO format like "2023-08-15T16:30:00.000Z"
+    return format(new Date(timeString), 'h:mm a');
+  } else if (timeString.includes(':')) {
+    // If it's just a time like "16:30"
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return format(date, 'h:mm a');
+  }
+  // Return as is if format not recognized
+  return timeString;
 };
 
 export default function PaymentScreen() {
@@ -62,7 +107,7 @@ export default function PaymentScreen() {
         setLoading(true);
         
         if (!appointmentId) {
-          Alert.alert('Erreur', 'ID de rendez-vous manquant');
+          Alert.alert('Error', 'Missing appointment ID');
           router.back();
           return;
         }
@@ -71,10 +116,17 @@ export default function PaymentScreen() {
         const foundAppointment = appointments.find((app: Appointment) => app._id === appointmentId);
         
         if (!foundAppointment) {
-          Alert.alert('Erreur', 'Rendez-vous non trouvé');
+          Alert.alert('Error', 'Appointment not found');
           router.back();
           return;
         }
+        
+        console.log('Selected appointment time slot:', {
+          startTime: foundAppointment.availability.startTime,
+          endTime: foundAppointment.availability.endTime,
+          date: foundAppointment.availability.date,
+          fullAppointment: foundAppointment
+        });
         
         setAppointment(foundAppointment);
         setLoading(false);
@@ -82,8 +134,8 @@ export default function PaymentScreen() {
         // Charger les méthodes de paiement sauvegardées
         fetchSavedPaymentMethods();
       } catch (error) {
-        console.error('Erreur lors du chargement du rendez-vous:', error);
-        Alert.alert('Erreur', 'Impossible de charger les détails du rendez-vous');
+        console.error('Error loading appointment details:', error);
+        Alert.alert('Error', 'Unable to load appointment details');
         setLoading(false);
         router.back();
       }
@@ -158,14 +210,14 @@ export default function PaymentScreen() {
       
       setProcessingPayment(false);
       Alert.alert(
-        'Paiement réussi',
-        'Votre paiement a été traité avec succès.',
+        'Payment Successful',
+        'Your payment has been processed successfully.',
         [{ text: 'OK', onPress: () => router.push('/(patient)/(tabs)/payments') }]
       );
     } catch (error) {
-      console.error('Erreur lors du paiement:', error);
+      console.error('Payment error:', error);
       setProcessingPayment(false);
-      Alert.alert('Erreur', 'Le paiement a échoué. Veuillez réessayer.');
+      Alert.alert('Error', 'Payment failed. Please try again.');
     }
   };
   
@@ -173,7 +225,7 @@ export default function PaymentScreen() {
   const renderSavedPaymentMethods = () => {
     if (loadingSavedMethods) {
       return (
-        <ActivityIndicator size="small" color="#5586CC" style={styles.methodsLoader} />
+        <ActivityIndicator size="small" color={COLORS.primary} style={styles.methodsLoader} />
       );
     }
     
@@ -181,15 +233,15 @@ export default function PaymentScreen() {
       return (
         <View style={styles.noSavedMethodsContainer}>
           <ThemedText style={styles.noSavedMethodsText}>
-            Vous n&apos;avez pas encore de méthode de paiement sauvegardée
+            You don't have any saved payment methods yet
           </ThemedText>
           <TouchableOpacity 
             style={styles.addPaymentMethodButton}
             onPress={() => router.push('/patient/profile/add-payment-method')}
           >
-            <Ionicons name="add-circle-outline" size={18} color="#5586CC" />
+            <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
             <ThemedText style={styles.addPaymentMethodText}>
-              Ajouter une méthode de paiement
+              Add a payment method
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -199,7 +251,7 @@ export default function PaymentScreen() {
     return (
       <View style={styles.savedMethodsContainer}>
         <ThemedText style={styles.savedMethodsTitle}>
-          Vos méthodes de paiement sauvegardées
+          Your saved payment methods
         </ThemedText>
         
         {savedPaymentMethods.map(method => (
@@ -218,7 +270,7 @@ export default function PaymentScreen() {
               <Ionicons 
                 name={getMethodIcon(method.type)} 
                 size={24} 
-                color={selectedSavedMethod === method._id ? '#FFFFFF' : '#0F2057'} 
+                color={selectedSavedMethod === method._id ? COLORS.white : COLORS.textDark} 
               />
             </View>
             <View style={styles.savedMethodInfo}>
@@ -240,7 +292,7 @@ export default function PaymentScreen() {
             </View>
             {method.isDefault && (
               <View style={styles.defaultBadge}>
-                <ThemedText style={styles.defaultBadgeText}>Par défaut</ThemedText>
+                <ThemedText style={styles.defaultBadgeText}>Default</ThemedText>
               </View>
             )}
           </TouchableOpacity>
@@ -253,9 +305,9 @@ export default function PaymentScreen() {
             router.push('/patient/profile/add-payment-method');
           }}
         >
-          <Ionicons name="add-circle-outline" size={18} color="#5586CC" />
+          <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
           <ThemedText style={styles.addNewMethodText}>
-            Utiliser une autre méthode de paiement
+            Use another payment method
           </ThemedText>
         </TouchableOpacity>
       </View>
@@ -276,8 +328,8 @@ export default function PaymentScreen() {
   if (loading) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#5586CC" />
-        <ThemedText style={styles.loadingText}>Chargement des détails...</ThemedText>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ThemedText style={styles.loadingText}>Loading appointment details...</ThemedText>
       </ThemedView>
     );
   }
@@ -286,10 +338,10 @@ export default function PaymentScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: 'Paiement',
+          title: 'Payment',
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#0F2057" />
+              <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
             </TouchableOpacity>
           )
         }} 
@@ -297,47 +349,49 @@ export default function PaymentScreen() {
       
       <ScrollView style={styles.content}>
         <View style={styles.appointmentCard}>
-          <ThemedText style={styles.cardTitle}>Détails du rendez-vous</ThemedText>
+          <ThemedText style={styles.cardTitle}>Appointment Details</ThemedText>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Médecin:</ThemedText>
+            <ThemedText style={styles.detailLabel}>Doctor:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.doctor?.full_name || 'Dr. Nom du médecin'}
+              {appointment?.doctor?.full_name || 'Doctor Name'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Date:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.availability?.date || 'Date non disponible'}
+              {appointment?.availability?.date ? format(parseISO(appointment.availability.date), 'MMM d, yyyy') : 'Not available'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Heure:</ThemedText>
+            <ThemedText style={styles.detailLabel}>Time:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.availability?.startTime || '00:00'}
+              {appointment?.slotStartTime && appointment?.slotEndTime 
+                ? `${formatTimeString(appointment.slotStartTime)} - ${formatTimeString(appointment.slotEndTime)}`
+                : 'Not available'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Type:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.caseDetails || 'Consultation standard'}
+              {appointment?.caseDetails || 'Standard consultation'}
             </ThemedText>
           </View>
         </View>
         
         <View style={styles.paymentSummary}>
-          <ThemedText style={styles.paymentTitle}>Récapitulatif du paiement</ThemedText>
+          <ThemedText style={styles.paymentTitle}>Payment Summary</ThemedText>
           
           <View style={styles.priceRow}>
-            <ThemedText style={styles.priceLabel}>Prix de la consultation:</ThemedText>
-            <ThemedText style={styles.priceValue}>{appointment?.price || 28} €</ThemedText>
+            <ThemedText style={styles.priceLabel}>Consultation fee:</ThemedText>
+            <ThemedText style={styles.priceValue}>${appointment?.price || 28}</ThemedText>
           </View>
         </View>
         
-        <ThemedText style={styles.methodsTitle}>Méthode de paiement</ThemedText>
+        <ThemedText style={styles.methodsTitle}>Payment Method</ThemedText>
         
         {/* Afficher les méthodes de paiement sauvegardées */}
         {renderSavedPaymentMethods()}
@@ -353,12 +407,12 @@ export default function PaymentScreen() {
           disabled={processingPayment || savedPaymentMethods.length === 0}
         >
           {processingPayment ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={COLORS.white} />
           ) : (
             <ThemedText style={styles.payButtonText}>
               {savedPaymentMethods.length === 0 
-                ? "Ajoutez une méthode de paiement pour continuer" 
-                : `Payer ${appointment?.price || 28} €`}
+                ? "Add a payment method to continue" 
+                : `Pay $${appointment?.price || 28}`}
             </ThemedText>
           )}
         </TouchableOpacity>
@@ -370,7 +424,7 @@ export default function PaymentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
@@ -380,14 +434,14 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#6C757D',
+    color: COLORS.textLight,
   },
   content: {
     flex: 1,
     padding: 16,
   },
   appointmentCard: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
@@ -400,7 +454,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.textDark,
     marginBottom: 16,
   },
   detailRow: {
@@ -410,15 +464,15 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.textLight,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#0F2057',
+    color: COLORS.textDark,
   },
   paymentSummary: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
@@ -431,7 +485,7 @@ const styles = StyleSheet.create({
   paymentTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.textDark,
     marginBottom: 16,
   },
   priceRow: {
@@ -441,22 +495,22 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.textLight,
   },
   priceValue: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.textDark,
   },
   methodsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0F2057',
+    color: COLORS.textDark,
     marginTop: 16,
     marginBottom: 16,
   },
   paymentMethods: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 16,
     shadowColor: '#000',
@@ -470,10 +524,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: COLORS.gray100,
   },
   selectedPaymentMethod: {
-    backgroundColor: '#5586CC',
+    backgroundColor: COLORS.primary,
     borderRadius: 8,
     marginVertical: 4,
     borderBottomWidth: 0,
@@ -484,21 +538,21 @@ const styles = StyleSheet.create({
   },
   methodText: {
     fontSize: 16,
-    color: '#0F2057',
+    color: COLORS.textDark,
   },
   selectedMethodText: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontWeight: 'bold',
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-    backgroundColor: 'white',
+    borderTopColor: COLORS.gray100,
+    backgroundColor: COLORS.cardBackground,
   },
   payButton: {
-    backgroundColor: '#5586CC',
+    backgroundColor: COLORS.primary,
     padding: 16,
     borderRadius: 10,
     alignItems: 'center',
@@ -506,17 +560,17 @@ const styles = StyleSheet.create({
   payButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
   disabledButton: {
-    backgroundColor: '#ACC2E4',
+    backgroundColor: COLORS.gray200,
   },
   // Styles pour les méthodes de paiement sauvegardées
   methodsLoader: {
     marginVertical: 20,
   },
   savedMethodsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
@@ -529,7 +583,7 @@ const styles = StyleSheet.create({
   savedMethodsTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#0F2057',
+    color: COLORS.textDark,
     marginBottom: 12,
   },
   savedMethodItem: {
@@ -538,16 +592,16 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.gray100,
   },
   selectedSavedMethod: {
-    backgroundColor: '#5586CC',
+    backgroundColor: COLORS.primary,
   },
   savedMethodIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: COLORS.gray200,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -557,11 +611,11 @@ const styles = StyleSheet.create({
   },
   savedMethodDetails: {
     fontSize: 12,
-    color: '#6C757D',
+    color: COLORS.textLight,
     marginTop: 2,
   },
   selectedMethodDetails: {
-    color: '#E2E8F0',
+    color: COLORS.gray300,
   },
   defaultBadge: {
     backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -572,7 +626,7 @@ const styles = StyleSheet.create({
   },
   defaultBadgeText: {
     fontSize: 10,
-    color: '#22C55E',
+    color: COLORS.success,
     fontWeight: '500',
   },
   addNewMethodButton: {
@@ -581,16 +635,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: COLORS.gray100,
     marginTop: 8,
   },
   addNewMethodText: {
     fontSize: 14,
-    color: '#5586CC',
+    color: COLORS.primary,
     marginLeft: 8,
   },
   noSavedMethodsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
@@ -603,7 +657,7 @@ const styles = StyleSheet.create({
   },
   noSavedMethodsText: {
     fontSize: 14,
-    color: '#6C757D',
+    color: COLORS.textLight,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -614,7 +668,7 @@ const styles = StyleSheet.create({
   },
   addPaymentMethodText: {
     fontSize: 14,
-    color: '#5586CC',
+    color: COLORS.primary,
     marginLeft: 8,
   },
 }); 

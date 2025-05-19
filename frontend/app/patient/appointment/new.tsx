@@ -874,15 +874,17 @@ export default function BookAppointmentScreen() {
           {/* Doctor card */}
           <ThemedView style={styles.doctorCard}>
             <View style={styles.doctorProfile}>
-              <Image
-                source={
-                  doctor.doctor_image
-                    ? { uri: getImageUrl(doctor.doctor_image) }
-                    : getDefaultImage()
-                }
-                style={styles.doctorImage}
-                contentFit="cover"
-              />
+              {doctor.doctor_image ? (
+                <Image
+                  source={{ uri: getImageUrl(doctor.doctor_image) }}
+                  style={styles.doctorImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={[styles.doctorImage, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="person" size={32} color={COLORS.white} />
+                </View>
+              )}
 
               <View style={styles.doctorInfo}>
                 <ThemedText type="title" style={styles.doctorName}>

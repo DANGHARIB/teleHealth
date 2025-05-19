@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { patientAPI } from '@/services/api';
+import { defaultDoctorImageBase64 } from '@/assets/images/default-doctor';
 
 // API URL constants
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -43,6 +44,7 @@ const COLORS = {
   error: '#EF4444',
   success: '#10B981',
   yellow: '#FFD700',
+  white: '#FFFFFF',
 }
 
 type Doctor = {
@@ -115,7 +117,7 @@ export default function PatientHomeScreen() {
     return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim();
   };
 
-  const getDefaultImage = () => require('@/assets/images/icon.png');
+  const getDefaultImage = () => ({ uri: defaultDoctorImageBase64 });
 
   const handleExploreDoctor = (doctorId: string) => {
     router.push(`/patient/doctor/${doctorId}`);
@@ -149,12 +151,18 @@ export default function PatientHomeScreen() {
       onPress={() => handleExploreDoctor(item._id)}
       activeOpacity={0.8}
     >
-      <Image
-        source={item.doctor_image ? { uri: getImageUrl(item.doctor_image) } : getDefaultImage()}
-        style={styles.doctorImage}
-        contentFit="cover"
-        transition={300}
-      />
+      {item.doctor_image ? (
+        <Image
+          source={{ uri: getImageUrl(item.doctor_image) }}
+          style={styles.doctorImage}
+          contentFit="cover"
+          transition={300}
+        />
+      ) : (
+        <View style={[styles.doctorImage, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="person" size={32} color={COLORS.white} />
+        </View>
+      )}
       <View style={styles.doctorInfo}>
         <ThemedText type="title" style={styles.doctorName}>
           Dr. {getDoctorName(item)}
@@ -286,7 +294,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   sectionContainer: {
     marginTop: 16,
