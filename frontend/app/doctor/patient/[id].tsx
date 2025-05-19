@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, View, Alert, Linking } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, Stack, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, Stack, useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -257,6 +257,21 @@ export default function PatientDetailScreen() {
                 Contact
               </ThemedText>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.notesButton}
+              onPress={() => router.push(`/doctor/notes/patient/${patient._id}`)}
+            >
+              <Ionicons 
+                name="document-text-outline" 
+                size={20} 
+                color="#fff" 
+                style={styles.buttonIcon} 
+              />
+              <ThemedText style={styles.buttonText}>
+                Voir les notes
+              </ThemedText>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       ) : (
@@ -386,6 +401,8 @@ const styles = StyleSheet.create({
   buttonContainer: {
     margin: 16,
     marginBottom: 30,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   contactButton: {
     flexDirection: 'row',
@@ -394,6 +411,8 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   buttonIcon: {
     marginRight: 8,
@@ -402,5 +421,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  notesButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.babyBlue,
+    borderRadius: 8,
+    padding: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: 8,
   },
 }); 

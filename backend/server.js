@@ -18,8 +18,20 @@ connectDB();
 // Initialiser Express
 const app = express();
 
+// Configuration CORS
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // URL de développement de l'application web admin (Vite)
+    'https://admin.votre-domaine.com', // URL de production de l'application web admin
+    // Ajoutez ici d'autres origines autorisées si nécessaire
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
 // Middlewares
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Logger en développement
@@ -57,6 +69,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/appointment-notes', require('./routes/appointmentNotes'));
 
 // Gestion des erreurs 404
 app.use((req, res) => {
@@ -82,17 +95,22 @@ const server = app.listen(PORT, () => {
 
 // Programmer la tâche de nettoyage des rendez-vous non payés
 // Exécution toutes les 10 minutes
-cron.schedule('*/10 * * * *', () => {
-  logger.info('Lancement du nettoyage des rendez-vous non payés');
-  exec('node scripts/cleanupUnpaidAppointments.js', (error, stdout, stderr) => {
-    if (error) {
-      logger.error(`Erreur d'exécution du script de nettoyage: ${error.message}`);
-      return;
-    }
-    if (stderr) {
-      logger.error(`Erreur dans le script de nettoyage: ${stderr}`);
-      return;
-    }
-    logger.info(`Résultat du nettoyage: ${stdout}`);
+// NOTE: Temporairement désactivé jusqu'à ce que les problèmes soient résolus
+const CLEANUP_ENABLED = false; // Mettre à true pour réactiver
+
+if (CLEANUP_ENABLED) {
+  cron.schedule('*/10 * * * *', () => {
+    logger.info('Lancement du nettoyage des rendez-vous non payés');
+    exec('node scripts/cleanupUnpaidAppointments.js', (error, stdout, stderr) => {
+      if (error) {
+        logger.error(`Erreur d'exécution du script de nettoyage: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        logger.error(`Erreur dans le script de nettoyage: ${stderr}`);
+        return;
+      }
+      logger.info(`Résultat du nettoyage: ${stdout}`);
+    });
   });
-}); 
+} 

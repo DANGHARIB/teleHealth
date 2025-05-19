@@ -230,7 +230,77 @@ export const doctorAPI = {
     } catch (error) {
       throw error.response?.data || error.message;
     }
-  }
+  },
+  
+  // Créer une note pour un rendez-vous
+  createAppointmentNote: async (noteData) => {
+    try {
+      const response = await api.post('/appointment-notes', noteData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Mettre à jour une note
+  updateAppointmentNote: async (noteId, noteData) => {
+    try {
+      const response = await api.put(`/appointment-notes/${noteId}`, noteData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer toutes les notes du médecin
+  getAppointmentNotes: async () => {
+    try {
+      const response = await api.get('/appointment-notes');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer les notes pour un patient spécifique
+  getPatientNotes: async (patientId) => {
+    try {
+      const response = await api.get(`/appointment-notes/patient/${patientId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Récupérer une note spécifique
+  getNoteById: async (noteId) => {
+    try {
+      const response = await api.get(`/appointment-notes/${noteId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Vérifier si une note existe pour un rendez-vous
+  checkNoteExists: async (appointmentId) => {
+    try {
+      const response = await api.get(`/appointment-notes/check/${appointmentId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Supprimer une note
+  deleteNote: async (noteId) => {
+    try {
+      const response = await api.delete(`/appointment-notes/${noteId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 };
 
 // API pour les patients

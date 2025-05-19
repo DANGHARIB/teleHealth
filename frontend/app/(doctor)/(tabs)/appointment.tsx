@@ -303,6 +303,44 @@ export default function DoctorAppointmentScreen() {
   
   // Les rendez-vous sont automatiquement confirmés après paiement
 
+  // Vérifier si un rendez-vous est passé (slot de fin est dépassé)
+  const isAppointmentPast = (appointment: Appointment) => {
+    try {
+      const now = new Date();
+      const appointmentDate = new Date(appointment.availability.date);
+      const [hours, minutes] = appointment.slotEndTime.split(':').map(Number);
+      
+      appointmentDate.setHours(hours, minutes, 0, 0);
+      
+      return now > appointmentDate;
+    } catch (error) {
+      console.error('Erreur lors de la vérification de la date du rendez-vous:', error);
+      return false;
+    }
+  };
+
+  // Naviguer vers l'écran des notes
+  const navigateToNotes = (appointment: Appointment) => {
+    // Vérifier d'abord si une note existe déjà
+    doctorAPI.checkNoteExists(appointment._id)
+      .then(({ exists, noteId }) => {
+        if (exists && noteId) {
+          // Si une note existe, naviguer vers l'édition de la note
+          router.push(`/doctor/notes/${noteId}`);
+        } else {
+          // Sinon, naviguer vers la création d'une nouvelle note
+          router.push({
+            pathname: '/doctor/notes/create',
+            params: { appointmentId: appointment._id }
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Erreur lors de la vérification des notes:', error);
+        Alert.alert('Erreur', 'Impossible de vérifier les notes existantes.');
+      });
+  };
+
   // Navigate to reschedule screen
   const navigateToReschedule = (appointment: Appointment) => {
     if (!canRescheduleAppointment(appointment.availability.date)) {
@@ -560,13 +598,25 @@ export default function DoctorAppointmentScreen() {
             
             <View style={styles.actionButtons}>
               {appointment.sessionLink && appointment.status !== 'cancelled' && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.primaryButton]}
-                  onPress={() => openZoomLink(appointment.sessionLink)}
-                >
-                  <Ionicons name="videocam" size={16} color={COLORS.white} />
-                  <ThemedText style={styles.buttonText}>Join Call</ThemedText>
-                </TouchableOpacity>
+                <>
+                  {isAppointmentPast(appointment) ? (
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.primaryButton]}
+                      onPress={() => navigateToNotes(appointment)}
+                    >
+                      <Ionicons name="document-text" size={16} color={COLORS.white} />
+                      <ThemedText style={styles.buttonText}>Notes</ThemedText>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.primaryButton]}
+                      onPress={() => openZoomLink(appointment.sessionLink)}
+                    >
+                      <Ionicons name="videocam" size={16} color={COLORS.white} />
+                      <ThemedText style={styles.buttonText}>Join Call</ThemedText>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
               
               {/* Option de reprogrammation disponible jusqu'à J-1 */}

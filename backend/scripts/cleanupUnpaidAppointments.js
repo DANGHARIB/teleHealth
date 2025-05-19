@@ -6,11 +6,14 @@
 const mongoose = require('mongoose');
 const Appointment = require('../models/Appointment');
 const Availability = require('../models/Availability');
-const config = require('../config/config');
 const logger = require('../config/logger');
+const dotenv = require('dotenv');
+
+// Charger les variables d'environnement
+dotenv.config();
 
 // Se connecter à la base de données
-mongoose.connect(config.mongoURI, {
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
