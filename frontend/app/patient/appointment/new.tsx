@@ -153,6 +153,23 @@ export default function BookAppointmentScreen() {
   // New state to track loading of available dates
   const [loadingAvailableDates, setLoadingAvailableDates] = useState(false);
 
+  // Helper function to check if a slot's time on a given date is before the current time
+  const isSlotTimeBeforeNow = (dateOfSlot: Date, startTimeStr: string): boolean => {
+    const now = new Date();
+    const [hours, minutes] = startTimeStr.split(':').map(Number);
+
+    // Create a new Date object for the slot's specific time
+    // Ensure to use the year, month, and day from dateOfSlot
+    const slotDateTime = new Date(
+      dateOfSlot.getFullYear(),
+      dateOfSlot.getMonth(),
+      dateOfSlot.getDate(),
+      hours,
+      minutes
+    );
+    return isBefore(slotDateTime, now);
+  };
+
   // Generate date options for the current week
   useEffect(() => {
     const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 }); // Start on Monday
@@ -626,8 +643,11 @@ export default function BookAppointmentScreen() {
               const isSelected =
                 format(selectedDate, "yyyy-MM-dd") ===
                 format(date, "yyyy-MM-dd");
-              const isToday =
+              const isTodayDate =
                 format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+              
+              // Check if the date is in the past (and not today)
+              const isPastDate = isBefore(date, new Date()) && !isTodayDate;
 
               // Check if this date has availabilities
               const dateOption = availableDates.find(
@@ -636,22 +656,25 @@ export default function BookAppointmentScreen() {
               );
               const hasAvailabilities = dateOption?.hasAvailabilities || false;
 
+              // A date is disabled if it's in the past OR it has no availabilities
+              const isDisabled = isPastDate || !hasAvailabilities;
+
               return (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.dateOption,
                     isSelected && styles.selectedDateOption,
-                    !hasAvailabilities && styles.unavailableDateOption,
+                    isDisabled && styles.unavailableDateOption,
                   ]}
-                  onPress={() => hasAvailabilities && handleDateSelection(date)}
-                  disabled={!hasAvailabilities}
+                  onPress={() => !isDisabled && handleDateSelection(date)}
+                  disabled={isDisabled}
                 >
                   <ThemedText
                     style={[
                       styles.dayName,
                       isSelected && styles.selectedDateText,
-                      !hasAvailabilities && styles.unavailableDateText,
+                      isDisabled && styles.unavailableDateText,
                     ]}
                   >
                     {format(date, "EEE", { locale: enUS })}
@@ -660,18 +683,23 @@ export default function BookAppointmentScreen() {
                     style={[
                       styles.dayNumber,
                       isSelected && styles.selectedDateText,
-                      !hasAvailabilities && styles.unavailableDateText,
+                      isDisabled && styles.unavailableDateText,
                     ]}
                   >
                     {format(date, "dd")}
                   </ThemedText>
-                  {isToday && !isSelected && (
+                  {isTodayDate && !isSelected && !isPastDate && (
                     <View style={styles.todayIndicator} />
                   )}
-                  {!hasAvailabilities && (
+                  {isDisabled && !isPastDate && !hasAvailabilities && (
                     <View style={styles.noAvailabilityIndicator}>
                       <Ionicons name="close" size={12} color={COLORS.white} />
                     </View>
+                  )}
+                  {isPastDate && (
+                     <View style={[styles.noAvailabilityIndicator, {backgroundColor: COLORS.gray500}]}>
+                       <Ionicons name="remove-circle-outline" size={12} color={COLORS.white} />
+                     </View>
                   )}
                 </TouchableOpacity>
               );
@@ -718,6 +746,42 @@ export default function BookAppointmentScreen() {
       return hour >= 17;
     });
 
+    const renderSlotList = (slots: TimeSlot[], type: string) => (
+      <View style={styles.timeGrid}>
+        {slots.map((slot, index) => {
+          const slotIsForToday = isToday(selectedDate);
+          const slotIsInThePast = slotIsForToday && isSlotTimeBeforeNow(selectedDate, slot.startTime);
+          const isDisabled = !slot.available || slotIsInThePast;
+
+          return (
+            <TouchableOpacity
+              key={`${type}-${index}`}
+              style={[
+                styles.timeSlot,
+                selectedTimeSlot === slot._id && styles.selectedTimeSlot,
+                isDisabled && styles.unavailableTimeSlot,
+              ]}
+              onPress={() => !isDisabled && handleTimeSlotSelect(slot)}
+              disabled={isDisabled}
+            >
+              {selectedTimeSlot === slot._id && (
+                <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
+              )}
+              <ThemedText
+                style={[
+                  styles.timeText,
+                  selectedTimeSlot === slot._id && styles.selectedTimeText,
+                  isDisabled && styles.unavailableTimeText,
+                ]}
+              >
+                {formatTimeForDisplay(slot.startTime, slot.endTime)}
+              </ThemedText>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+
     return (
       <View style={styles.timeSlotsContainer}>
         {morningSlots.length > 0 && (
@@ -728,33 +792,7 @@ export default function BookAppointmentScreen() {
                 Morning
               </ThemedText>
             </View>
-            <View style={styles.timeGrid}>
-              {morningSlots.map((slot, index) => (
-                <TouchableOpacity
-                  key={`morning-${index}`}
-                  style={[
-                    styles.timeSlot,
-                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot,
-                  ]}
-                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
-                  disabled={!slot.available}
-                >
-                  {selectedTimeSlot === slot._id && (
-                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
-                  )}
-                  <ThemedText
-                    style={[
-                      styles.timeText,
-                      selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText,
-                    ]}
-                  >
-                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {renderSlotList(morningSlots, 'morning')}
           </View>
         )}
 
@@ -770,33 +808,7 @@ export default function BookAppointmentScreen() {
                 Afternoon
               </ThemedText>
             </View>
-            <View style={styles.timeGrid}>
-              {afternoonSlots.map((slot, index) => (
-                <TouchableOpacity
-                  key={`afternoon-${index}`}
-                  style={[
-                    styles.timeSlot,
-                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot,
-                  ]}
-                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
-                  disabled={!slot.available}
-                >
-                  {selectedTimeSlot === slot._id && (
-                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
-                  )}
-                  <ThemedText
-                    style={[
-                      styles.timeText,
-                      selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText,
-                    ]}
-                  >
-                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {renderSlotList(afternoonSlots, 'afternoon')}
           </View>
         )}
 
@@ -808,33 +820,7 @@ export default function BookAppointmentScreen() {
                 Evening
               </ThemedText>
             </View>
-            <View style={styles.timeGrid}>
-              {eveningSlots.map((slot, index) => (
-                <TouchableOpacity
-                  key={`evening-${index}`}
-                  style={[
-                    styles.timeSlot,
-                    selectedTimeSlot === slot._id && styles.selectedTimeSlot,
-                    !slot.available && styles.unavailableTimeSlot,
-                  ]}
-                  onPress={() => slot.available && handleTimeSlotSelect(slot)}
-                  disabled={!slot.available}
-                >
-                  {selectedTimeSlot === slot._id && (
-                    <Ionicons name="checkmark-circle" size={14} color={COLORS.white} style={styles.selectedIcon} />
-                  )}
-                  <ThemedText
-                    style={[
-                      styles.timeText,
-                      selectedTimeSlot === slot._id && styles.selectedTimeText,
-                      !slot.available && styles.unavailableTimeText,
-                    ]}
-                  >
-                    {formatTimeForDisplay(slot.startTime, slot.endTime)}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {renderSlotList(eveningSlots, 'evening')}
           </View>
         )}
       </View>
