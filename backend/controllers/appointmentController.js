@@ -536,6 +536,7 @@ exports.patientRescheduleAppointment = async (req, res) => {
 
     console.log("===== DÉBUT REPROGRAMMATION PAR PATIENT =====");
     console.log("Appointment ID à reprogrammer:", appointmentId);
+    console.log("Type de l'ID:", typeof appointmentId);
     console.log("Nouvelles données de slot:", JSON.stringify({ newAvailabilityId, newSlotStartTime, newSlotEndTime }, null, 2));
 
     if (!newAvailabilityId || !newSlotStartTime || !newSlotEndTime) {
@@ -550,13 +551,30 @@ exports.patientRescheduleAppointment = async (req, res) => {
     }
     console.log("✅ Patient identifié:", patient._id);
 
+    // Recherche directement dans la base de données pour voir si l'ID est valide
+    console.log("Tentative de recherche du rendez-vous avec ID:", appointmentId);
+    
+    // Vérifier si l'ID est un ObjectId valide
+    if (!appointmentId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log("❌ ID de rendez-vous invalide (format incorrect):", appointmentId);
+      return res.status(400).json({ message: "ID de rendez-vous au format invalide." });
+    }
+
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) {
-      console.log("❌ Rendez-vous non trouvé:", appointmentId);
-      return res.status(404).json({ message: "Rendez-vous non trouvé." });
+      console.log("❌ Rendez-vous non trouvé avec ID:", appointmentId);
+      
+      // Rechercher parmi tous les rendez-vous du patient pour vérifier s'ils existent
+      const patientAppointments = await Appointment.find({ patient: patient._id });
+      console.log(`Le patient a ${patientAppointments.length} rendez-vous. IDs:`, patientAppointments.map(a => a._id.toString()));
+      
+      return res.status(404).json({ 
+        message: "Rendez-vous non trouvé. Vérifiez que l'ID est correct et que le rendez-vous n'a pas été supprimé." 
+      });
     }
     console.log("✅ Rendez-vous trouvé:", appointment._id, "Status actuel:", appointment.status);
 
+    // Le reste du code reste inchangé
     if (appointment.patient.toString() !== patient._id.toString()) {
       console.log("❌ Accès non autorisé. Patient:", patient._id, "Propriétaire RDV:", appointment.patient);
       return res.status(403).json({ message: "Non autorisé à modifier ce rendez-vous." });
@@ -644,13 +662,18 @@ exports.patientRescheduleAppointment = async (req, res) => {
 // @access  Private
 exports.cancelAppointment = async (req, res) => {
   try {
+    console.log("===== DÉBUT ANNULATION DE RENDEZ-VOUS =====");
+    
     // Récupérer l'ID du patient
     const patient = await Patient.findOne({ user: req.user._id });
     if (!patient) {
+      console.log("❌ Patient non trouvé pour l'utilisateur:", req.user._id);
       return res.status(404).json({ message: "Patient non trouvé" });
     }
+    console.log("✅ Patient identifié:", patient._id);
 
     const appointmentId = req.params.id;
+    console.log("Tentative d'annulation du rendez-vous:", appointmentId);
 
     const appointment = await Appointment.findOne({
       _id: appointmentId,
@@ -658,51 +681,73 @@ exports.cancelAppointment = async (req, res) => {
     });
 
     if (!appointment) {
+      console.log("❌ Rendez-vous non trouvé:", appointmentId);
       return res.status(404).json({ message: "Rendez-vous non trouvé" });
     }
+    console.log("✅ Rendez-vous trouvé:", appointment._id, "Statut actuel:", appointment.status);
 
     // Vérifier si le rendez-vous peut être annulé (pas déjà passé)
     const availability = await Availability.findById(appointment.availability);
+    if (!availability) {
+      console.log("❌ Disponibilité non trouvée pour le rendez-vous:", appointment.availability);
+      return res.status(404).json({ message: "Disponibilité du rendez-vous non trouvée" });
+    }
+    console.log("✅ Disponibilité trouvée:", availability._id);
+    
     const appointmentDate = new Date(
       `${availability.date}T${availability.startTime}`,
     );
 
     if (appointmentDate < new Date()) {
+      console.log("❌ Le rendez-vous est déjà passé, impossible d'annuler");
       return res
         .status(400)
         .json({ message: "Impossible d'annuler un rendez-vous passé" });
     }
+    console.log("✅ Le rendez-vous peut être annulé (date future)");
 
     // Mettre à jour le statut du rendez-vous
     appointment.status = "cancelled";
+    console.log("✅ Statut du rendez-vous mis à jour: cancelled");
 
     // Passer le statut de paiement à 'refunded'
     appointment.paymentStatus = "refunded";
+    console.log("✅ Statut de paiement mis à jour: refunded");
 
     // Traiter le remboursement automatiquement
     try {
       // Utiliser le service de remboursement partiel (80%)
       await paymentService.processPartialRefund(appointmentId);
+      console.log("✅ Remboursement partiel (80%) traité avec succès");
     } catch (refundError) {
-      console.error("Erreur lors du remboursement:", refundError);
+      console.error("⚠️ Erreur lors du remboursement:", refundError);
       // Continuer avec l'annulation même si le remboursement échoue
     }
 
     await appointment.save();
+    console.log("✅ Rendez-vous sauvegardé avec le nouveau statut");
 
     // Libérer le créneau de disponibilité
-    availability.isBooked = false;
-    await availability.save();
+    if (availability.isBooked) {
+      availability.isBooked = false;
+      await availability.save();
+      console.log("✅ Créneau de disponibilité libéré avec succès");
+    } else {
+      console.log("ℹ️ Le créneau de disponibilité était déjà libre");
+    }
 
     // Envoyer une notification au médecin
     await notificationService.notifyAppointmentCancelled(appointment);
+    console.log("✅ Notification d'annulation envoyée au médecin");
 
+    console.log("===== FIN ANNULATION DE RENDEZ-VOUS =====");
+    
     res.status(200).json({
       message: "Rendez-vous annulé avec succès",
       paymentStatus: "refunded",
     });
   } catch (error) {
-    console.error("Erreur lors de l'annulation du rendez-vous:", error);
+    console.error("❌ Erreur lors de l'annulation du rendez-vous:", error);
     res
       .status(500)
       .json({ message: "Erreur serveur lors de l'annulation du rendez-vous" });

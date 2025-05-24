@@ -73,8 +73,12 @@ exports.getDoctorAvailability = async (req, res) => {
     console.log(`✅ ${generalAvailabilities.length} plage(s) de disponibilité générale trouvée(s) pour le ${date}.`);
 
     // 2. Récupérer tous les rendez-vous existants pour ce médecin à cette date
+    // Ne considérer que les rendez-vous confirmés (non annulés) et payés 
+    // pour permettre aux créneaux associés à des rendez-vous annulés d'être à nouveau disponibles
     const existingAppointments = await Appointment.find({
       doctor: doctorId,
+      status: { $nin: ['cancelled', 'rejected'] }, // Exclure les rendez-vous annulés ou rejetés
+      paymentStatus: 'completed' // Ne considérer que les rendez-vous payés
     }).populate('availability');
 
     const bookedSlotsForDate = new Set();
@@ -87,7 +91,7 @@ exports.getDoctorAvailability = async (req, res) => {
         }
       }
     });
-    console.log(`ℹ️ ${bookedSlotsForDate.size} créneaux déjà réservés pour le ${date}:`, Array.from(bookedSlotsForDate));
+    console.log(`ℹ️ ${bookedSlotsForDate.size} créneaux réservés actifs pour le ${date}:`, Array.from(bookedSlotsForDate));
     
     const allThirtyMinuteSlots = [];
 

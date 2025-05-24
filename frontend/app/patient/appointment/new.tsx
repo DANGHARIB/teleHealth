@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   StyleSheet,
   ScrollView,
@@ -153,6 +153,9 @@ export default function BookAppointmentScreen() {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [availableDates, setAvailableDates] = useState<DateOption[]>([]);
 
+  // Cache for time slots by date
+  const [timeSlotsCache, setTimeSlotsCache] = useState<{[key: string]: TimeSlot[]}>({});
+
   // Week navigation
   const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
   const [dateOptions, setDateOptions] = useState<Date[]>([]);
@@ -237,7 +240,14 @@ export default function BookAppointmentScreen() {
           return;
         }
 
-        console.log(`BookAppointmentScreen - Fetching doctor details for ID: ${doctorId}`);
+        // Log pour debugging
+        console.log('BookAppointmentScreen - Fetching doctor details:', {
+          doctorId,
+          appointmentIdToReschedule,
+          doctorIdType: typeof doctorId,
+          appointmentIdType: typeof appointmentIdToReschedule
+        });
+
         setLoading(true);
         const doctorData = await doctorAPI.getDoctorById(doctorId as string);
         
@@ -268,7 +278,16 @@ export default function BookAppointmentScreen() {
   // Retrieve 30-minute time slots for a specific date
   const fetchAvailabilities = async (date: string) => {
     try {
+      // Check if we already have cached data for this date
+      if (timeSlotsCache[date]) {
+        console.log('Using cached time slots for date:', date);
+        setTimeSlots(timeSlotsCache[date]);
+        return;
+      }
+      
+      // Only show loading indicator when we don't have data yet
       setLoadingSlots(true);
+      
       setSelectedTimeSlot(null); // Reset selection when date changes
 
       // This API call will now return an array of TimeSlot objects
@@ -276,7 +295,13 @@ export default function BookAppointmentScreen() {
         doctorId as string,
         date,
       );
+      
+      // Update both the current time slots and the cache
       setTimeSlots(timeSlotsData);
+      setTimeSlotsCache(prevCache => ({
+        ...prevCache,
+        [date]: timeSlotsData
+      }));
 
       setLoadingSlots(false);
     } catch (err) {
@@ -426,7 +451,7 @@ export default function BookAppointmentScreen() {
   // Book the appointment
   const handleBookAppointment = async () => {
     if (!selectedTimeSlot || !doctorId || !doctor) {
-      Alert.alert("Erreur", "Veuillez sélectionner une date et une heure, ou les détails du médecin sont manquants.");
+      Alert.alert("Error", "Please select a date and time, or doctor details are missing.");
       return;
     }
 
@@ -434,16 +459,83 @@ export default function BookAppointmentScreen() {
       const selectedSlot = timeSlots.find((slot) => slot._id === selectedTimeSlot);
 
       if (!selectedSlot) {
-        Alert.alert("Erreur", "Créneau sélectionné non trouvé.");
+        Alert.alert("Error", "Selected slot not found.");
         return;
       }
 
-      // Pour une reprogrammation, continuer avec la logique existante
+      // For rescheduling an existing appointment
       if (appointmentIdToReschedule) {
-        // Code existant pour reprogrammer un rendez-vous...
+        setLoading(true);
+        
+        try {
+          // Assurons-nous que l'ID est correctement formaté
+          const formattedAppointmentId = String(appointmentIdToReschedule).trim();
+          
+          console.log(`Attempting to reschedule appointment:`, {
+            appointmentId: formattedAppointmentId,
+            originalId: appointmentIdToReschedule,
+            slotId: selectedSlot.availabilityId,
+            startTime: selectedSlot.startTime,
+            endTime: selectedSlot.endTime,
+            date: format(selectedDate, "yyyy-MM-dd")
+          });
+          
+          // Call the API to reschedule the appointment
+          const response = await patientAPI.rescheduleAppointment(
+            formattedAppointmentId,
+            {
+              availabilityId: selectedSlot.availabilityId,
+              slotStartTime: selectedSlot.startTime,
+              slotEndTime: selectedSlot.endTime,
+              date: format(selectedDate, "yyyy-MM-dd")
+            }
+          );
+          
+          console.log("Rescheduling successful:", response);
+          
+          // Show success message
+          Alert.alert(
+            "Success", 
+            "Your appointment has been successfully rescheduled.",
+            [
+              { 
+                text: "OK", 
+                onPress: () => {
+                  // Navigate back to the appointments screen
+                  router.replace("/(patient)/(tabs)/appointment");
+                }
+              }
+            ]
+          );
+          
+        } catch (error) {
+          console.error("Error rescheduling appointment:", error);
+          
+          // Show a more detailed error message
+          let errorMessage = "Failed to reschedule appointment. Please try again.";
+          if (typeof error === 'object' && error !== null) {
+            // Conversion explicite de l'objet error en string lisible
+            if ('message' in error) {
+              errorMessage = String(error.message);
+            } else if (error.toString) {
+              errorMessage = error.toString();
+            }
+          }
+          
+          Alert.alert("Error", errorMessage, [
+            { 
+              text: "OK", 
+              onPress: () => {
+                // Navigate back to the appointments screen since rescheduling failed
+                router.replace("/(patient)/(tabs)/appointment");
+              }
+            }
+          ]);
+        } finally {
+          setLoading(false);
+        }
       } else {
-        // Pour une nouvelle réservation - rediriger directement vers la page de paiement
-        // avec les informations nécessaires sans créer de rendez-vous
+        // For a new reservation - redirect to payment page
         router.push({
           pathname: "/patient/payment",
           params: { 
@@ -459,7 +551,8 @@ export default function BookAppointmentScreen() {
         });
       }
     } catch (err) {
-      // Gérer les erreurs...
+      console.error("Error during appointment booking:", err);
+      Alert.alert("Error", "An error occurred while processing your request. Please try again.");
     }
   };
 

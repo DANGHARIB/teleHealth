@@ -626,13 +626,30 @@ export default function AppointmentScreen() {
                 canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.rescheduleButton]}
-                  onPress={() => router.push({
-                    pathname: '/patient/appointment/new',
-                    params: { 
-                      doctorId: appointment.doctor._id,
-                      appointmentIdToReschedule: appointment._id
+                  onPress={() => {
+                    // Vérifier que l'ID est au bon format
+                    if (!appointment || !appointment._id) {
+                      console.error("Appointment ID is missing for rescheduling");
+                      Alert.alert("Error", "Invalid appointment data");
+                      return;
                     }
-                  })}
+                    
+                    // S'assurer que l'ID est bien une chaîne de caractères
+                    const appointmentId = String(appointment._id).trim();
+                    console.log("Redirecting to reschedule screen with appointment ID:", {
+                      id: appointmentId, 
+                      doctorId: appointment.doctor._id,
+                      type: typeof appointmentId
+                    });
+                    
+                    router.push({
+                      pathname: '/patient/appointment/new',
+                      params: { 
+                        doctorId: String(appointment.doctor._id),
+                        appointmentIdToReschedule: appointmentId
+                      }
+                    });
+                  }}
                 >
                   <Ionicons name="calendar-outline" size={16} color={COLORS.white} />
                   <ThemedText style={styles.buttonText}>Reschedule</ThemedText>

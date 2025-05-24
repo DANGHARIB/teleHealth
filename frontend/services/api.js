@@ -450,10 +450,32 @@ export const patientAPI = {
   // Reprogrammer un rendez-vous par le patient
   rescheduleAppointment: async (appointmentId, rescheduleData) => {
     try {
-      // Note: rescheduleData should contain { newAvailabilityId, newSlotStartTime, newSlotEndTime }
-      const response = await api.put(`/appointments/${appointmentId}/patient-reschedule`, rescheduleData);
+      if (!appointmentId || typeof appointmentId !== 'string') {
+        console.error('Invalid appointment ID for rescheduling:', appointmentId);
+        throw new Error('Invalid appointment ID');
+      }
+      
+      // Ensure appointment ID is properly trimmed
+      const sanitizedAppointmentId = appointmentId.trim();
+      
+      // Convert from the current frontend format to the expected backend format
+      const formattedData = {
+        newAvailabilityId: rescheduleData.availabilityId,
+        newSlotStartTime: rescheduleData.slotStartTime,
+        newSlotEndTime: rescheduleData.slotEndTime,
+        date: rescheduleData.date
+      };
+      
+      console.log('Sending reschedule request with data:', {
+        endpoint: `/appointments/${sanitizedAppointmentId}/patient-reschedule`,
+        data: formattedData
+      });
+      
+      const response = await api.put(`/appointments/${sanitizedAppointmentId}/patient-reschedule`, formattedData);
+      console.log('Reschedule response received:', response.status);
       return response.data;
     } catch (error) {
+      console.error('Reschedule API error:', error.response?.data || error.message);
       throw error.response?.data || error.message;
     }
   },
