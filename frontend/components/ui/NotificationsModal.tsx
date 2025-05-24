@@ -227,40 +227,18 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
         hasUserInfo: !!userInfo
       });
       
-      // Step 5: Prepare notification data
-      let notificationData = notification.data || {};
-      
-      // Ensure we have required fields
-      notificationData = {
-        ...notificationData,
-        type: notificationData.type || notification.type,
-        notificationId: notification._id,
-        title: notification.title,
-        message: notification.message
+      // Step 5: Prepare notification data with proper string values
+      // Ensure all fields are properly typed strings to avoid serialization issues
+      const notificationData = {
+        type: notification.type || '',
+        notificationId: notification._id || '',
+        title: notification.title || '',
+        message: notification.message || '',
+        appointmentId: notification.data?.appointmentId || '',
+        doctorId: notification.data?.doctorId || '',
       };
 
-      // For reschedule requests, try to extract missing data from message
-      if (notification.type === 'reschedule_requested') {
-        console.log('NotificationsModal - Processing reschedule request...');
-        
-        if (!notificationData.appointmentId && notification.message) {
-          const appointmentIdMatch = notification.message.match(/appointmentId[:\s]+([a-zA-Z0-9]+)/i);
-          if (appointmentIdMatch?.[1]) {
-            notificationData.appointmentId = appointmentIdMatch[1];
-            console.log('NotificationsModal - Extracted appointmentId:', notificationData.appointmentId);
-          }
-        }
-        
-        if (!notificationData.doctorId && notification.message) {
-          const doctorIdMatch = notification.message.match(/doctorId[:\s]+([a-zA-Z0-9]+)/i);
-          if (doctorIdMatch?.[1]) {
-            notificationData.doctorId = doctorIdMatch[1];
-            console.log('NotificationsModal - Extracted doctorId:', notificationData.doctorId);
-          }
-        }
-      }
-      
-      console.log('NotificationsModal - Final notification data:', notificationData);
+      console.log('NotificationsModal - Final notification data (stringified):', notificationData);
       
       // Step 6: Process notification
       console.log('NotificationsModal - Processing notification for navigation...');

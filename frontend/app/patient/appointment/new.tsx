@@ -134,6 +134,16 @@ const minutesToTime = (minutes: number): string => {
 
 export default function BookAppointmentScreen() {
   const { doctorId, appointmentIdToReschedule } = useLocalSearchParams< { doctorId: string; appointmentIdToReschedule?: string }>();
+  
+  // Ajouter un log pour vérifier les paramètres reçus
+  console.log('BookAppointmentScreen - Params:', { 
+    doctorId, 
+    appointmentIdToReschedule,
+    isDoctorIdString: typeof doctorId === 'string',
+    doctorIdValue: String(doctorId),
+    rawParams: useLocalSearchParams()
+  });
+  
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -219,25 +229,41 @@ export default function BookAppointmentScreen() {
   useEffect(() => {
     const fetchDoctorDetails = async () => {
       try {
-        if (!doctorId) return;
+        // Vérifier si doctorId est valide
+        if (!doctorId || doctorId === 'undefined' || doctorId === '[object Object]') {
+          console.error('BookAppointmentScreen - Invalid doctorId:', doctorId);
+          setError("Identifiant du médecin invalide ou manquant");
+          setLoading(false);
+          return;
+        }
 
+        console.log(`BookAppointmentScreen - Fetching doctor details for ID: ${doctorId}`);
         setLoading(true);
         const doctorData = await doctorAPI.getDoctorById(doctorId as string);
+        
+        if (!doctorData) {
+          console.error('BookAppointmentScreen - No doctor data returned from API');
+          setError("Médecin non trouvé");
+          setLoading(false);
+          return;
+        }
+        
+        console.log('BookAppointmentScreen - Doctor data received:', doctorData._id);
         setDoctor(doctorData);
 
-        // Once doctor details are loaded, load slots for the selected date
+        // Une fois les détails du médecin chargés, charger les créneaux pour la date sélectionnée
         await fetchAvailabilities(format(selectedDate, "yyyy-MM-dd"));
 
         setLoading(false);
       } catch (err) {
-        console.error("Error loading doctor details:", err);
-        setError("Unable to load doctor details");
+        console.error("BookAppointmentScreen - Error loading doctor details:", err);
+        setError("Impossible de charger les détails du médecin. Veuillez réessayer.");
         setLoading(false);
       }
     };
 
     fetchDoctorDetails();
-  }, [doctorId]);
+  }, [doctorId, selectedDate]);
 
   // Retrieve 30-minute time slots for a specific date
   const fetchAvailabilities = async (date: string) => {

@@ -269,15 +269,41 @@ export const NotificationProvider = ({ children }) => {
     } 
     // Gérer les demandes de reprogrammation
     else if (notification.type === 'reschedule_requested') {
-      console.log('NotificationContext - Processing reschedule request:', notification.appointmentId);
-      if (notification.appointmentId && notification.doctorId) {
+      console.log('NotificationContext - Processing reschedule request notification');
+      
+      // Vérifier si les paramètres nécessaires sont présents
+      const doctorId = notification.doctorId || '';
+      const appointmentId = notification.appointmentId || '';
+      
+      console.log('NotificationContext - Parameters:', {
+        doctorId,
+        appointmentId,
+        hasParams: !!(doctorId && appointmentId)
+      });
+      
+      if (doctorId && appointmentId) {
         if (isAuthenticated && userRole === 'Patient') {
-          // Rediriger le patient vers l'écran de reprogrammation
-          navigation.push('/patient/appointment/new', { 
-            doctorId: notification.doctorId,
-            appointmentIdToReschedule: notification.appointmentId
-          });
+          try {
+            // Simplifier la navigation avec une URL directe incluant les paramètres dans l'URL
+            const url = `/patient/appointment/new?doctorId=${doctorId}&appointmentIdToReschedule=${appointmentId}`;
+            console.log('NotificationContext - Navigating to URL:', url);
+            
+            // Utiliser la méthode la plus simple de navigation disponible
+            if (typeof navigation.replace === 'function') {
+              navigation.replace(url);
+            } else if (typeof navigation.navigate === 'function') {
+              navigation.navigate(url);
+            } else {
+              console.error('NotificationContext - Navigation methods not available:', navigation);
+            }
+          } catch (err) {
+            console.error('NotificationContext - Navigation error:', err);
+          }
+        } else {
+          console.log('NotificationContext - User not authenticated as patient:', userRole);
         }
+      } else {
+        console.error('NotificationContext - Missing parameters for reschedule request navigation');
       }
     }
     // Ajouter ici d'autres types de notifications au besoin
