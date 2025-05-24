@@ -5,6 +5,7 @@ const Doctor = require('../models/Doctor');
 const User = require('../models/User');
 const notificationService = require('../services/notificationService');
 const { sendAppointmentZoomLink } = require('../services/emailService');
+const { createZoomMeeting } = require('../services/zoomService');
 const logger = require('../config/logger');
 const Availability = require('../models/Availability');
 
@@ -124,10 +125,26 @@ exports.createAppointmentWithPayment = async (req, res) => {
       existingAppointmentForSameCombination.status = "confirmed";
       existingAppointmentForSameCombination.paymentStatus = "completed";
       
-      // Générer un nouveau lien Zoom
-      const zoomId = Math.random().toString(36).substring(2, 10);
-      const zoomLink = `https://zoom.us/j/${zoomId}`;
-      existingAppointmentForSameCombination.sessionLink = zoomLink;
+      // Créer un vrai rendez-vous Zoom
+      const appointmentDate = new Date(availability.date);
+      const [hours, minutes] = slotStartTime.split(':').map(Number);
+      appointmentDate.setHours(hours, minutes);
+      
+      try {
+        const zoomMeeting = await createZoomMeeting(
+          `Consultation médicale avec ${doctor.last_name}`,
+          appointmentDate,
+          existingAppointmentForSameCombination.duration || 30
+        );
+        existingAppointmentForSameCombination.sessionLink = zoomMeeting.join_url;
+        logger.info("✅ Rendez-vous Zoom créé avec succès:", zoomMeeting.id);
+      } catch (zoomError) {
+        logger.error("❌ Erreur lors de la création du rendez-vous Zoom:", zoomError);
+        // Fallback to random link if Zoom API fails
+        const zoomId = Math.random().toString(36).substring(2, 10);
+        const zoomLink = `https://zoom.us/j/${zoomId}`;
+        existingAppointmentForSameCombination.sessionLink = zoomLink;
+      }
       
       // Sauvegarder les modifications
       const updatedAppointment = await existingAppointmentForSameCombination.save();
@@ -167,7 +184,7 @@ exports.createAppointmentWithPayment = async (req, res) => {
             updatedAppointment,
             doctorUser.email,
             patientUser.email,
-            zoomLink,
+            updatedAppointment.sessionLink,
             appointmentDate,
             slotStartTime
           );
@@ -203,10 +220,26 @@ exports.createAppointmentWithPayment = async (req, res) => {
       paymentStatus: "completed"
     });
 
-    // Générer un lien Zoom aléatoire pour la consultation
-    const zoomId = Math.random().toString(36).substring(2, 10);
-    const zoomLink = `https://zoom.us/j/${zoomId}`;
-    appointment.sessionLink = zoomLink;
+    // Créer un vrai rendez-vous Zoom
+    const appointmentDate = new Date(availability.date);
+    const [hours, minutes] = slotStartTime.split(':').map(Number);
+    appointmentDate.setHours(hours, minutes);
+    
+    try {
+      const zoomMeeting = await createZoomMeeting(
+        `Consultation médicale avec ${doctor.last_name}`,
+        appointmentDate,
+        appointment.duration
+      );
+      appointment.sessionLink = zoomMeeting.join_url;
+      logger.info("✅ Rendez-vous Zoom créé avec succès:", zoomMeeting.id);
+    } catch (zoomError) {
+      logger.error("❌ Erreur lors de la création du rendez-vous Zoom:", zoomError);
+      // Fallback to random link if Zoom API fails
+      const zoomId = Math.random().toString(36).substring(2, 10);
+      const zoomLink = `https://zoom.us/j/${zoomId}`;
+      appointment.sessionLink = zoomLink;
+    }
     
     // Sauvegarder le rendez-vous
     const createdAppointment = await appointment.save();
@@ -246,7 +279,7 @@ exports.createAppointmentWithPayment = async (req, res) => {
           createdAppointment,
           doctorUser.email,
           patientUser.email,
-          zoomLink,
+          createdAppointment.sessionLink,
           appointmentDate,
           slotStartTime
         );
@@ -363,7 +396,7 @@ exports.createPayment = async (req, res) => {
           appointmentWithDetails,
           doctorEmail,
           patientEmail,
-          zoomLink,
+          appointmentWithDetails.sessionLink,
           appointmentDate,
           appointmentTime
         );
