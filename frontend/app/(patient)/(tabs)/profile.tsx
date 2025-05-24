@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const [userName, setUserName] = useState('Patient');
   const [profileImageUri, setProfileImageUri] = useState<string | undefined>(undefined);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  const { notificationQueue, sendTestNotification, notifications, fetchNotifications, unreadCount, fetchUnreadCount } = useContext(NotificationContext);
+  const { notificationQueue, fetchNotifications, notifications, fetchUnreadCount, unreadCount } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -219,27 +219,6 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  // Function to send a test notification
-  const handleSendTestNotification = async () => {
-    console.log('Sending test notification...');
-    try {
-      await sendTestNotification(
-        'Test Notification',
-        'This is a test notification to verify the notification system is working.',
-        {
-          type: 'test_notification',
-          message: 'Test notification message',
-          appointmentId: 'test-id-123'
-        }
-      );
-      console.log('Test notification sent successfully');
-      Alert.alert('Success', 'Test notification sent. Check your notifications.');
-    } catch (error) {
-      console.error('Failed to send test notification:', error);
-      Alert.alert('Error', 'Failed to send test notification.');
-    }
-  };
-
   // Ouvrir le modal de notifications 
   const handleOpenNotificationsModal = () => {
     console.log('ProfileScreen - Opening notifications modal, unreadCount:', unreadCount);
@@ -292,17 +271,6 @@ export default function ProfileScreen() {
           >
             <Ionicons name="log-out-outline" size={20} color={COLORS.white} />
             <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.logoutContainer}>
-          <TouchableOpacity 
-            style={[styles.logoutButton, { backgroundColor: COLORS.warning }]} 
-            onPress={handleSendTestNotification}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="notifications-outline" size={20} color={COLORS.white} />
-            <Text style={styles.logoutButtonText}>Test Notification</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

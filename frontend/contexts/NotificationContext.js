@@ -273,13 +273,9 @@ export const NotificationProvider = ({ children }) => {
       if (notification.appointmentId && notification.doctorId) {
         if (isAuthenticated && userRole === 'Patient') {
           // Rediriger le patient vers l'écran de reprogrammation
-          navigation.navigate('patient', {
-            screen: 'appointment/new',
-            params: { 
-              doctorId: notification.doctorId,
-              appointmentId: notification.appointmentId,
-              isRescheduling: true 
-            }
+          navigation.push('/patient/appointment/new', { 
+            doctorId: notification.doctorId,
+            appointmentIdToReschedule: notification.appointmentId
           });
         }
       }

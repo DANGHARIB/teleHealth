@@ -195,7 +195,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
           console.log('NotificationsModal - Processing with navigation, userRole:', userRole);
           console.log('NotificationsModal - Notification data:', notification.data);
           
-          // Utiliser soit data, soit la notification elle-même si data n'existe pas
+          // Use data from notification, with proper fallback
           const notificationData = notification.data || { 
             type: notification.type,
             appointmentId: undefined,
@@ -203,6 +203,29 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
             patientId: undefined,
             notificationId: notification._id
           };
+          
+          // For reschedule_requested notifications, ensure we have all required data
+          if (notification.type === 'reschedule_requested' || (notificationData && notificationData.type === 'reschedule_requested')) {
+            console.log('NotificationsModal - Handling reschedule request notification');
+            // If we don't have data in the notification.data, try to extract from the notification body
+            if (!notificationData.appointmentId && notification.message) {
+              try {
+                // Try to find appointmentId in the message using regex
+                const appointmentIdMatch = notification.message.match(/appointmentId[:\s]+([a-zA-Z0-9]+)/i);
+                if (appointmentIdMatch && appointmentIdMatch[1]) {
+                  notificationData.appointmentId = appointmentIdMatch[1];
+                }
+                
+                // Try to find doctorId in the message using regex
+                const doctorIdMatch = notification.message.match(/doctorId[:\s]+([a-zA-Z0-9]+)/i);
+                if (doctorIdMatch && doctorIdMatch[1]) {
+                  notificationData.doctorId = doctorIdMatch[1];
+                }
+              } catch (err) {
+                console.error('Error extracting IDs from notification message:', err);
+              }
+            }
+          }
           
           processNotification(navigation, notificationData, isAuthenticated, userRole);
         } else {
