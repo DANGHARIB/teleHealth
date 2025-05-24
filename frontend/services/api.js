@@ -325,6 +325,16 @@ export const patientAPI = {
     }
   },
 
+  // Obtenir un médecin par ID
+  getDoctorById: async (id) => {
+    try {
+      const response = await api.get(`/doctors/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Récupérer les médecins sauvegardés
   getSavedDoctors: async () => {
     try {
@@ -370,6 +380,16 @@ export const patientAPI = {
   createAppointment: async (appointmentData) => {
     try {
       const response = await api.post('/appointments', appointmentData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  
+  // Créer un rendez-vous et le paiement en une seule opération
+  createAppointmentWithPayment: async (data) => {
+    try {
+      const response = await api.post('/payments/appointment-with-payment', data);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

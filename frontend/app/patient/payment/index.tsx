@@ -33,7 +33,20 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-// Type pour l'objet appointment
+// Type pour les informations de rendez-vous
+type AppointmentInfo = {
+  doctorId: string;
+  doctorName?: string;
+  availabilityId: string;
+  date?: string;
+  slotStartTime: string;
+  slotEndTime: string;
+  price: number;
+  duration: number;
+  caseDetails: string;
+};
+
+// Type pour l'objet appointment complet (après création)
 type Appointment = {
   _id: string;
   doctor: {
@@ -88,11 +101,23 @@ const formatTimeString = (timeString: string): string => {
 export default function PaymentScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const appointmentId = params.appointmentId as string;
+  
+  // Récupérer les informations du rendez-vous depuis les paramètres
+  const appointmentInfo: AppointmentInfo = {
+    doctorId: params.doctorId as string,
+    doctorName: params.doctorName as string,
+    availabilityId: params.availabilityId as string,
+    date: params.date as string,
+    slotStartTime: params.slotStartTime as string,
+    slotEndTime: params.slotEndTime as string,
+    price: Number(params.price) || 28,
+    duration: Number(params.duration) || 30,
+    caseDetails: params.caseDetails as string || "Standard consultation"
+  };
   
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [appointment, setAppointment] = useState<Appointment | null>(null);
+  const [doctor, setDoctor] = useState<any>(null);
   const [selectedMethod, setSelectedMethod] = useState('card');
   
   // Nouveau state pour les méthodes de paiement sauvegardées
@@ -100,73 +125,50 @@ export default function PaymentScreen() {
   const [selectedSavedMethod, setSelectedSavedMethod] = useState<string | null>(null);
   const [loadingSavedMethods, setLoadingSavedMethods] = useState(false);
   
-  // Charger les détails du rendez-vous
+  // Charger les détails du médecin
   useEffect(() => {
-    const fetchAppointmentDetails = async () => {
+    const fetchDoctorDetails = async () => {
       try {
         setLoading(true);
         
-        if (!appointmentId) {
-          Alert.alert('Error', 'Missing appointment ID');
+        if (!appointmentInfo.doctorId) {
+          Alert.alert('Erreur', 'Identifiant du médecin manquant');
           router.back();
           return;
         }
         
-        const appointments = await patientAPI.getAppointments();
-        const foundAppointment = appointments.find((app: Appointment) => app._id === appointmentId);
+        const doctorData = await patientAPI.getDoctorById(appointmentInfo.doctorId);
         
-        if (!foundAppointment) {
-          Alert.alert('Error', 'Appointment not found');
+        if (!doctorData) {
+          Alert.alert('Erreur', 'Médecin non trouvé');
           router.back();
           return;
         }
         
-        console.log('Selected appointment time slot:', {
-          startTime: foundAppointment.availability.startTime,
-          endTime: foundAppointment.availability.endTime,
-          date: foundAppointment.availability.date,
-          fullAppointment: foundAppointment
-        });
-        
-        setAppointment(foundAppointment);
+        setDoctor(doctorData);
         setLoading(false);
       } catch (error) {
-        console.error('Error loading appointment details:', error);
-        Alert.alert('Error', 'Unable to load appointment details');
+        console.error('Erreur lors du chargement des détails du médecin:', error);
+        Alert.alert('Erreur', 'Impossible de charger les détails du médecin');
         setLoading(false);
         router.back();
       }
     };
     
-    fetchAppointmentDetails();
-  }, [appointmentId]);
+    fetchDoctorDetails();
+  }, [appointmentInfo.doctorId]);
   
   // Utiliser useFocusEffect pour recharger les méthodes de paiement à chaque fois que l'écran devient actif
   useFocusEffect(
     React.useCallback(() => {
       // Cette fonction sera appelée chaque fois que l'écran devient actif (lors de la navigation vers cet écran)
-      if (appointmentId) {
-        fetchSavedPaymentMethods();
-      }
+      fetchSavedPaymentMethods();
       
       return () => {
         // Fonction de nettoyage si nécessaire
       };
-    }, [appointmentId])
+    }, [])
   );
-  
-  // Gérer le cas où l'utilisateur quitte la page
-  useEffect(() => {
-    // Fonction de nettoyage exécutée quand le composant est démonté
-    return () => {
-      // Si le processus de paiement n'est pas en cours et que le rendez-vous est toujours en attente
-      if (!processingPayment && appointment && appointment.paymentStatus === 'pending') {
-        // On pourrait ajouter ici une logique côté client pour annuler le rendez-vous
-        // Mais c'est préférable de laisser le backend faire ce nettoyage avec un job périodique
-        console.log('Utilisateur a quitté la page de paiement sans finaliser');
-      }
-    };
-  }, [processingPayment, appointment]);
   
   // Charger les méthodes de paiement sauvegardées
   const fetchSavedPaymentMethods = async () => {
@@ -191,7 +193,10 @@ export default function PaymentScreen() {
   
   // Traiter le paiement
   const processPayment = async () => {
-    if (!appointment) return;
+    if (!appointmentInfo.doctorId || !appointmentInfo.availabilityId) {
+      Alert.alert('Erreur', 'Informations de rendez-vous incomplètes');
+      return;
+    }
     
     setProcessingPayment(true);
     
@@ -199,36 +204,32 @@ export default function PaymentScreen() {
       // Simuler un délai de traitement du paiement
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Préparer les données de paiement
-      let paymentData: {
-        appointmentId: string;
-        paymentMethod: string;
-        amount: number;
-        savedPaymentMethodId?: string;
-      } = {
-        appointmentId: appointment._id,
+      // Préparer les données de paiement directement avec les informations du rendez-vous
+      let paymentData = {
+        doctorId: appointmentInfo.doctorId,
+        availabilityId: appointmentInfo.availabilityId,
+        slotStartTime: appointmentInfo.slotStartTime,
+        slotEndTime: appointmentInfo.slotEndTime,
+        price: appointmentInfo.price,
+        duration: appointmentInfo.duration,
+        caseDetails: appointmentInfo.caseDetails,
         paymentMethod: selectedMethod,
-        amount: appointment.price
+        savedPaymentMethodId: selectedSavedMethod
       };
       
-      // Si une méthode sauvegardée est sélectionnée, ajouter son ID
-      if (selectedSavedMethod) {
-        paymentData.savedPaymentMethodId = selectedSavedMethod;
-      }
-      
-      // Appel à l'API pour créer le paiement
-      await patientAPI.createPayment(paymentData);
+      // Appel à l'API pour créer le paiement et le rendez-vous simultanément
+      await patientAPI.createAppointmentWithPayment(paymentData);
       
       setProcessingPayment(false);
       Alert.alert(
-        'Payment Successful',
-        'Your payment has been processed successfully.',
-        [{ text: 'OK', onPress: () => router.push('/(patient)/(tabs)/payments') }]
+        'Paiement réussi',
+        'Votre rendez-vous a été confirmé avec succès.',
+        [{ text: 'OK', onPress: () => router.push('/(patient)/(tabs)/appointment') }]
       );
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Erreur de paiement:', error);
       setProcessingPayment(false);
-      Alert.alert('Error', 'Payment failed. Please try again.');
+      Alert.alert('Erreur', 'Le paiement a échoué. Veuillez réessayer.');
     }
   };
   
@@ -244,7 +245,7 @@ export default function PaymentScreen() {
       return (
         <View style={styles.noSavedMethodsContainer}>
           <ThemedText style={styles.noSavedMethodsText}>
-            You don&apos;t have any saved payment methods yet
+            Vous n&apos;avez pas encore de méthode de paiement enregistrée
           </ThemedText>
           <TouchableOpacity 
             style={styles.addPaymentMethodButton}
@@ -252,7 +253,7 @@ export default function PaymentScreen() {
           >
             <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
             <ThemedText style={styles.addPaymentMethodText}>
-              Add a payment method
+              Ajouter une méthode de paiement
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -262,7 +263,7 @@ export default function PaymentScreen() {
     return (
       <View style={styles.savedMethodsContainer}>
         <ThemedText style={styles.savedMethodsTitle}>
-          Your saved payment methods
+          Vos méthodes de paiement enregistrées
         </ThemedText>
         
         {savedPaymentMethods.map(method => (
@@ -303,7 +304,7 @@ export default function PaymentScreen() {
             </View>
             {method.isDefault && (
               <View style={styles.defaultBadge}>
-                <ThemedText style={styles.defaultBadgeText}>Default</ThemedText>
+                <ThemedText style={styles.defaultBadgeText}>Par défaut</ThemedText>
               </View>
             )}
           </TouchableOpacity>
@@ -318,7 +319,7 @@ export default function PaymentScreen() {
         >
           <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
           <ThemedText style={styles.addNewMethodText}>
-            Use another payment method
+            Utiliser une autre méthode de paiement
           </ThemedText>
         </TouchableOpacity>
       </View>
@@ -340,7 +341,7 @@ export default function PaymentScreen() {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <ThemedText style={styles.loadingText}>Loading appointment details...</ThemedText>
+        <ThemedText style={styles.loadingText}>Chargement des détails...</ThemedText>
       </ThemedView>
     );
   }
@@ -349,7 +350,7 @@ export default function PaymentScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: 'Payment',
+          title: 'Paiement',
           headerLeft: () => (
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
@@ -360,49 +361,49 @@ export default function PaymentScreen() {
       
       <ScrollView style={styles.content}>
         <View style={styles.appointmentCard}>
-          <ThemedText style={styles.cardTitle}>Appointment Details</ThemedText>
+          <ThemedText style={styles.cardTitle}>Détails du rendez-vous</ThemedText>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Doctor:</ThemedText>
+            <ThemedText style={styles.detailLabel}>Médecin:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.doctor?.full_name || 'Doctor Name'}
+              {doctor?.full_name || doctor?.first_name + ' ' + doctor?.last_name || 'Nom du médecin'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Date:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.availability?.date ? format(parseISO(appointment.availability.date), 'MMM d, yyyy') : 'Not available'}
+              {appointmentInfo.date ? format(parseISO(appointmentInfo.date), 'dd/MM/yyyy') : 'Non disponible'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>Time:</ThemedText>
+            <ThemedText style={styles.detailLabel}>Heure:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.slotStartTime && appointment?.slotEndTime 
-                ? `${formatTimeString(appointment.slotStartTime)} - ${formatTimeString(appointment.slotEndTime)}`
-                : 'Not available'}
+              {appointmentInfo.slotStartTime && appointmentInfo.slotEndTime 
+                ? `${formatTimeString(appointmentInfo.slotStartTime)} - ${formatTimeString(appointmentInfo.slotEndTime)}`
+                : 'Non disponible'}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Type:</ThemedText>
             <ThemedText style={styles.detailValue}>
-              {appointment?.caseDetails || 'Standard consultation'}
+              {appointmentInfo.caseDetails || 'Consultation standard'}
             </ThemedText>
           </View>
         </View>
         
         <View style={styles.paymentSummary}>
-          <ThemedText style={styles.paymentTitle}>Payment Summary</ThemedText>
+          <ThemedText style={styles.paymentTitle}>Récapitulatif de paiement</ThemedText>
           
           <View style={styles.priceRow}>
-            <ThemedText style={styles.priceLabel}>Consultation fee:</ThemedText>
-            <ThemedText style={styles.priceValue}>${appointment?.price || 28}</ThemedText>
+            <ThemedText style={styles.priceLabel}>Frais de consultation:</ThemedText>
+            <ThemedText style={styles.priceValue}>${appointmentInfo.price}</ThemedText>
           </View>
         </View>
         
-        <ThemedText style={styles.methodsTitle}>Payment Method</ThemedText>
+        <ThemedText style={styles.methodsTitle}>Méthode de paiement</ThemedText>
         
         {/* Afficher les méthodes de paiement sauvegardées */}
         {renderSavedPaymentMethods()}
@@ -422,8 +423,8 @@ export default function PaymentScreen() {
           ) : (
             <ThemedText style={styles.payButtonText}>
               {savedPaymentMethods.length === 0 
-                ? "Add a payment method to continue" 
-                : `Pay $${appointment?.price || 28}`}
+                ? "Ajoutez une méthode de paiement pour continuer" 
+                : `Payer $${appointmentInfo.price}`}
             </ThemedText>
           )}
         </TouchableOpacity>
