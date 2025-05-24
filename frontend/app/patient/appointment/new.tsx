@@ -471,14 +471,8 @@ export default function BookAppointmentScreen() {
           // Assurons-nous que l'ID est correctement formaté
           const formattedAppointmentId = String(appointmentIdToReschedule).trim();
           
-          console.log(`Attempting to reschedule appointment:`, {
-            appointmentId: formattedAppointmentId,
-            originalId: appointmentIdToReschedule,
-            slotId: selectedSlot.availabilityId,
-            startTime: selectedSlot.startTime,
-            endTime: selectedSlot.endTime,
-            date: format(selectedDate, "yyyy-MM-dd")
-          });
+          // Log discret en mode info (pas d'erreur)
+          console.info(`Processing appointment rescheduling`);
           
           // Call the API to reschedule the appointment
           const response = await patientAPI.rescheduleAppointment(
@@ -490,8 +484,6 @@ export default function BookAppointmentScreen() {
               date: format(selectedDate, "yyyy-MM-dd")
             }
           );
-          
-          console.log("Rescheduling successful:", response);
           
           // Show success message
           Alert.alert(
@@ -509,7 +501,7 @@ export default function BookAppointmentScreen() {
           );
           
         } catch (error) {
-          console.error("Error rescheduling appointment:", error);
+          // Ne pas logger l'erreur dans la console
           
           // Show a more detailed error message
           let errorMessage = "Failed to reschedule appointment. Please try again.";
@@ -536,23 +528,78 @@ export default function BookAppointmentScreen() {
         }
       } else {
         // For a new reservation - redirect to payment page
-        router.push({
-          pathname: "/patient/payment",
-          params: { 
-            doctorId: doctorId,
-            availabilityId: selectedSlot.availabilityId,
-            slotStartTime: selectedSlot.startTime,
-            slotEndTime: selectedSlot.endTime,
-            price: doctor.price || 28,
-            duration: APPOINTMENT_DURATION,
-            caseDetails: "Standard consultation",
-            date: format(selectedDate, "yyyy-MM-dd") // Utiliser la date sélectionnée
-          },
-        });
+        try {
+          router.push({
+            pathname: "/patient/payment",
+            params: { 
+              doctorId: doctorId,
+              availabilityId: selectedSlot.availabilityId,
+              slotStartTime: selectedSlot.startTime,
+              slotEndTime: selectedSlot.endTime,
+              price: doctor.price || 28,
+              duration: APPOINTMENT_DURATION,
+              caseDetails: "Standard consultation",
+              date: format(selectedDate, "yyyy-MM-dd") // Utiliser la date sélectionnée
+            },
+          });
+        } catch (error) {
+          // Ne pas logger l'erreur dans la console
+          
+          // Check if the error message indicates a same-day booking attempt
+          const errorMessage = typeof error === 'object' && error !== null && 'message' in error 
+            ? String(error.message) 
+            : String(error);
+            
+          if (errorMessage.includes("Vous avez déjà un rendez-vous") || 
+              errorMessage.includes("same date") || 
+              errorMessage.includes("already have an appointment")) {
+            
+            // Show an elegant, modern alert for same-day booking attempt
+            Alert.alert(
+              "Booking Limit Reached",
+              "You already have an appointment with this doctor on the selected date. Please choose a different date.",
+              [
+                {
+                  text: "OK",
+                  style: "default"
+                }
+              ],
+              { cancelable: true }
+            );
+          } else {
+            // For other errors
+            Alert.alert("Error", "An error occurred while processing your request. Please try again.");
+          }
+        }
       }
     } catch (err) {
-      console.error("Error during appointment booking:", err);
-      Alert.alert("Error", "An error occurred while processing your request. Please try again.");
+      // Ne pas logger l'erreur dans la console
+      
+      // Check if the error is about same-day booking
+      const errorMessage = typeof err === 'object' && err !== null && 'message' in err 
+        ? String(err.message) 
+        : String(err);
+        
+      if (errorMessage.includes("Vous avez déjà un rendez-vous") || 
+          errorMessage.includes("same date") || 
+          errorMessage.includes("already have an appointment")) {
+        
+        // Show an elegant, modern alert for same-day booking attempt
+        Alert.alert(
+          "Booking Limit Reached",
+          "You already have an appointment with this doctor on the selected date. Please choose a different date.",
+          [
+            {
+              text: "OK",
+              style: "default"
+            }
+          ],
+          { cancelable: true }
+        );
+      } else {
+        // For other errors
+        Alert.alert("Error", "An error occurred while processing your request. Please try again.");
+      }
     }
   };
 

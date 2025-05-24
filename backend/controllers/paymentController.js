@@ -103,6 +103,92 @@ exports.createAppointmentWithPayment = async (req, res) => {
       });
     }
     
+    // Vérifier s'il existe déjà un rendez-vous pour ce médecin, ce patient et cette disponibilité
+    // (cas possible lors d'une reprogrammation)
+    const existingAppointmentForSameCombination = await Appointment.findOne({
+      doctor: doctorId,
+      patient: patient._id,
+      availability: availabilityId
+    });
+    
+    // Si un tel rendez-vous existe déjà (cas de reprogrammation)
+    if (existingAppointmentForSameCombination) {
+      logger.info(`⚠️ Rendez-vous existant trouvé pour doctor=${doctorId}, patient=${patient._id}, availability=${availabilityId}. Mise à jour plutôt que création.`);
+      
+      // Mettre à jour le rendez-vous existant
+      existingAppointmentForSameCombination.slotStartTime = slotStartTime;
+      existingAppointmentForSameCombination.slotEndTime = slotEndTime;
+      existingAppointmentForSameCombination.price = price || 28;
+      existingAppointmentForSameCombination.duration = duration || 30;
+      existingAppointmentForSameCombination.caseDetails = caseDetails || "Consultation standard";
+      existingAppointmentForSameCombination.status = "confirmed";
+      existingAppointmentForSameCombination.paymentStatus = "completed";
+      
+      // Générer un nouveau lien Zoom
+      const zoomId = Math.random().toString(36).substring(2, 10);
+      const zoomLink = `https://zoom.us/j/${zoomId}`;
+      existingAppointmentForSameCombination.sessionLink = zoomLink;
+      
+      // Sauvegarder les modifications
+      const updatedAppointment = await existingAppointmentForSameCombination.save();
+      logger.info("✅ Rendez-vous existant mis à jour avec succès:", updatedAppointment._id);
+      
+      // Marquer le créneau comme réservé
+      availability.isBooked = true;
+      await availability.save();
+      logger.info("✅ Créneau marqué comme réservé");
+      
+      // Créer un nouveau paiement
+      const payment = new Payment({
+        appointment: updatedAppointment._id,
+        patient: patient._id,
+        amount: price || updatedAppointment.price,
+        paymentMethod,
+        status: 'completed'
+      });
+      
+      // Sauvegarder le paiement
+      const createdPayment = await payment.save();
+      logger.info("✅ Paiement créé avec succès:", createdPayment._id);
+      
+      // Notifications et emails
+      try {
+        await notificationService.notifyAppointmentRescheduledByPatient(updatedAppointment);
+        await notificationService.notifyPaymentReceived(createdPayment);
+        await notificationService.scheduleAppointmentReminders(updatedAppointment);
+        
+        // Envoi du lien Zoom
+        const doctorUser = await User.findById(doctor.user);
+        const patientUser = await User.findById(req.user._id);
+        
+        if (doctorUser && patientUser) {
+          const appointmentDate = new Date(availability.date).toLocaleDateString('fr-FR');
+          await sendAppointmentZoomLink(
+            updatedAppointment,
+            doctorUser.email,
+            patientUser.email,
+            zoomLink,
+            appointmentDate,
+            slotStartTime
+          );
+          logger.info("✅ Lien Zoom envoyé par email");
+        }
+      } catch (notificationError) {
+        logger.error("⚠️ Erreur lors de l'envoi des notifications ou emails:", notificationError);
+        // On continue malgré les erreurs de notification
+      }
+      
+      logger.info("===== FIN MISE À JOUR RENDEZ-VOUS AVEC PAIEMENT =====");
+      
+      res.status(200).json({
+        appointment: updatedAppointment,
+        payment: createdPayment,
+        isUpdate: true
+      });
+      
+      return;
+    }
+    
     // Créer le rendez-vous
     const appointment = new Appointment({
       doctor: doctorId,

@@ -38,6 +38,7 @@ const notificationSchema = new mongoose.Schema({
       'payment_received',      // Paiement reçu
       'payment_refunded',      // Remboursement effectué
       'appointment_reminder',  // Rappel de rendez-vous
+      'penalty_retained',      // Pénalité d'annulation conservée
       'system'                 // Notification système
     ]
   },

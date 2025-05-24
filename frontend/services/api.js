@@ -389,9 +389,25 @@ export const patientAPI = {
   // Créer un rendez-vous et le paiement en une seule opération
   createAppointmentWithPayment: async (data) => {
     try {
+      // Log silencieux avec un niveau d'information (pas d'erreur)
+      console.info('Processing appointment creation with payment');
+      
       const response = await api.post('/payments/appointment-with-payment', data);
       return response.data;
     } catch (error) {
+      // Ne pas afficher d'erreur dans la console
+      
+      // Check if the error is about same-day booking
+      if (error.response?.data?.message && 
+          (error.response.data.message.includes("Vous avez déjà un rendez-vous") ||
+           error.response.data.message.includes("already have an appointment"))) {
+        throw {
+          message: "You already have an appointment with this doctor on the selected date",
+          sameDay: true,
+          originalError: error.response?.data
+        };
+      }
+      
       throw error.response?.data || error.message;
     }
   },

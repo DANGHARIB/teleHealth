@@ -244,9 +244,36 @@ export default function PaymentScreen() {
         [{ text: 'OK', onPress: () => router.push('/(patient)/(tabs)/appointment') }]
       );
     } catch (error) {
-      console.error('Payment error:', error);
+      // Ne pas logger l'erreur dans la console
       setProcessingPayment(false);
-      Alert.alert('Error', 'Payment failed. Please try again.');
+      
+      // Check if the error is about same-day booking
+      const errorMessage = typeof error === 'object' && error !== null && 'message' in error 
+        ? String(error.message) 
+        : String(error);
+        
+      if (errorMessage.includes("Vous avez déjà un rendez-vous") || 
+          errorMessage.includes("same date") || 
+          errorMessage.includes("already have an appointment") ||
+          (typeof error === 'object' && error !== null && 'sameDay' in error)) {
+        
+        // Show an elegant, modern alert for same-day booking attempt
+        Alert.alert(
+          "Booking Limit Reached",
+          "You already have an appointment with this doctor on the selected date. Please choose a different date.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.back(),
+              style: "default"
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        // For other errors
+        Alert.alert('Payment Failed', 'An error occurred while processing your payment. Please try again.');
+      }
     }
   };
   
