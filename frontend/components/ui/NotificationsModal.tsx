@@ -28,6 +28,9 @@ interface NotificationData {
   body?: string;
   message?: string;
   notificationId?: string;
+  appointmentId?: string;
+  doctorId?: string;
+  patientId?: string;
   [key: string]: any;
 }
 
@@ -99,7 +102,8 @@ const NotificationCard = ({ notification, onPress }: NotificationCardProps) => {
       </View>
       <View style={styles.content}>
         <Text style={[styles.title, !read && styles.unread]}>{title || 'Notification'}</Text>
-        <Text style={styles.message} numberOfLines={2}>{message}</Text>
+        {/* FIXED: Removed numberOfLines to show full message */}
+        <Text style={styles.message}>{message}</Text>
         <Text style={styles.date}>{new Date(createdAt).toLocaleString()}</Text>
       </View>
       {!read && (
@@ -154,7 +158,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
       setCurrentPage(1);
     } catch (error) {
       console.error('Error loading notifications:', error);
-      Alert.alert('Erreur', 'Impossible de charger les notifications');
+      Alert.alert('Error', 'Unable to load notifications');
     }
   };
   
@@ -174,86 +178,118 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
     }
   };
   
-  // Handle notification press
+  // IMPROVED: Simplified and more robust notification handling
   const handleNotificationPress = async (notification: Notification) => {
-    console.log('NotificationsModal - Notification pressed:', notification);
+    console.log('NotificationsModal - Notification pressed:', {
+      id: notification._id,
+      type: notification.type,
+      data: notification.data
+    });
+    
     try {
-      // Mark as read
+      // Step 1: Mark as read
+      console.log('NotificationsModal - Marking notification as read...');
       await markNotificationAsRead(notification._id);
       
-      // Close modal first
+      // Step 2: Close modal
+      console.log('NotificationsModal - Closing modal...');
       onClose();
       
-      // Process notification for navigation
-      if (processNotification && navigation) {
-        const userInfoString = await AsyncStorage.getItem('@user');
-        if (userInfoString) {
-          const userInfo = JSON.parse(userInfoString);
-          const isAuthenticated = !!userInfo;
-          const userRole = userInfo?.role || '';
-          
-          console.log('NotificationsModal - Processing with navigation, userRole:', userRole);
-          console.log('NotificationsModal - Notification data:', notification.data);
-          
-          // Use data from notification, with proper fallback
-          const notificationData = notification.data || { 
-            type: notification.type,
-            appointmentId: undefined,
-            doctorId: undefined,
-            patientId: undefined,
-            notificationId: notification._id
-          };
-          
-          // For reschedule_requested notifications, ensure we have all required data
-          if (notification.type === 'reschedule_requested' || (notificationData && notificationData.type === 'reschedule_requested')) {
-            console.log('NotificationsModal - Handling reschedule request notification');
-            // If we don't have data in the notification.data, try to extract from the notification body
-            if (!notificationData.appointmentId && notification.message) {
-              try {
-                // Try to find appointmentId in the message using regex
-                const appointmentIdMatch = notification.message.match(/appointmentId[:\s]+([a-zA-Z0-9]+)/i);
-                if (appointmentIdMatch && appointmentIdMatch[1]) {
-                  notificationData.appointmentId = appointmentIdMatch[1];
-                }
-                
-                // Try to find doctorId in the message using regex
-                const doctorIdMatch = notification.message.match(/doctorId[:\s]+([a-zA-Z0-9]+)/i);
-                if (doctorIdMatch && doctorIdMatch[1]) {
-                  notificationData.doctorId = doctorIdMatch[1];
-                }
-              } catch (err) {
-                console.error('Error extracting IDs from notification message:', err);
-              }
-            }
-          }
-          
-          processNotification(navigation, notificationData, isAuthenticated, userRole);
-        } else {
-          console.log('NotificationsModal - No user info found in storage');
-        }
-      } else {
-        console.log('NotificationsModal - Cannot process: processNotification or navigation missing');
+      // Step 3: Handle navigation
+      if (!navigation) {
+        console.error('NotificationsModal - Navigation object is missing');
+        Alert.alert('Error', 'Navigation not available');
+        return;
       }
+
+      if (!processNotification) {
+        console.error('NotificationsModal - processNotification function is missing');
+        Alert.alert('Error', 'Notification processing not available');
+        return;
+      }
+
+      // Step 4: Get user info for navigation context
+      console.log('NotificationsModal - Getting user info...');
+      const userInfoString = await AsyncStorage.getItem('userInfo');
+      if (!userInfoString) {
+        console.error('NotificationsModal - No user info found in storage');
+        Alert.alert('Error', 'User authentication required');
+        return;
+      }
+
+      const userInfo = JSON.parse(userInfoString);
+      const isAuthenticated = !!userInfo;
+      const userRole = userInfo?.role || '';
+      
+      console.log('NotificationsModal - User context:', {
+        isAuthenticated,
+        userRole,
+        hasUserInfo: !!userInfo
+      });
+      
+      // Step 5: Prepare notification data
+      let notificationData = notification.data || {};
+      
+      // Ensure we have required fields
+      notificationData = {
+        ...notificationData,
+        type: notificationData.type || notification.type,
+        notificationId: notification._id,
+        title: notification.title,
+        message: notification.message
+      };
+
+      // For reschedule requests, try to extract missing data from message
+      if (notification.type === 'reschedule_requested') {
+        console.log('NotificationsModal - Processing reschedule request...');
+        
+        if (!notificationData.appointmentId && notification.message) {
+          const appointmentIdMatch = notification.message.match(/appointmentId[:\s]+([a-zA-Z0-9]+)/i);
+          if (appointmentIdMatch?.[1]) {
+            notificationData.appointmentId = appointmentIdMatch[1];
+            console.log('NotificationsModal - Extracted appointmentId:', notificationData.appointmentId);
+          }
+        }
+        
+        if (!notificationData.doctorId && notification.message) {
+          const doctorIdMatch = notification.message.match(/doctorId[:\s]+([a-zA-Z0-9]+)/i);
+          if (doctorIdMatch?.[1]) {
+            notificationData.doctorId = doctorIdMatch[1];
+            console.log('NotificationsModal - Extracted doctorId:', notificationData.doctorId);
+          }
+        }
+      }
+      
+      console.log('NotificationsModal - Final notification data:', notificationData);
+      
+      // Step 6: Process notification
+      console.log('NotificationsModal - Processing notification for navigation...');
+      processNotification(navigation, notificationData, isAuthenticated, userRole);
+      
     } catch (error) {
-      console.error('Error processing notification:', error);
+      console.error('NotificationsModal - Error processing notification:', error);
+      Alert.alert(
+        'Navigation Error',
+        'Unable to navigate to the requested page. Please try again.'
+      );
     }
   };
   
   // Mark all notifications as read
   const handleMarkAllAsRead = () => {
     Alert.alert(
-      "Marquer comme lues",
-      "Marquer toutes les notifications comme lues ?",
+      "Mark as Read",
+      "Mark all notifications as read?",
       [
-        { text: "Annuler", style: "cancel" },
+        { text: "Cancel", style: "cancel" },
         { 
-          text: "Marquer", 
+          text: "Mark All", 
           onPress: async () => {
             try {
               await markAllNotificationsAsRead();
             } catch (error) {
               console.error('Error marking all notifications as read:', error);
-              Alert.alert('Erreur', 'Impossible de marquer les notifications comme lues');
+              Alert.alert('Error', 'Unable to mark notifications as read');
             }
           }
         }
@@ -264,19 +300,19 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
   // Clear all notifications
   const handleClearAll = () => {
     Alert.alert(
-      "Effacer les notifications",
-      "Voulez-vous vraiment effacer toutes les notifications ?",
+      "Clear Notifications",
+      "Do you want to clear all notifications?",
       [
-        { text: "Annuler", style: "cancel" },
+        { text: "Cancel", style: "cancel" },
         { 
-          text: "Effacer", 
+          text: "Clear", 
           style: "destructive",
           onPress: async () => {
             try {
               await clearAllNotifications();
             } catch (error) {
               console.error('Error clearing all notifications:', error);
-              Alert.alert('Erreur', 'Impossible d\'effacer les notifications');
+              Alert.alert('Error', 'Unable to clear notifications');
             }
           }
         }
@@ -329,14 +365,14 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
                     style={styles.actionButton}
                     onPress={handleMarkAllAsRead}
                   >
-                    <Text style={[styles.actionText, { color: colors.primary }]}>Tout lire</Text>
+                    <Text style={[styles.actionText, { color: colors.primary }]}>Mark All</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={handleClearAll}
                   >
-                    <Text style={[styles.actionText, { color: colors.primary }]}>Effacer</Text>
+                    <Text style={[styles.actionText, { color: colors.primary }]}>Clear</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -354,14 +390,14 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
             <View style={styles.loaderContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={[styles.emptyText, { color: colors.text, marginTop: 16 }]}>
-                Chargement des notifications...
+                Loading notifications...
               </Text>
             </View>
           ) : notifications.length === 0 ? (
             <View style={styles.emptyContainer}>
               <FontAwesome name="bell-o" size={50} color={colors.primary} />
               <Text style={[styles.emptyText, { color: colors.text }]}>
-                Aucune notification pour le moment
+                No notifications yet
               </Text>
             </View>
           ) : (
@@ -392,7 +428,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
                 <View style={styles.loadingMore}>
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={{ color: colors.text, marginLeft: 8 }}>
-                    Chargement...
+                    Loading...
                   </Text>
                 </View>
               )}
@@ -409,18 +445,18 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
                 onPress={loadNotifications}
               >
                 <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>
-                  Réessayer
+                  Retry
                 </Text>
               </TouchableOpacity>
             </View>
           )}
           
-          {/* Bouton de fermeture en bas */}
+          {/* Bottom close button */}
           <TouchableOpacity
             style={[styles.bottomCloseButton, { backgroundColor: colors.primary }]}
             onPress={onClose}
           >
-            <Text style={styles.bottomCloseButtonText}>Fermer</Text>
+            <Text style={styles.bottomCloseButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -536,6 +572,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.8,
     marginBottom: 6,
+    // IMPROVED: Allow flexible height for full message display
+    lineHeight: 20,
   },
   date: {
     fontSize: 12,
@@ -588,4 +626,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default NotificationsModal; 
+export default NotificationsModal;

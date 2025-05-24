@@ -91,14 +91,14 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  // Charger les notifications au démarrage
+  // Load notifications on startup
   useEffect(() => {
     console.log('ProfileScreen - Loading initial notifications');
     fetchNotifications(1, 20);
     fetchUnreadCount();
   }, [fetchNotifications, fetchUnreadCount]);
 
-  // Actualiser les notifications lorsque le modal est ouvert
+  // Refresh notifications when modal is opened
   useEffect(() => {
     if (notificationModalVisible) {
       console.log('ProfileScreen - Modal opened, refreshing notifications');
@@ -113,11 +113,11 @@ export default function ProfileScreen() {
       "Are you sure you want to logout?",
       [
         {
-          text: "No",
+          text: "Cancel",
           style: "cancel"
         },
         {
-          text: "Yes",
+          text: "Logout",
           onPress: async () => {
             try {
               await AsyncStorage.removeItem('userToken');
@@ -219,13 +219,13 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  // Ouvrir le modal de notifications 
+  // Open notifications modal 
   const handleOpenNotificationsModal = () => {
     console.log('ProfileScreen - Opening notifications modal, unreadCount:', unreadCount);
     setNotificationModalVisible(true);
   };
 
-  // Fermer le modal de notifications 
+  // Close notifications modal 
   const handleCloseNotificationsModal = () => {
     console.log('ProfileScreen - Closing notifications modal');
     setNotificationModalVisible(false);
@@ -461,4 +461,4 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 10
   },
-}); 
+});
