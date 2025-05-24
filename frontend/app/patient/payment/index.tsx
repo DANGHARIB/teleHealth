@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 
@@ -130,9 +130,6 @@ export default function PaymentScreen() {
         
         setAppointment(foundAppointment);
         setLoading(false);
-        
-        // Charger les méthodes de paiement sauvegardées
-        fetchSavedPaymentMethods();
       } catch (error) {
         console.error('Error loading appointment details:', error);
         Alert.alert('Error', 'Unable to load appointment details');
@@ -143,6 +140,20 @@ export default function PaymentScreen() {
     
     fetchAppointmentDetails();
   }, [appointmentId]);
+  
+  // Utiliser useFocusEffect pour recharger les méthodes de paiement à chaque fois que l'écran devient actif
+  useFocusEffect(
+    React.useCallback(() => {
+      // Cette fonction sera appelée chaque fois que l'écran devient actif (lors de la navigation vers cet écran)
+      if (appointmentId) {
+        fetchSavedPaymentMethods();
+      }
+      
+      return () => {
+        // Fonction de nettoyage si nécessaire
+      };
+    }, [appointmentId])
+  );
   
   // Gérer le cas où l'utilisateur quitte la page
   useEffect(() => {
@@ -233,7 +244,7 @@ export default function PaymentScreen() {
       return (
         <View style={styles.noSavedMethodsContainer}>
           <ThemedText style={styles.noSavedMethodsText}>
-            You don't have any saved payment methods yet
+            You don&apos;t have any saved payment methods yet
           </ThemedText>
           <TouchableOpacity 
             style={styles.addPaymentMethodButton}
