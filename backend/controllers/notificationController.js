@@ -167,7 +167,7 @@ exports.deleteNotification = async (req, res) => {
       });
     }
     
-    await notification.deleteOne();
+    await notification.remove();
     
     res.status(200).json({
       success: true,

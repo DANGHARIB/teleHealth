@@ -39,8 +39,10 @@ export default function DoctorTabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
-            tabBarIcon: ({ color, focused }) => <IconSymbol size={28} name="house.fill" color={focused ? ACTIVE_ICON_COLOR : color} />,
+            title: 'Payments',
+            tabBarIcon: ({ color, focused }) => (
+              <FontAwesome name="credit-card" size={22} color={focused ? ACTIVE_ICON_COLOR : color} />
+            ),
           }}
         />
         <Tabs.Screen

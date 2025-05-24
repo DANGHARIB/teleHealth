@@ -181,10 +181,6 @@ export const NotificationProvider = ({ children }) => {
       // Update unread notifications counter
       setUnreadCount(0);
       
-      // Clear notifications from local storage
-      await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify([]));
-      console.log('NotificationContext - Notifications cleared from storage');
-      
       return true;
     } catch (error) {
       console.error('Error deleting all notifications:', error);
