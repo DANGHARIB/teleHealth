@@ -162,6 +162,7 @@ export default function PaymentsScreen() {
     fetchPayments(false);
   };
 
+  
   // Filter payments
   const getFilteredPayments = () => {
     if (!activeFilter) return payments;
