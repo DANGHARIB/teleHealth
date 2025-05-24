@@ -120,6 +120,7 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
   const { colors } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isClearingNotifications, setIsClearingNotifications] = useState(false);
 
   const { 
     notifications, 
@@ -287,10 +288,24 @@ export const NotificationsModal = ({ visible, onClose, navigation }: Notificatio
           style: "destructive",
           onPress: async () => {
             try {
-              await clearAllNotifications();
+              setIsClearingNotifications(true);
+              const success = await clearAllNotifications();
+              setIsClearingNotifications(false);
+              
+              if (success) {
+                // Show success message
+                Alert.alert(
+                  "Success",
+                  "All notifications have been cleared",
+                  [{ text: "OK" }]
+                );
+              } else {
+                Alert.alert("Error", "Unable to clear notifications");
+              }
             } catch (error) {
+              setIsClearingNotifications(false);
               console.error('Error clearing all notifications:', error);
-              Alert.alert('Error', 'Unable to clear notifications');
+              Alert.alert("Error", "Unable to clear notifications");
             }
           }
         }

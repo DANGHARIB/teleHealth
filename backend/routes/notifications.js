@@ -16,8 +16,8 @@ router.get('/', protect, getUserNotifications);
 router.get('/unread-count', protect, getUnreadCount);
 router.put('/:id/read', protect, markAsRead);
 router.put('/read-all', protect, markAllAsRead);
-router.delete('/:id', protect, deleteNotification);
 router.delete('/clear-all', protect, clearAllNotifications);
+router.delete('/:id', protect, deleteNotification);
 
 // Protected routes for admins only
 router.post('/test', protect, admin, createTestNotification);
