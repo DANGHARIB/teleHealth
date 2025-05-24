@@ -56,9 +56,9 @@ const SignupScreen = () => {
       console.log('Réponse d\'inscription:', JSON.stringify(response.data));
       
       if (response.data) {
-        // Navigate to OTP verification screen
+        // Navigate to details screen instead of OTP verification
         router.push({
-          pathname: '/patient/auth/verify',
+          pathname: '/patient/auth/details',
           params: { email: formData.email }
         });
       }

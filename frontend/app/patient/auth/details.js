@@ -5,10 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import api from '../../../services/api'; // Chemin relatif corrigé
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PatientDetailsScreen = () => {
   const router = useRouter();
-  // const { email } = useLocalSearchParams(); // email n'est pas utilisé ici, peut être retiré si non nécessaire
+  const { email } = useLocalSearchParams(); // récupérer l'email passé en paramètre
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -58,19 +59,25 @@ const PatientDetailsScreen = () => {
     setError('');
 
     try {
-      // L'API /patients/profile est un PUT qui nécessite d'être authentifié
-      // S'assurer que api (axios instance) a bien l'intercepteur pour le token
-      await api.put('/patients/profile', {
+      // Stocker temporairement les détails du patient pour les utiliser après vérification
+      // Au lieu d'appeler l'API immédiatement, nous stockerons les détails localement
+      const patientDetails = {
         first_name: formData.first_name,
         last_name: formData.last_name,
         gender: formData.gender,
         date_of_birth: dateOfBirth
-      });
+      };
+      
+      // Stocker les détails dans localStorage pour les récupérer après vérification
+      await AsyncStorage.setItem('tempPatientDetails', JSON.stringify(patientDetails));
 
-      // Rediriger vers l'écran de connexion pour que l'utilisateur puisse se connecter
-      router.replace('/patient/auth/login');
+      // Rediriger vers l'écran de vérification OTP
+      router.push({
+        pathname: '/patient/auth/verify',
+        params: { email }
+      });
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      setError('Failed to save details');
     } finally {
       setIsLoading(false);
     }

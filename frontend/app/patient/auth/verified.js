@@ -8,7 +8,7 @@ const VerifiedScreen = () => {
   const router = useRouter();
 
   const handleContinue = () => {
-    router.push('/patient/auth/details');
+    router.push('/patient/assessment');
   };
 
   return (

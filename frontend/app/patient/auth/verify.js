@@ -103,6 +103,27 @@ const VerifyScreen = () => {
         
         await AsyncStorage.setItem('userInfo', JSON.stringify(userInfoToStore));
         
+        // Récupérer et enregistrer les détails du patient
+        try {
+          const tempPatientDetails = await AsyncStorage.getItem('tempPatientDetails');
+          if (tempPatientDetails) {
+            const patientDetails = JSON.parse(tempPatientDetails);
+            
+            // Envoyer les détails du patient à l'API
+            await axios.put(`${API_URL}/patients/profile`, patientDetails, {
+              headers: {
+                'Authorization': `Bearer ${response.data.token}`
+              }
+            });
+            
+            // Nettoyer les données temporaires
+            await AsyncStorage.removeItem('tempPatientDetails');
+          }
+        } catch (profileError) {
+          console.error('Erreur lors de la mise à jour du profil patient:', profileError.message);
+          // On continue malgré l'erreur pour permettre à l'utilisateur de continuer
+        }
+        
         router.push({
           pathname: '/patient/auth/verified',
           params: { email }
