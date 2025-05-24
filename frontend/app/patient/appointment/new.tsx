@@ -453,7 +453,8 @@ export default function BookAppointmentScreen() {
             slotEndTime: selectedSlot.endTime,
             price: doctor.price || 28,
             duration: APPOINTMENT_DURATION,
-            caseDetails: "Standard consultation"
+            caseDetails: "Standard consultation",
+            date: format(selectedDate, "yyyy-MM-dd") // Utiliser la date sélectionnée
           },
         });
       }
