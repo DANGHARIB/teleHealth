@@ -11,7 +11,7 @@ const {
 } = require('../controllers/notificationController');
 const { protect, admin } = require('../middlewares/authMiddleware');
 
-// Routes protégées pour tous les utilisateurs authentifiés
+// Protected routes for all authenticated users
 router.get('/', protect, getUserNotifications);
 router.get('/unread-count', protect, getUnreadCount);
 router.put('/:id/read', protect, markAsRead);
@@ -19,7 +19,7 @@ router.put('/read-all', protect, markAllAsRead);
 router.delete('/:id', protect, deleteNotification);
 router.delete('/clear-all', protect, clearAllNotifications);
 
-// Routes protégées pour les admins seulement
+// Protected routes for admins only
 router.post('/test', protect, admin, createTestNotification);
 
 module.exports = router; 

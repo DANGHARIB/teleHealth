@@ -3,21 +3,21 @@ const User = require('../models/User');
 const notificationService = require('../services/notificationService');
 
 /**
- * Contrôleur de notifications
- * Ce contrôleur gère toutes les opérations liées aux notifications
+ * Notification Controller
+ * This controller handles all operations related to notifications
  */
 
-// @desc    Récupérer les notifications de l'utilisateur connecté
+// @desc    Get notifications for the logged in user
 // @route   GET /api/notifications
 // @access  Private
 exports.getUserNotifications = async (req, res) => {
   try {
-    console.log('Récupération des notifications pour', req.user._id);
+    console.log('Retrieving notifications for', req.user._id);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     
-    // Filtrer par read status si spécifié
+    // Filter by read status if specified
     const query = { recipient: req.user._id };
     if (req.query.read === 'true') {
       query.read = true;
@@ -25,22 +25,22 @@ exports.getUserNotifications = async (req, res) => {
       query.read = false;
     }
     
-    // Récupérer les notifications de l'utilisateur avec pagination
+    // Get user notifications with pagination
     const notifications = await Notification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
     
-    // Obtenir le nombre total de notifications pour la pagination
+    // Get total notifications count for pagination
     const totalNotifications = await Notification.countDocuments(query);
     
-    // Obtenir le nombre de notifications non lues
+    // Get unread notifications count
     const unreadCount = await Notification.countDocuments({ 
       recipient: req.user._id,
       read: false
     });
     
-    console.log(`${notifications.length} notifications récupérées, ${unreadCount} non lues`);
+    console.log(`${notifications.length} notifications retrieved, ${unreadCount} unread`);
     
     res.status(200).json({
       success: true,
@@ -52,15 +52,15 @@ exports.getUserNotifications = async (req, res) => {
       data: notifications
     });
   } catch (error) {
-    console.error('Erreur lors de la récupération des notifications:', error);
+    console.error('Error retrieving notifications:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la récupération des notifications'
+      message: 'Server error while retrieving notifications'
     });
   }
 };
 
-// @desc    Récupérer le nombre de notifications non lues de l'utilisateur
+// @desc    Get unread notification count for the user
 // @route   GET /api/notifications/unread-count
 // @access  Private
 exports.getUnreadCount = async (req, res) => {
@@ -75,15 +75,15 @@ exports.getUnreadCount = async (req, res) => {
       count
     });
   } catch (error) {
-    console.error('Erreur lors du comptage des notifications non lues:', error);
+    console.error('Error counting unread notifications:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors du comptage des notifications non lues'
+      message: 'Server error while counting unread notifications'
     });
   }
 };
 
-// @desc    Marquer une notification comme lue
+// @desc    Mark notification as read
 // @route   PUT /api/notifications/:id/read
 // @access  Private
 exports.markAsRead = async (req, res) => {
@@ -93,15 +93,15 @@ exports.markAsRead = async (req, res) => {
     if (!notification) {
       return res.status(404).json({
         success: false,
-        message: 'Notification non trouvée'
+        message: 'Notification not found'
       });
     }
     
-    // Vérifier que l'utilisateur est bien le destinataire
+    // Verify that the user is the recipient
     if (notification.recipient.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
-        message: 'Non autorisé à modifier cette notification'
+        message: 'Not authorized to modify this notification'
       });
     }
     
@@ -113,15 +113,15 @@ exports.markAsRead = async (req, res) => {
       data: notification
     });
   } catch (error) {
-    console.error('Erreur lors du marquage de la notification comme lue:', error);
+    console.error('Error marking notification as read:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors du marquage de la notification'
+      message: 'Server error while marking notification'
     });
   }
 };
 
-// @desc    Marquer toutes les notifications comme lues
+// @desc    Mark all notifications as read
 // @route   PUT /api/notifications/read-all
 // @access  Private
 exports.markAllAsRead = async (req, res) => {
@@ -134,18 +134,18 @@ exports.markAllAsRead = async (req, res) => {
     res.status(200).json({
       success: true,
       count: result.nModified,
-      message: `${result.nModified} notifications marquées comme lues`
+      message: `${result.nModified} notifications marked as read`
     });
   } catch (error) {
-    console.error('Erreur lors du marquage de toutes les notifications:', error);
+    console.error('Error marking all notifications:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors du marquage des notifications'
+      message: 'Server error while marking notifications'
     });
   }
 };
 
-// @desc    Supprimer une notification
+// @desc    Delete a notification
 // @route   DELETE /api/notifications/:id
 // @access  Private
 exports.deleteNotification = async (req, res) => {
@@ -155,15 +155,15 @@ exports.deleteNotification = async (req, res) => {
     if (!notification) {
       return res.status(404).json({
         success: false,
-        message: 'Notification non trouvée'
+        message: 'Notification not found'
       });
     }
     
-    // Vérifier que l'utilisateur est bien le destinataire
+    // Verify that the user is the recipient
     if (notification.recipient.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
-        message: 'Non autorisé à supprimer cette notification'
+        message: 'Not authorized to delete this notification'
       });
     }
     
@@ -171,18 +171,18 @@ exports.deleteNotification = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      message: 'Notification supprimée avec succès'
+      message: 'Notification successfully deleted'
     });
   } catch (error) {
-    console.error('Erreur lors de la suppression de la notification:', error);
+    console.error('Error deleting notification:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la suppression de la notification'
+      message: 'Server error while deleting notification'
     });
   }
 };
 
-// @desc    Supprimer toutes les notifications de l'utilisateur
+// @desc    Delete all user notifications
 // @route   DELETE /api/notifications/clear-all
 // @access  Private
 exports.clearAllNotifications = async (req, res) => {
@@ -192,18 +192,18 @@ exports.clearAllNotifications = async (req, res) => {
     res.status(200).json({
       success: true,
       count: result.deletedCount,
-      message: `${result.deletedCount} notifications supprimées`
+      message: `${result.deletedCount} notifications deleted`
     });
   } catch (error) {
-    console.error('Erreur lors de la suppression de toutes les notifications:', error);
+    console.error('Error deleting all notifications:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la suppression des notifications'
+      message: 'Server error while deleting notifications'
     });
   }
 };
 
-// @desc    Créer une notification (pour test et usage interne uniquement)
+// @desc    Create a notification (for testing and internal use only)
 // @route   POST /api/notifications/test
 // @access  Private/Admin
 exports.createTestNotification = async (req, res) => {
@@ -213,14 +213,14 @@ exports.createTestNotification = async (req, res) => {
     if (!title || !message || !type) {
       return res.status(400).json({
         success: false,
-        message: 'Veuillez fournir un titre, un message et un type'
+        message: 'Please provide a title, message and type'
       });
     }
     
-    // Si un ID utilisateur est fourni, l'utiliser, sinon utiliser l'ID de l'utilisateur authentifié
+    // If a user ID is provided, use it, otherwise use the authenticated user's ID
     const recipientId = userId || req.user._id;
     
-    // Créer la notification en base de données
+    // Create notification in database
     const notification = await Notification.create({
       recipient: recipientId,
       title,
@@ -230,7 +230,7 @@ exports.createTestNotification = async (req, res) => {
       read: false
     });
     
-    // Envoyer la notification push via le service de notification
+    // Send push notification via notification service
     try {
       const recipient = await User.findById(recipientId);
       if (recipient && recipient.deviceToken) {
@@ -245,13 +245,13 @@ exports.createTestNotification = async (req, res) => {
           }
         );
         
-        // Marquer comme envoyée
+        // Mark as sent
         notification.pushed = true;
         await notification.save();
       }
     } catch (pushError) {
-      console.error('Erreur lors de l\'envoi de la notification push:', pushError);
-      // Ne pas échouer la requête si l'envoi push échoue
+      console.error('Error sending push notification:', pushError);
+      // Don't fail the request if push sending fails
     }
     
     res.status(201).json({
@@ -259,10 +259,10 @@ exports.createTestNotification = async (req, res) => {
       data: notification
     });
   } catch (error) {
-    console.error('Erreur lors de la création de la notification test:', error);
+    console.error('Error creating test notification:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur lors de la création de la notification'
+      message: 'Server error while creating notification'
     });
   }
 }; 

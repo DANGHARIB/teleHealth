@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const NotificationContext = createContext();
 
-// Clé pour le stockage local des notifications
+// Key for local notification storage
 const NOTIFICATION_STORAGE_KEY = '@notifications';
 
 export const NotificationProvider = ({ children }) => {
@@ -23,7 +23,7 @@ export const NotificationProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Configurer les notifications
+  // Configure notifications
   const setupNotificationsIfNeeded = async (isUserAuthenticated) => {
     console.log('NotificationContext - Setting up notifications, isAuthenticated:', isUserAuthenticated);
     if (isUserAuthenticated && !isNotificationsConfigured) {
@@ -35,45 +35,45 @@ export const NotificationProvider = ({ children }) => {
         if (!success) {
           Alert.alert(
             'Notification',
-            'Les notifications sont désactivées. Certaines fonctionnalités peuvent être limitées.',
+            'Notifications are disabled. Some features may be limited.',
             [{ text: 'OK' }]
           );
         }
         return success;
       } catch (error) {
-        console.error('Erreur lors de la configuration des notifications:', error);
+        console.error('Error while configuring notifications:', error);
         return false;
       }
     }
     return isNotificationsConfigured;
   };
 
-  // Récupérer les notifications depuis le backend
+  // Fetch notifications from backend
   const fetchNotifications = useCallback(async (page = 1, limit = 20) => {
     console.log('NotificationContext - Fetching notifications from backend, page:', page, 'limit:', limit);
     setIsLoading(true);
     setError(null);
     
     try {
-      // Récupérer les notifications depuis l'API
+      // Get notifications from API
       const response = await notificationsAPI.getNotifications(page, limit);
       console.log('NotificationContext - API Response:', response);
       
-      // Vérifier la structure de la réponse et extraire les données correctement
+      // Check response structure and extract data correctly
       const notificationData = response.data?.data || response.data || [];
       console.log('NotificationContext - Notifications extracted:', notificationData.length);
       
-      // Si c'est la première page, remplacer les notifications, sinon ajouter à la liste existante
+      // If it's the first page, replace notifications, otherwise add to existing list
       if (page === 1) {
         setNotifications(notificationData);
       } else {
         setNotifications(prev => [...prev, ...notificationData]);
       }
       
-      // Enregistrer les notifications dans le stockage local
+      // Save notifications to local storage
       await saveNotificationsToStorage(notificationData);
       
-      // Mettre à jour le compteur de notifications non lues
+      // Update unread notifications counter
       if (response.data?.unreadCount !== undefined) {
         setUnreadCount(response.data.unreadCount);
       } else {
@@ -85,10 +85,10 @@ export const NotificationProvider = ({ children }) => {
         data: notificationData
       };
     } catch (error) {
-      console.error('Erreur lors de la récupération des notifications:', error);
-      setError(error.message || 'Impossible de récupérer les notifications');
+      console.error('Error fetching notifications:', error);
+      setError(error.message || 'Unable to retrieve notifications');
       
-      // En cas d'échec, utiliser le stockage local comme fallback
+      // On failure, use local storage as fallback
       const cachedNotifications = await loadNotificationsFromStorage();
       if (cachedNotifications && cachedNotifications.length > 0) {
         setNotifications(cachedNotifications);
@@ -100,105 +100,105 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [fetchUnreadCount]);
 
-  // Récupérer le nombre de notifications non lues
+  // Get unread notifications count
   const fetchUnreadCount = useCallback(async () => {
     try {
       const count = await notificationsAPI.getUnreadCount();
       setUnreadCount(count);
       return count;
     } catch (error) {
-      console.error('Erreur lors de la récupération du nombre de notifications non lues:', error);
+      console.error('Error retrieving unread notification count:', error);
       return 0;
     }
   }, []);
 
-  // Marquer une notification comme lue
+  // Mark a notification as read
   const markNotificationAsRead = useCallback(async (notificationId) => {
     try {
       await notificationsAPI.markAsRead(notificationId);
       
-      // Mettre à jour l'état local
+      // Update local state
       setNotifications(prev => 
         prev.map(notif => 
           notif._id === notificationId ? { ...notif, read: true } : notif
         )
       );
       
-      // Mettre à jour le compteur de notifications non lues
+      // Update unread notifications counter
       fetchUnreadCount();
       
       return true;
     } catch (error) {
-      console.error('Erreur lors du marquage de la notification comme lue:', error);
+      console.error('Error marking notification as read:', error);
       return false;
     }
   }, [fetchUnreadCount]);
 
-  // Marquer toutes les notifications comme lues
+  // Mark all notifications as read
   const markAllNotificationsAsRead = useCallback(async () => {
     try {
       await notificationsAPI.markAllAsRead();
       
-      // Mettre à jour l'état local
+      // Update local state
       setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
       
-      // Mettre à jour le compteur de notifications non lues
+      // Update unread notifications counter
       setUnreadCount(0);
       
       return true;
     } catch (error) {
-      console.error('Erreur lors du marquage de toutes les notifications comme lues:', error);
+      console.error('Error marking all notifications as read:', error);
       return false;
     }
   }, []);
 
-  // Supprimer une notification
+  // Delete a notification
   const deleteNotification = useCallback(async (notificationId) => {
     try {
       await notificationsAPI.deleteNotification(notificationId);
       
-      // Mettre à jour l'état local
+      // Update local state
       setNotifications(prev => prev.filter(notif => notif._id !== notificationId));
       
-      // Mettre à jour le compteur de notifications non lues
+      // Update unread notifications counter
       fetchUnreadCount();
       
       return true;
     } catch (error) {
-      console.error('Erreur lors de la suppression de la notification:', error);
+      console.error('Error deleting notification:', error);
       return false;
     }
   }, [fetchUnreadCount]);
 
-  // Effacer toutes les notifications
+  // Clear all notifications
   const clearAllNotifications = useCallback(async () => {
     try {
       await notificationsAPI.clearAllNotifications();
       
-      // Mettre à jour l'état local
+      // Update local state
       setNotifications([]);
       
-      // Mettre à jour le compteur de notifications non lues
+      // Update unread notifications counter
       setUnreadCount(0);
       
       return true;
     } catch (error) {
-      console.error('Erreur lors de la suppression de toutes les notifications:', error);
+      console.error('Error deleting all notifications:', error);
       return false;
     }
   }, []);
 
-  // Sauvegarder les notifications dans le stockage local
+  // Save notifications to local storage
   const saveNotificationsToStorage = async (notifs) => {
     try {
       await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(notifs));
       console.log('NotificationContext - Notifications saved to storage:', notifs.length);
     } catch (error) {
-      console.error('Erreur lors de l\'enregistrement des notifications dans le stockage:', error);
+      console.error('Error saving notifications to storage:', error);
     }
   };
 
-  // Charger les notifications depuis le stockage local
+  // Load notifications from local storage
   const loadNotificationsFromStorage = async () => {
     try {
       const storedNotifications = await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEY);
@@ -209,26 +209,26 @@ export const NotificationProvider = ({ children }) => {
       }
       return [];
     } catch (error) {
-      console.error('Erreur lors du chargement des notifications depuis le stockage:', error);
+      console.error('Error loading notifications from storage:', error);
       return [];
     }
   };
 
-  // Mettre en place les gestionnaires de notifications
+  // Set up notification handlers
   useEffect(() => {
     console.log('NotificationContext - Setting up handlers, isConfigured:', isNotificationsConfigured);
     if (isNotificationsConfigured) {
       const cleanupHandlers = setupNotificationHandlers();
       
-      // Configurer le gestionnaire pour les notifications sur lesquelles on a appuyé
+      // Configure handler for notifications that were tapped
       const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
         const { data } = response.notification.request.content;
         console.log('NotificationContext - Notification response received:', data);
         setLastNotification(data);
-        // Ajouter à la file d'attente pour traitement ultérieur par le composant utilisant la navigation
+        // Add to queue for later processing by the component using navigation
         setNotificationQueue(prev => [...prev, data]);
         
-        // Si la notification a un ID et vient du backend, la marquer comme lue
+        // If notification has an ID and comes from backend, mark it as read
         if (data.notificationId) {
           markNotificationAsRead(data.notificationId);
         }
@@ -241,17 +241,17 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [isNotificationsConfigured, markNotificationAsRead]);
 
-  // Fonction pour traiter une notification avec navigation
+  // Function to process a notification with navigation
   const processNotification = (navigation, notification, isAuthenticated, userRole) => {
     console.log('NotificationContext - Processing notification:', notification, 'userRole:', userRole);
     if (!notification) return;
     
-    // Si la notification a un ID et vient du backend, la marquer comme lue
+    // If notification has an ID and comes from backend, mark it as read
     if (notification.notificationId) {
       markNotificationAsRead(notification.notificationId);
     }
     
-    // Navigation en fonction du type de notification
+    // Navigation based on notification type
     if (notification.type === 'new_appointment' || notification.type === 'confirmed_appointment') {
       if (notification.appointmentId) {
         if (isAuthenticated && userRole === 'Doctor') {
@@ -267,11 +267,11 @@ export const NotificationProvider = ({ children }) => {
         }
       }
     } 
-    // Gérer les demandes de reprogrammation
+    // Handle reschedule requests
     else if (notification.type === 'reschedule_requested') {
       console.log('NotificationContext - Processing reschedule request notification');
       
-      // Vérifier si les paramètres nécessaires sont présents
+      // Check if required parameters are present
       const doctorId = notification.doctorId || '';
       const appointmentId = notification.appointmentId || '';
       
@@ -284,11 +284,11 @@ export const NotificationProvider = ({ children }) => {
       if (doctorId && appointmentId) {
         if (isAuthenticated && userRole === 'Patient') {
           try {
-            // Simplifier la navigation avec une URL directe incluant les paramètres dans l'URL
+            // Simplify navigation with direct URL including parameters
             const url = `/patient/appointment/new?doctorId=${doctorId}&appointmentIdToReschedule=${appointmentId}`;
             console.log('NotificationContext - Navigating to URL:', url);
             
-            // Utiliser la méthode la plus simple de navigation disponible
+            // Use the simplest navigation method available
             if (typeof navigation.replace === 'function') {
               navigation.replace(url);
             } else if (typeof navigation.navigate === 'function') {
@@ -306,33 +306,33 @@ export const NotificationProvider = ({ children }) => {
         console.error('NotificationContext - Missing parameters for reschedule request navigation');
       }
     }
-    // Ajouter ici d'autres types de notifications au besoin
+    // Add other notification types here as needed
   };
 
-  // Fonction pour traiter toutes les notifications en attente
+  // Function to process all pending notifications
   const processNotificationQueue = (navigation, isAuthenticated, userRole) => {
     console.log('NotificationContext - Processing notification queue, length:', notificationQueue.length);
     if (notificationQueue.length > 0) {
       const currentNotification = notificationQueue[0];
       processNotification(navigation, currentNotification, isAuthenticated, userRole);
-      // Retirer la notification traitée de la file d'attente
+      // Remove processed notification from queue
       setNotificationQueue(prev => prev.slice(1));
     }
   };
 
-  // Fonction pour envoyer une notification locale (test)
+  // Function to send a local notification (test)
   const sendTestNotification = async (title, body, data = {}) => {
     console.log('NotificationContext - Sending test notification:', title, body, data);
     try {
       await sendLocalNotification(title, body, data);
       return true;
     } catch (error) {
-      console.error('Erreur lors de l\'envoi de la notification de test:', error);
+      console.error('Error sending test notification:', error);
       return false;
     }
   };
 
-  // Initialisation - charger les notifications depuis le stockage local au démarrage
+  // Initialization - load notifications from local storage at startup
   useEffect(() => {
     const loadInitialNotifications = async () => {
       const cachedNotifications = await loadNotificationsFromStorage();

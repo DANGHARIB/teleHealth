@@ -6,65 +6,65 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 
 /**
- * Gestionnaire de notifications pour l'application
- * Ce service gère l'envoi de notifications pour les rendez-vous et paiements
+ * Notification manager for the application
+ * This service handles sending notifications for appointments and payments
  * 
- * Il a deux fonctions principales:
- * 1. Envoyer des notifications push aux appareils des utilisateurs
- * 2. Persister les notifications dans la base de données pour affichage ultérieur
+ * It has two main functions:
+ * 1. Send push notifications to users' devices
+ * 2. Persist notifications in the database for later display
  */
 
-// Map temporaire pour stocker les jetons actifs (pour la compatibilité avec le code existant)
+// Temporary map to store active tokens (for compatibility with existing code)
 const deviceTokens = new Map();
 
-// Enregistrer un jeton d'appareil pour un utilisateur
+// Register a device token for a user
 exports.registerDeviceToken = async (userId, token) => {
   try {
-    // Enregistrer dans la base de données
+    // Register in the database
     await User.findByIdAndUpdate(userId, { deviceToken: token });
     
-    // Conserver dans la map temporaire pour la compatibilité
+    // Keep in temporary map for compatibility
     deviceTokens.set(userId, token);
-    console.log(`Token d'appareil enregistré pour l'utilisateur ${userId}`);
+    console.log(`Device token registered for user ${userId}`);
     return true;
   } catch (error) {
-    console.error(`Erreur lors de l'enregistrement du token pour l'utilisateur ${userId}:`, error);
+    console.error(`Error while registering token for user ${userId}:`, error);
     return false;
   }
 };
 
-// Obtenir le jeton d'appareil d'un utilisateur (d'abord depuis la base de données, puis depuis la map temporaire)
+// Get a user's device token (first from database, then from temporary map)
 exports.getDeviceToken = async (userId) => {
   try {
-    // Vérifier d'abord dans la base de données
+    // Check first in the database
     const user = await User.findById(userId);
     if (user && user.deviceToken) {
       return user.deviceToken;
     }
     
-    // Retomber sur la map temporaire si nécessaire
+    // Fall back to temporary map if necessary
     return deviceTokens.get(userId);
   } catch (error) {
-    console.error('Erreur lors de la récupération du token:', error);
+    console.error('Error retrieving token:', error);
     return null;
   }
 };
 
 /**
- * Créer une notification persistante dans la base de données
+ * Create a persistent notification in the database
  * 
- * @param {string} userId - ID de l'utilisateur destinataire
- * @param {string} title - Titre de la notification
- * @param {string} message - Message détaillé de la notification
- * @param {string} type - Type de notification (voir le modèle Notification pour les types disponibles)
- * @param {Object} data - Données supplémentaires pour la notification
- * @param {string} priority - Priorité de la notification (low, normal, high)
- * @param {Date} expiresAt - Date d'expiration de la notification (null = pas d'expiration)
- * @returns {Promise<Notification>} La notification créée
+ * @param {string} userId - Recipient user ID
+ * @param {string} title - Notification title
+ * @param {string} message - Detailed notification message
+ * @param {string} type - Notification type (see Notification model for available types)
+ * @param {Object} data - Additional data for the notification
+ * @param {string} priority - Notification priority (low, normal, high)
+ * @param {Date} expiresAt - Notification expiration date (null = no expiration)
+ * @returns {Promise<Notification>} The created notification
  */
 exports.createNotification = async (userId, title, message, type, data = {}, priority = 'normal', expiresAt = null) => {
   try {
-    console.log(`Création d'une notification persistante pour l'utilisateur ${userId}`);
+    console.log(`Creating a persistent notification for user ${userId}`);
     
     const notification = await Notification.create({
       recipient: userId,
@@ -78,36 +78,36 @@ exports.createNotification = async (userId, title, message, type, data = {}, pri
       expiresAt
     });
     
-    console.log(`Notification persistante créée avec succès, ID: ${notification._id}`);
+    console.log(`Persistent notification successfully created, ID: ${notification._id}`);
     return notification;
   } catch (error) {
-    console.error('Erreur lors de la création de la notification persistante:', error);
+    console.error('Error creating persistent notification:', error);
     return null;
   }
 };
 
 /**
- * Envoyer une notification à un utilisateur
+ * Send a notification to a user
  * 
- * Cette fonction gère à la fois:
- * 1. La création d'une notification persistante dans la base de données
- * 2. L'envoi d'une notification push à l'appareil de l'utilisateur
+ * This function handles both:
+ * 1. Creating a persistent notification in the database
+ * 2. Sending a push notification to the user's device
  * 
- * @param {string} userId - ID de l'utilisateur destinataire
- * @param {string} title - Titre de la notification
- * @param {string} body - Corps de la notification (message court)
- * @param {Object} data - Données supplémentaires pour la notification
- * @param {boolean} persist - Si true, persiste la notification dans la base de données
- * @returns {Promise<boolean>} true si succès, false sinon
+ * @param {string} userId - Recipient user ID
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body (short message)
+ * @param {Object} data - Additional data for the notification
+ * @param {boolean} persist - If true, persists the notification in the database
+ * @returns {Promise<boolean>} true if successful, false otherwise
  */
 exports.sendNotification = async (userId, title, body, data = {}, persist = true) => {
   try {
-    console.log(`Envoi de notification à l'utilisateur ${userId}:`);
-    console.log(`Titre: ${title}`);
-    console.log(`Corps: ${body}`);
-    console.log(`Données: ${JSON.stringify(data)}`);
+    console.log(`Sending notification to user ${userId}:`);
+    console.log(`Title: ${title}`);
+    console.log(`Body: ${body}`);
+    console.log(`Data: ${JSON.stringify(data)}`);
     
-    // 1. Persister la notification dans la base de données si demandé
+    // 1. Persist the notification in the database if requested
     let notification = null;
     if (persist) {
       notification = await this.createNotification(
@@ -118,25 +118,25 @@ exports.sendNotification = async (userId, title, body, data = {}, persist = true
         data
       );
       
-      // Ajouter l'ID de la notification aux données pour référence
+      // Add notification ID to data for reference
       if (notification) {
         data.notificationId = notification._id.toString();
       }
     }
     
-    // 2. Envoyer la notification push
-    // Obtenir le token de l'utilisateur
+    // 2. Send push notification
+    // Get user token
     const token = await this.getDeviceToken(userId);
     
     if (!token) {
-      console.log(`Aucun token d'appareil trouvé pour l'utilisateur ${userId}`);
-      return notification !== null; // Succès si la notification a été persistée, échec sinon
+      console.log(`No device token found for user ${userId}`);
+      return notification !== null; // Success if notification was persisted, failure otherwise
     }
     
-    // En production, cette fonction enverrait réellement la notification via Expo ou Firebase
-    console.log(`Notification PUSH envoyée à l'utilisateur ${userId}`);
+    // In production, this function would actually send the notification via Expo or Firebase
+    console.log(`PUSH notification sent to user ${userId}`);
     
-    // Dans une implémentation réelle, on utiliserait un service comme:
+    // In a real implementation, we would use a service like:
     // await fetch('https://exp.host/--/api/v2/push/send', {
     //   method: 'POST',
     //   headers: {
@@ -150,7 +150,7 @@ exports.sendNotification = async (userId, title, body, data = {}, persist = true
     //   }),
     // });
     
-    // Marquer la notification comme envoyée en push
+    // Mark notification as pushed
     if (notification) {
       notification.pushed = true;
       await notification.save();
@@ -158,12 +158,12 @@ exports.sendNotification = async (userId, title, body, data = {}, persist = true
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification:', error);
+    console.error('Error sending notification:', error);
     return false;
   }
 };
 
-// Notification de création de rendez-vous
+// Appointment creation notification
 exports.notifyAppointmentCreated = async (appointment) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -171,13 +171,13 @@ exports.notifyAppointmentCreated = async (appointment) => {
       .populate('patient', 'user first_name last_name')
       .populate('availability', 'date startTime');
     
-    // Notifier le médecin
+    // Notify the doctor
     const doctorUser = await User.findById(populatedAppointment.doctor.user);
     if (doctorUser) {
       await this.sendNotification(
         doctorUser._id,
-        'Nouveau rendez-vous',
-        `Vous avez un nouveau rendez-vous avec ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} le ${populatedAppointment.availability.date} à ${populatedAppointment.availability.startTime}`,
+        'New appointment',
+        `You have a new appointment with ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} on ${populatedAppointment.availability.date} at ${populatedAppointment.availability.startTime}`,
         { 
           appointmentId: appointment._id, 
           type: 'new_appointment',
@@ -188,12 +188,12 @@ exports.notifyAppointmentCreated = async (appointment) => {
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de création de rendez-vous:', error);
+    console.error('Error sending appointment creation notification:', error);
     return false;
   }
 };
 
-// Notification de confirmation de rendez-vous
+// Appointment confirmation notification
 exports.notifyAppointmentConfirmed = async (appointment) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -201,13 +201,13 @@ exports.notifyAppointmentConfirmed = async (appointment) => {
       .populate('patient', 'user first_name last_name')
       .populate('availability', 'date startTime');
     
-    // Notifier le patient
+    // Notify the patient
     const patientUser = await User.findById(populatedAppointment.patient.user);
     if (patientUser) {
       await this.sendNotification(
         patientUser._id,
-        'Rendez-vous confirmé',
-        `Votre rendez-vous avec Dr ${populatedAppointment.doctor.last_name} le ${populatedAppointment.availability.date} à ${populatedAppointment.availability.startTime} a été confirmé`,
+        'Appointment confirmed',
+        `Your appointment with Dr. ${populatedAppointment.doctor.last_name} on ${populatedAppointment.availability.date} at ${populatedAppointment.availability.startTime} has been confirmed`,
         { 
           appointmentId: appointment._id, 
           type: 'confirmed_appointment',
@@ -219,12 +219,12 @@ exports.notifyAppointmentConfirmed = async (appointment) => {
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de confirmation de rendez-vous:', error);
+    console.error('Error sending appointment confirmation notification:', error);
     return false;
   }
 };
 
-// Notification de reprogrammation de rendez-vous
+// Appointment rescheduling notification
 exports.notifyAppointmentRescheduled = async (appointment, oldDate, oldTime) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -232,13 +232,13 @@ exports.notifyAppointmentRescheduled = async (appointment, oldDate, oldTime) => 
       .populate('patient', 'user first_name last_name')
       .populate('availability', 'date startTime');
     
-    // Notifier le patient
+    // Notify the patient
     const patientUser = await User.findById(populatedAppointment.patient.user);
     if (patientUser) {
       await this.sendNotification(
         patientUser._id,
-        'Rendez-vous reprogrammé',
-        `Votre rendez-vous avec Dr ${populatedAppointment.doctor.last_name} initialement prévu le ${oldDate} à ${oldTime} a été reprogrammé pour le ${populatedAppointment.availability.date} à ${populatedAppointment.availability.startTime}`,
+        'Appointment rescheduled',
+        `Your appointment with Dr. ${populatedAppointment.doctor.last_name} originally scheduled for ${oldDate} at ${oldTime} has been rescheduled for ${populatedAppointment.availability.date} at ${populatedAppointment.availability.startTime}`,
         { 
           appointmentId: appointment._id, 
           type: 'rescheduled',
@@ -251,12 +251,12 @@ exports.notifyAppointmentRescheduled = async (appointment, oldDate, oldTime) => 
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de reprogrammation de rendez-vous:', error);
+    console.error('Error sending appointment rescheduling notification:', error);
     return false;
   }
 };
 
-// Notification de demande de reprogrammation par le médecin
+// Reschedule request notification from doctor
 exports.notifyRescheduleRequest = async (appointmentId) => {
   try {
     const appointment = await Appointment.findById(appointmentId)
@@ -265,20 +265,20 @@ exports.notifyRescheduleRequest = async (appointmentId) => {
       .populate('availability', 'date');
 
     if (!appointment) {
-      console.error('Rendez-vous non trouvé pour la demande de reprogrammation:', appointmentId);
+      console.error('Appointment not found for reschedule request:', appointmentId);
       return false;
     }
     
     const doctorName = appointment.doctor.full_name || `Dr. ${appointment.doctor.first_name} ${appointment.doctor.last_name}`;
-    const appointmentDate = new Date(appointment.availability.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+    const appointmentDate = new Date(appointment.availability.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     
-    // Notifier le patient
+    // Notify the patient
     const patientUser = await User.findById(appointment.patient.user);
     if (patientUser) {
       await this.sendNotification(
         patientUser._id,
-        'Demande de reprogrammation',
-        `${doctorName} souhaite reprogrammer votre rendez-vous du ${appointmentDate} à ${appointment.slotStartTime} en raison d'un empêchement. Veuillez choisir un nouveau créneau horaire.`,
+        'Reschedule request',
+        `${doctorName} would like to reschedule your appointment on ${appointmentDate} at ${appointment.slotStartTime} due to a conflict. Please choose a new time slot.`,
         { 
           appointmentId: appointment._id, 
           type: 'reschedule_requested',
@@ -288,19 +288,19 @@ exports.notifyRescheduleRequest = async (appointmentId) => {
           appointmentTime: appointment.slotStartTime,
           action: 'reschedule'
         },
-        true, // Persister la notification
-        'high' // Priorité élevée
+        true, // Persist notification
+        'high' // High priority
       );
     }
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de demande de reprogrammation:', error);
+    console.error('Error sending reschedule request notification:', error);
     return false;
   }
 };
 
-// Notification de reprogrammation de rendez-vous par le PATIENT
+// Appointment rescheduled by PATIENT notification
 exports.notifyAppointmentRescheduledByPatient = async (appointment, oldDate, oldTime) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -311,16 +311,16 @@ exports.notifyAppointmentRescheduledByPatient = async (appointment, oldDate, old
     const doctorName = populatedAppointment.doctor.full_name || `Dr. ${populatedAppointment.doctor.first_name} ${populatedAppointment.doctor.last_name}`;
     const patientName = populatedAppointment.patient.full_name || `${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name}`;
     
-    const newAppointmentDateStr = new Date(populatedAppointment.availability.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
-    const oldAppointmentDateStr = new Date(oldDate).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+    const newAppointmentDateStr = new Date(populatedAppointment.availability.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const oldAppointmentDateStr = new Date(oldDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Notifier le patient
+    // Notify the patient
     const patientUser = await User.findById(populatedAppointment.patient.user);
     if (patientUser) {
       await this.sendNotification(
         patientUser._id,
-        'Rendez-vous reprogrammé avec succès',
-        `Votre rendez-vous avec ${doctorName} initialement prévu le ${oldAppointmentDateStr} à ${oldTime} a été reprogrammé pour le ${newAppointmentDateStr} à ${populatedAppointment.slotStartTime}.`,
+        'Appointment successfully rescheduled',
+        `Your appointment with ${doctorName} originally scheduled for ${oldAppointmentDateStr} at ${oldTime} has been rescheduled for ${newAppointmentDateStr} at ${populatedAppointment.slotStartTime}.`,
         { 
           appointmentId: appointment._id, 
           type: 'rescheduled',
@@ -331,13 +331,13 @@ exports.notifyAppointmentRescheduledByPatient = async (appointment, oldDate, old
       );
     }
 
-    // Notifier le médecin
+    // Notify the doctor
     const doctorUser = await User.findById(populatedAppointment.doctor.user);
     if (doctorUser) {
       await this.sendNotification(
         doctorUser._id,
-        'Rendez-vous reprogrammé par un patient',
-        `Le rendez-vous avec ${patientName} initialement prévu le ${oldAppointmentDateStr} à ${oldTime} a été reprogrammé par le patient pour le ${newAppointmentDateStr} à ${populatedAppointment.slotStartTime}.`,
+        'Appointment rescheduled by patient',
+        `The appointment with ${patientName} originally scheduled for ${oldAppointmentDateStr} at ${oldTime} has been rescheduled by the patient for ${newAppointmentDateStr} at ${populatedAppointment.slotStartTime}.`,
         { 
           appointmentId: appointment._id, 
           type: 'rescheduled',
@@ -350,12 +350,12 @@ exports.notifyAppointmentRescheduledByPatient = async (appointment, oldDate, old
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de reprogrammation (par patient):', error);
+    console.error('Error sending rescheduling notification (by patient):', error);
     return false;
   }
 };
 
-// Notification d'annulation de rendez-vous
+// Appointment cancellation notification
 exports.notifyAppointmentCancelled = async (appointment) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -363,13 +363,13 @@ exports.notifyAppointmentCancelled = async (appointment) => {
       .populate('patient', 'user first_name last_name')
       .populate('availability', 'date startTime');
     
-    // Notifier le médecin
+    // Notify the doctor
     const doctorUser = await User.findById(populatedAppointment.doctor.user);
     if (doctorUser) {
       await this.sendNotification(
         doctorUser._id,
-        'Rendez-vous annulé',
-        `Le rendez-vous avec ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} le ${populatedAppointment.availability.date} à ${populatedAppointment.availability.startTime} a été annulé`,
+        'Appointment cancelled',
+        `The appointment with ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} on ${populatedAppointment.availability.date} at ${populatedAppointment.availability.startTime} has been cancelled`,
         { 
           appointmentId: appointment._id, 
           type: 'cancelled_appointment',
@@ -380,15 +380,15 @@ exports.notifyAppointmentCancelled = async (appointment) => {
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification d\'annulation de rendez-vous:', error);
+    console.error('Error sending appointment cancellation notification:', error);
     return false;
   }
 };
 
-// Notification de paiement effectué
+// Payment received notification
 exports.notifyPaymentReceived = async (payment) => {
   try {
-    // Notifier le médecin
+    // Notify the doctor
     const appointment = await Appointment.findById(payment.appointment)
       .populate('doctor', 'user first_name last_name')
       .populate('patient', 'user first_name last_name');
@@ -397,8 +397,8 @@ exports.notifyPaymentReceived = async (payment) => {
     if (doctorUser) {
       await this.sendNotification(
         doctorUser._id,
-        'Paiement reçu',
-        `Vous avez reçu un paiement de ${payment.amount}€ pour votre consultation avec ${appointment.patient.first_name} ${appointment.patient.last_name}`,
+        'Payment received',
+        `You have received a payment of ${payment.amount}€ for your consultation with ${appointment.patient.first_name} ${appointment.patient.last_name}`,
         { 
           paymentId: payment._id, 
           type: 'payment_received',
@@ -411,12 +411,12 @@ exports.notifyPaymentReceived = async (payment) => {
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi de la notification de paiement:', error);
+    console.error('Error sending payment notification:', error);
     return false;
   }
 };
 
-// Planifier des rappels de rendez-vous
+// Schedule appointment reminders
 exports.scheduleAppointmentReminders = async (appointment) => {
   try {
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -426,19 +426,19 @@ exports.scheduleAppointmentReminders = async (appointment) => {
     
     const appointmentDate = new Date(`${populatedAppointment.availability.date}T${populatedAppointment.availability.startTime}`);
     
-    // Soustraire 1 heure pour le rappel
+    // Subtract 1 hour for the reminder
     const reminderTime = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
     
-    // Vérifier si la date de rappel est dans le futur
+    // Check if reminder time is in the future
     if (reminderTime > new Date()) {
-      // Planifier le rappel pour le patient
+      // Schedule reminder for patient
       const patientUser = await User.findById(populatedAppointment.patient.user);
       if (patientUser) {
         schedule.scheduleJob(reminderTime, async () => {
           await this.sendNotification(
             patientUser._id,
-            'Rappel de rendez-vous',
-            `Rappel: Vous avez rendez-vous avec Dr ${populatedAppointment.doctor.last_name} dans 1 heure (${populatedAppointment.availability.startTime})`,
+            'Appointment reminder',
+            `Reminder: You have an appointment with Dr. ${populatedAppointment.doctor.last_name} in 1 hour (${populatedAppointment.availability.startTime})`,
             { 
               appointmentId: appointment._id, 
               type: 'appointment_reminder',
@@ -449,14 +449,14 @@ exports.scheduleAppointmentReminders = async (appointment) => {
         });
       }
       
-      // Planifier le rappel pour le médecin
+      // Schedule reminder for doctor
       const doctorUser = await User.findById(populatedAppointment.doctor.user);
       if (doctorUser) {
         schedule.scheduleJob(reminderTime, async () => {
           await this.sendNotification(
             doctorUser._id,
-            'Rappel de rendez-vous',
-            `Rappel: Vous avez rendez-vous avec ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} dans 1 heure (${populatedAppointment.availability.startTime})`,
+            'Appointment reminder',
+            `Reminder: You have an appointment with ${populatedAppointment.patient.first_name} ${populatedAppointment.patient.last_name} in 1 hour (${populatedAppointment.availability.startTime})`,
             { 
               appointmentId: appointment._id, 
               type: 'appointment_reminder',
@@ -467,12 +467,12 @@ exports.scheduleAppointmentReminders = async (appointment) => {
         });
       }
       
-      console.log(`Rappels de rendez-vous programmés pour le ${reminderTime}`);
+      console.log(`Appointment reminders scheduled for ${reminderTime}`);
     }
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de la programmation des rappels de rendez-vous:', error);
+    console.error('Error scheduling appointment reminders:', error);
     return false;
   }
 };

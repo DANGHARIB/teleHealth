@@ -4,8 +4,8 @@ import { NotificationContext } from '../../contexts/NotificationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * Composant qui traite les notifications et gère la navigation
- * Ce composant doit être placé à un niveau où useNavigation est disponible
+ * Component that handles notifications and manages navigation
+ * This component should be placed at a level where useNavigation is available
  */
 export const NotificationHandler = () => {
   const navigation = useNavigation();
@@ -15,11 +15,11 @@ export const NotificationHandler = () => {
     setupNotificationsIfNeeded 
   } = useContext(NotificationContext);
   
-  // Configurer les notifications et traiter la file d'attente
+  // Configure notifications and process the queue
   useEffect(() => {
     const setupAndProcess = async () => {
       try {
-        // Vérifier si l'utilisateur est authentifié
+        // Check if user is authenticated
         const userInfoString = await AsyncStorage.getItem('@user');
         if (!userInfoString) return;
         
@@ -27,22 +27,22 @@ export const NotificationHandler = () => {
         const isAuthenticated = !!userInfo;
         const userRole = userInfo?.role || '';
         
-        // Configurer les notifications si nécessaire
+        // Configure notifications if needed
         await setupNotificationsIfNeeded(isAuthenticated);
         
-        // Traiter les notifications en attente
+        // Process notifications in queue
         if (notificationQueue.length > 0) {
           processNotificationQueue(navigation, isAuthenticated, userRole);
         }
       } catch (error) {
-        console.error('Erreur dans le gestionnaire de notifications:', error);
+        console.error('Error in notification handler:', error);
       }
     };
     
     setupAndProcess();
   }, [notificationQueue, navigation, processNotificationQueue, setupNotificationsIfNeeded]);
   
-  // Ce composant ne rend rien, il s'agit juste d'un gestionnaire
+  // This component doesn't render anything, it's just a handler
   return null;
 };
 
