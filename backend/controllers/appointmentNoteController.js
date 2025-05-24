@@ -3,85 +3,103 @@ const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const logger = require('../config/logger');
 
-// @desc    Créer une note pour un rendez-vous
+// @desc    Create a note for an appointment
 // @route   POST /api/appointment-notes
 // @access  Private/Doctor
 exports.createAppointmentNote = async (req, res) => {
   try {
     const { appointmentId, content, diagnosis, treatment, advice, followUp } = req.body;
 
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
 
-    // Vérifier si le rendez-vous existe et appartient au médecin
+    // Check if the appointment exists and belongs to the doctor
     const appointment = await Appointment.findOne({ 
       _id: appointmentId,
       doctor: doctor._id
     }).populate('patient');
 
     if (!appointment) {
-      return res.status(404).json({ message: 'Rendez-vous non trouvé ou accès non autorisé.' });
+      return res.status(404).json({ message: 'Appointment not found or unauthorized access.' });
     }
 
-    // Vérifier si une note existe déjà pour ce rendez-vous
+    // Check if a note already exists for this appointment
     const existingNote = await AppointmentNote.findOne({ appointment: appointmentId });
     if (existingNote) {
-      return res.status(400).json({ message: 'Une note existe déjà pour ce rendez-vous.' });
+      return res.status(400).json({ message: 'A note already exists for this appointment.' });
     }
 
-    // Créer la note
+    // Prepare note data with default values to avoid errors
+    const safeContent = content || '';
+    const safeDiagnosis = diagnosis || '';
+    const safeTreatment = treatment || '';
+    const safeAdvice = advice || '';
+    const safeFollowUp = followUp || '';
+
+    // Create the note
     const appointmentNote = new AppointmentNote({
       appointment: appointmentId,
       doctor: doctor._id,
       patient: appointment.patient._id,
-      content,
-      diagnosis: diagnosis || '',
-      treatment: treatment || '',
-      advice: advice || '',
-      followUp: followUp || ''
+      content: safeContent,
+      diagnosis: safeDiagnosis,
+      treatment: safeTreatment,
+      advice: safeAdvice,
+      followUp: safeFollowUp
     });
 
-    const savedNote = await appointmentNote.save();
-    
-    // Retourner la note créée avec les références peuplées
-    const populatedNote = await AppointmentNote.findById(savedNote._id)
-      .populate('appointment', 'slotStartTime slotEndTime')
-      .populate('patient', 'first_name last_name');
-    
-    res.status(201).json(populatedNote);
+    try {
+      const savedNote = await appointmentNote.save();
+      
+      // Return the created note with populated references
+      const populatedNote = await AppointmentNote.findById(savedNote._id)
+        .populate('appointment', 'slotStartTime slotEndTime')
+        .populate('patient', 'first_name last_name');
+      
+      res.status(201).json(populatedNote);
+    } catch (saveError) {
+      logger.error('Error saving note:', saveError);
+      res.status(500).json({ 
+        message: 'Server error while creating note.',
+        details: process.env.NODE_ENV === 'development' ? saveError.message : undefined
+      });
+    }
   } catch (error) {
-    logger.error('Erreur lors de la création de la note:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la création de la note.' });
+    logger.error('Error creating note:', error);
+    res.status(500).json({ 
+      message: 'Server error while creating note.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
-// @desc    Mettre à jour une note existante
+// @desc    Update an existing note
 // @route   PUT /api/appointment-notes/:id
 // @access  Private/Doctor
 exports.updateAppointmentNote = async (req, res) => {
   try {
     const { content, diagnosis, treatment, advice, followUp } = req.body;
     
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Vérifier si la note existe et appartient au médecin
+    // Check if the note exists and belongs to the doctor
     const note = await AppointmentNote.findOne({
       _id: req.params.id,
       doctor: doctor._id
     });
     
     if (!note) {
-      return res.status(404).json({ message: 'Note non trouvée ou accès non autorisé.' });
+      return res.status(404).json({ message: 'Note not found or unauthorized access.' });
     }
     
-    // Mettre à jour la note
+    // Update the note
     note.content = content || note.content;
     note.diagnosis = diagnosis !== undefined ? diagnosis : note.diagnosis;
     note.treatment = treatment !== undefined ? treatment : note.treatment;
@@ -90,30 +108,30 @@ exports.updateAppointmentNote = async (req, res) => {
     
     const updatedNote = await note.save();
     
-    // Retourner la note mise à jour avec les références peuplées
+    // Return the updated note with populated references
     const populatedNote = await AppointmentNote.findById(updatedNote._id)
       .populate('appointment', 'slotStartTime slotEndTime')
       .populate('patient', 'first_name last_name');
     
     res.status(200).json(populatedNote);
   } catch (error) {
-    logger.error('Erreur lors de la mise à jour de la note:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la mise à jour de la note.' });
+    logger.error('Error updating note:', error);
+    res.status(500).json({ message: 'Server error while updating note.' });
   }
 };
 
-// @desc    Récupérer toutes les notes d'un médecin
+// @desc    Get all notes for a doctor
 // @route   GET /api/appointment-notes
 // @access  Private/Doctor
 exports.getDoctorNotes = async (req, res) => {
   try {
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Récupérer toutes les notes du médecin
+    // Get all notes for the doctor
     const notes = await AppointmentNote.find({ doctor: doctor._id })
       .populate({
         path: 'appointment',
@@ -128,25 +146,25 @@ exports.getDoctorNotes = async (req, res) => {
     
     res.status(200).json(notes);
   } catch (error) {
-    logger.error('Erreur lors de la récupération des notes:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la récupération des notes.' });
+    logger.error('Error retrieving notes:', error);
+    res.status(500).json({ message: 'Server error while retrieving notes.' });
   }
 };
 
-// @desc    Récupérer toutes les notes pour un patient spécifique
+// @desc    Get all notes for a specific patient
 // @route   GET /api/appointment-notes/patient/:patientId
 // @access  Private/Doctor
 exports.getPatientNotes = async (req, res) => {
   try {
     const { patientId } = req.params;
     
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Récupérer toutes les notes du médecin pour ce patient
+    // Get all notes from the doctor for this patient
     const notes = await AppointmentNote.find({
       doctor: doctor._id,
       patient: patientId
@@ -163,23 +181,23 @@ exports.getPatientNotes = async (req, res) => {
     
     res.status(200).json(notes);
   } catch (error) {
-    logger.error('Erreur lors de la récupération des notes du patient:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la récupération des notes du patient.' });
+    logger.error('Error retrieving patient notes:', error);
+    res.status(500).json({ message: 'Server error while retrieving patient notes.' });
   }
 };
 
-// @desc    Récupérer une note spécifique
+// @desc    Get a specific note
 // @route   GET /api/appointment-notes/:id
 // @access  Private/Doctor
 exports.getNoteById = async (req, res) => {
   try {
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Récupérer la note et vérifier qu'elle appartient au médecin
+    // Get the note and verify it belongs to the doctor
     const note = await AppointmentNote.findOne({
       _id: req.params.id,
       doctor: doctor._id
@@ -195,58 +213,58 @@ exports.getNoteById = async (req, res) => {
       .populate('patient', 'first_name last_name gender date_of_birth');
     
     if (!note) {
-      return res.status(404).json({ message: 'Note non trouvée ou accès non autorisé.' });
+      return res.status(404).json({ message: 'Note not found or unauthorized access.' });
     }
     
     res.status(200).json(note);
   } catch (error) {
-    logger.error('Erreur lors de la récupération de la note:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la récupération de la note.' });
+    logger.error('Error retrieving note:', error);
+    res.status(500).json({ message: 'Server error while retrieving note.' });
   }
 };
 
-// @desc    Supprimer une note
+// @desc    Delete a note
 // @route   DELETE /api/appointment-notes/:id
 // @access  Private/Doctor
 exports.deleteNote = async (req, res) => {
   try {
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Trouver et supprimer la note
+    // Find and delete the note
     const note = await AppointmentNote.findOneAndDelete({
       _id: req.params.id,
       doctor: doctor._id
     });
     
     if (!note) {
-      return res.status(404).json({ message: 'Note non trouvée ou accès non autorisé.' });
+      return res.status(404).json({ message: 'Note not found or unauthorized access.' });
     }
     
-    res.status(200).json({ message: 'Note supprimée avec succès.' });
+    res.status(200).json({ message: 'Note successfully deleted.' });
   } catch (error) {
-    logger.error('Erreur lors de la suppression de la note:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la suppression de la note.' });
+    logger.error('Error deleting note:', error);
+    res.status(500).json({ message: 'Server error while deleting note.' });
   }
 };
 
-// @desc    Vérifier si une note existe pour un rendez-vous spécifique
+// @desc    Check if a note exists for a specific appointment
 // @route   GET /api/appointment-notes/check/:appointmentId
 // @access  Private/Doctor
 exports.checkNoteExists = async (req, res) => {
   try {
     const { appointmentId } = req.params;
     
-    // Vérifier si l'utilisateur est un médecin
+    // Check if the user is a doctor
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      return res.status(403).json({ message: 'Accès non autorisé. Profil médecin requis.' });
+      return res.status(403).json({ message: 'Unauthorized access. Doctor profile required.' });
     }
     
-    // Vérifier si une note existe
+    // Check if a note exists
     const note = await AppointmentNote.findOne({
       appointment: appointmentId,
       doctor: doctor._id
@@ -257,7 +275,7 @@ exports.checkNoteExists = async (req, res) => {
       noteId: note ? note._id : null
     });
   } catch (error) {
-    logger.error('Erreur lors de la vérification de la note:', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la vérification de la note.' });
+    logger.error('Error checking note:', error);
+    res.status(500).json({ message: 'Server error while checking note.' });
   }
 }; 

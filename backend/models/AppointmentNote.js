@@ -1,11 +1,26 @@
 const mongoose = require('mongoose');
+const { encrypt, decrypt } = require('../utils/encryption');
 
 /**
- * Schéma des notes de rendez-vous
- * Ce modèle représente les notes prises par un médecin après un rendez-vous avec un patient
+ * Appointment Notes Schema
+ * This model represents notes taken by a doctor after an appointment with a patient
+ * Sensitive data is encrypted to comply with HIPAA standards
  */
+
+// Function wrapper for encrypt that handles null/undefined values
+const encryptField = function(val) {
+  if (val === null || val === undefined) return '';
+  return encrypt(val);
+};
+
+// Function wrapper for decrypt that handles null/undefined values
+const decryptField = function(val) {
+  if (val === null || val === undefined) return '';
+  return decrypt(val);
+};
+
 const appointmentNoteSchema = new mongoose.Schema({
-  // Le rendez-vous auquel cette note est associée
+  // The appointment this note is associated with
   appointment: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment',
@@ -13,7 +28,7 @@ const appointmentNoteSchema = new mongoose.Schema({
     index: true
   },
   
-  // Le médecin qui a créé la note
+  // The doctor who created the note
   doctor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Doctor',
@@ -21,7 +36,7 @@ const appointmentNoteSchema = new mongoose.Schema({
     index: true
   },
   
-  // Le patient concerné par la note
+  // The patient concerned by the note
   patient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Patient',
@@ -29,41 +44,54 @@ const appointmentNoteSchema = new mongoose.Schema({
     index: true
   },
   
-  // Contenu de la note
+  // Content of the note (encrypted)
   content: {
     type: String,
-    required: true
+    required: true,
+    set: encryptField,
+    get: decryptField
   },
   
-  // Diagnostic établi (optionnel)
+  // Diagnosis (optional, encrypted)
   diagnosis: {
     type: String,
-    default: ''
+    default: '',
+    set: encryptField,
+    get: decryptField
   },
   
-  // Traitement prescrit (optionnel)
+  // Prescribed treatment (optional, encrypted)
   treatment: {
     type: String,
-    default: ''
+    default: '',
+    set: encryptField,
+    get: decryptField
   },
   
-  // Conseils au patient (optionnel)
+  // Advice to patient (optional, encrypted)
   advice: {
     type: String,
-    default: ''
+    default: '',
+    set: encryptField,
+    get: decryptField
   },
   
-  // Suivi recommandé (optionnel)
+  // Recommended follow-up (optional, encrypted)
   followUp: {
     type: String,
-    default: ''
+    default: '',
+    set: encryptField,
+    get: decryptField
   }
 }, {
-  // Ajouter automatiquement createdAt et updatedAt
-  timestamps: true
+  // Automatically add createdAt and updatedAt
+  timestamps: true,
+  // Ensure getters are applied when converting to JSON/object
+  toJSON: { getters: true },
+  toObject: { getters: true }
 });
 
-// Créer un index composé pour faciliter la recherche des notes par médecin et patient
+// Create a composite index to facilitate searching notes by doctor and patient
 appointmentNoteSchema.index({ doctor: 1, patient: 1 });
 
 const AppointmentNote = mongoose.model('AppointmentNote', appointmentNoteSchema);

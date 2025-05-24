@@ -49,14 +49,14 @@ export default function CreateAppointmentNote() {
   const [saving, setSaving] = useState(false);
   const [appointment, setAppointment] = useState<any>(null);
   
-  // États pour les champs de la note
+  // States for note fields
   const [content, setContent] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [treatment, setTreatment] = useState('');
   const [advice, setAdvice] = useState('');
   const [followUp, setFollowUp] = useState('');
 
-  // Charger les détails du rendez-vous
+  // Load appointment details
   useEffect(() => {
     const fetchAppointmentDetails = async () => {
       if (!appointmentId) return;
@@ -67,10 +67,10 @@ export default function CreateAppointmentNote() {
         setAppointment(data);
         setLoading(false);
       } catch (error) {
-        console.error('Erreur lors du chargement du rendez-vous:', error);
+        console.error('Error loading appointment:', error);
         Alert.alert(
-          'Erreur',
-          'Impossible de charger les détails du rendez-vous.'
+          'Error',
+          'Unable to load appointment details.'
         );
         setLoading(false);
       }
@@ -79,24 +79,24 @@ export default function CreateAppointmentNote() {
     fetchAppointmentDetails();
   }, [appointmentId]);
 
-  // Formater la date du rendez-vous
+  // Format appointment date
   const formatAppointmentDate = (appointment: any) => {
     if (!appointment || !appointment.availability || !appointment.availability.date) {
-      return 'Date inconnue';
+      return 'Unknown date';
     }
     
     try {
       const date = new Date(appointment.availability.date);
-      return format(date, 'dd/MM/yyyy');
+      return format(date, 'MM/dd/yyyy');
     } catch (error) {
-      return 'Date invalide';
+      return 'Invalid date';
     }
   };
 
-  // Sauvegarder la note
+  // Save note
   const saveNote = async () => {
     if (!content.trim()) {
-      Alert.alert('Erreur', 'Le contenu de la note ne peut pas être vide.');
+      Alert.alert('Error', 'Note content cannot be empty.');
       return;
     }
 
@@ -114,16 +114,16 @@ export default function CreateAppointmentNote() {
       
       setSaving(false);
       Alert.alert(
-        'Succès',
-        'La note a été enregistrée avec succès.',
+        'Success',
+        'Note has been saved successfully.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde de la note:', error);
+      console.error('Error saving note:', error);
       setSaving(false);
       Alert.alert(
-        'Erreur',
-        'Impossible de sauvegarder la note. Veuillez réessayer.'
+        'Error',
+        'Unable to save note. Please try again.'
       );
     }
   };
@@ -132,7 +132,7 @@ export default function CreateAppointmentNote() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <ThemedText style={styles.loadingText}>Chargement des détails du rendez-vous...</ThemedText>
+        <ThemedText style={styles.loadingText}>Loading appointment details...</ThemedText>
       </View>
     );
   }
@@ -141,8 +141,8 @@ export default function CreateAppointmentNote() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{
-          headerTitle: 'Nouvelle note',
-          headerBackTitle: 'Retour',
+          headerTitle: 'New Note',
+          headerBackTitle: 'Back',
         }}
       />
       
@@ -155,15 +155,15 @@ export default function CreateAppointmentNote() {
           {appointment && (
             <ThemedView style={styles.appointmentInfoCard}>
               <ThemedText style={styles.appointmentInfoTitle}>
-                Détails du rendez-vous
+                Appointment Details
               </ThemedText>
               
               <View style={styles.appointmentInfoRow}>
                 <ThemedText style={styles.appointmentInfoLabel}>Patient:</ThemedText>
                 <ThemedText style={styles.appointmentInfoValue}>
                   {appointment.patient ? 
-                    `${appointment.patient.first_name || ''} ${appointment.patient.last_name || ''}`.trim() || 'Nom non disponible' 
-                    : 'Patient non disponible'}
+                    `${appointment.patient.first_name || ''} ${appointment.patient.last_name || ''}`.trim() || 'Name not available' 
+                    : 'Patient not available'}
                 </ThemedText>
               </View>
               
@@ -175,7 +175,7 @@ export default function CreateAppointmentNote() {
               </View>
               
               <View style={styles.appointmentInfoRow}>
-                <ThemedText style={styles.appointmentInfoLabel}>Horaire:</ThemedText>
+                <ThemedText style={styles.appointmentInfoLabel}>Time:</ThemedText>
                 <ThemedText style={styles.appointmentInfoValue}>
                   {appointment.slotStartTime} - {appointment.slotEndTime}
                 </ThemedText>
@@ -183,7 +183,7 @@ export default function CreateAppointmentNote() {
               
               {appointment.caseDetails && (
                 <View style={styles.appointmentInfoRow}>
-                  <ThemedText style={styles.appointmentInfoLabel}>Motif:</ThemedText>
+                  <ThemedText style={styles.appointmentInfoLabel}>Reason:</ThemedText>
                   <ThemedText style={styles.appointmentInfoValue}>
                     {appointment.caseDetails}
                   </ThemedText>
@@ -193,48 +193,48 @@ export default function CreateAppointmentNote() {
           )}
           
           <ThemedView style={styles.noteCard}>
-            <ThemedText style={styles.sectionTitle}>Note générale</ThemedText>
+            <ThemedText style={styles.sectionTitle}>General Notes</ThemedText>
             <RNTextInput
               style={styles.textArea}
-              placeholder="Entrez vos notes sur la consultation..."
+              placeholder="Enter your consultation notes..."
               multiline
               textAlignVertical="top"
               value={content}
               onChangeText={setContent}
             />
             
-            <ThemedText style={styles.sectionTitle}>Diagnostic</ThemedText>
+            <ThemedText style={styles.sectionTitle}>Diagnosis</ThemedText>
             <RNTextInput
               style={styles.textInput}
-              placeholder="Entrez le diagnostic établi"
+              placeholder="Enter diagnosis"
               value={diagnosis}
               onChangeText={setDiagnosis}
             />
             
-            <ThemedText style={styles.sectionTitle}>Traitement prescrit</ThemedText>
+            <ThemedText style={styles.sectionTitle}>Prescribed Treatment</ThemedText>
             <RNTextInput
               style={styles.textArea}
-              placeholder="Entrez le traitement prescrit"
+              placeholder="Enter prescribed treatment"
               multiline
               textAlignVertical="top"
               value={treatment}
               onChangeText={setTreatment}
             />
             
-            <ThemedText style={styles.sectionTitle}>Conseils</ThemedText>
+            <ThemedText style={styles.sectionTitle}>Advice</ThemedText>
             <RNTextInput
               style={styles.textArea}
-              placeholder="Entrez les conseils donnés au patient"
+              placeholder="Enter advice given to patient"
               multiline
               textAlignVertical="top"
               value={advice}
               onChangeText={setAdvice}
             />
             
-            <ThemedText style={styles.sectionTitle}>Suivi recommandé</ThemedText>
+            <ThemedText style={styles.sectionTitle}>Recommended Follow-up</ThemedText>
             <RNTextInput
               style={styles.textInput}
-              placeholder="Entrez le suivi recommandé"
+              placeholder="Enter recommended follow-up"
               value={followUp}
               onChangeText={setFollowUp}
             />
@@ -247,7 +247,7 @@ export default function CreateAppointmentNote() {
             onPress={() => router.back()}
             disabled={saving}
           >
-            <ThemedText style={styles.cancelButtonText}>Annuler</ThemedText>
+            <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -260,7 +260,7 @@ export default function CreateAppointmentNote() {
             ) : (
               <>
                 <Ionicons name="save-outline" size={18} color={COLORS.white} />
-                <ThemedText style={styles.saveButtonText}>Enregistrer</ThemedText>
+                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
               </>
             )}
           </TouchableOpacity>
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 80, // Espace pour le actionBar
+    marginBottom: 80, // Space for actionBar
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,

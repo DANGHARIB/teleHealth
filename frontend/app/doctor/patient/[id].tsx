@@ -269,7 +269,7 @@ export default function PatientDetailScreen() {
                 style={styles.buttonIcon} 
               />
               <ThemedText style={styles.buttonText}>
-                Voir les notes
+                View Notes
               </ThemedText>
             </TouchableOpacity>
           </View>

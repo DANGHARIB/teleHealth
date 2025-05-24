@@ -48,14 +48,14 @@ export default function PatientNotes() {
   const [notes, setNotes] = useState<any[]>([]);
   const [patient, setPatient] = useState<any>(null);
 
-  // Charger les détails du patient et ses notes
+  // Load patient details and notes
   const loadPatientNotes = useCallback(async () => {
     if (!id) return;
     
     try {
       setLoading(true);
       
-      // Charger le patient
+      // Load patient
       const patientData = await doctorAPI.getSavedPatients();
       const foundPatient = patientData.find((p: any) => p._id === id);
       
@@ -63,54 +63,54 @@ export default function PatientNotes() {
         setPatient(foundPatient);
       }
       
-      // Charger les notes
+      // Load notes
       const notesData = await doctorAPI.getPatientNotes(id as string);
       setNotes(notesData);
       
       setLoading(false);
     } catch (error) {
-      console.error('Erreur lors du chargement des notes:', error);
+      console.error('Error loading notes:', error);
       Alert.alert(
-        'Erreur',
-        'Impossible de charger les notes du patient.'
+        'Error',
+        'Unable to load patient notes.'
       );
       setLoading(false);
     }
   }, [id]);
 
-  // Charger les données au chargement initial
+  // Load data on initial load
   useEffect(() => {
     loadPatientNotes();
   }, [loadPatientNotes]);
 
-  // Actualiser les données lors du retour sur cette page
+  // Refresh data when returning to this page
   useFocusEffect(
     useCallback(() => {
       loadPatientNotes();
     }, [loadPatientNotes])
   );
 
-  // Fonction pour formater la date
+  // Function to format date
   const formatNoteDate = (note: any) => {
     if (!note || !note.appointment || !note.appointment.availability || !note.appointment.availability.date) {
-      return 'Date inconnue';
+      return 'Unknown date';
     }
     
     try {
-      return format(new Date(note.appointment.availability.date), 'dd/MM/yyyy');
+      return format(new Date(note.appointment.availability.date), 'MM/dd/yyyy');
     } catch (error) {
-      return 'Date invalide';
+      return 'Invalid date';
     }
   };
 
-  // Rafraîchissement des données
+  // Refresh data
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadPatientNotes();
     setRefreshing(false);
   }, [loadPatientNotes]);
 
-  // Ouvrir une note
+  // Open a note
   const openNote = (noteId: string) => {
     router.push(`/doctor/notes/${noteId}`);
   };
@@ -119,7 +119,7 @@ export default function PatientNotes() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <ThemedText style={styles.loadingText}>Chargement des notes...</ThemedText>
+        <ThemedText style={styles.loadingText}>Loading notes...</ThemedText>
       </View>
     );
   }
@@ -128,8 +128,8 @@ export default function PatientNotes() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{
-          headerTitle: 'Notes du patient',
-          headerBackTitle: 'Retour',
+          headerTitle: 'Patient Notes',
+          headerBackTitle: 'Back',
         }}
       />
       
@@ -151,20 +151,20 @@ export default function PatientNotes() {
             </ThemedText>
             {patient.gender && patient.date_of_birth && (
               <ThemedText style={styles.patientDetails}>
-                {patient.gender} • {format(new Date(patient.date_of_birth), 'dd/MM/yyyy')}
+                {patient.gender} • {format(new Date(patient.date_of_birth), 'MM/dd/yyyy')}
               </ThemedText>
             )}
           </ThemedView>
         )}
         
-        <ThemedText style={styles.sectionTitle}>Historique des notes</ThemedText>
+        <ThemedText style={styles.sectionTitle}>Notes History</ThemedText>
         
         {notes.length === 0 ? (
           <ThemedView style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={64} color={COLORS.gray300} />
-            <ThemedText style={styles.emptyTitle}>Aucune note</ThemedText>
+            <ThemedText style={styles.emptyTitle}>No Notes</ThemedText>
             <ThemedText style={styles.emptyText}>
-              Vous n&apos;avez pas encore créé de notes pour ce patient.
+              You haven't created any notes for this patient yet.
             </ThemedText>
           </ThemedView>
         ) : (

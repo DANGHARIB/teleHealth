@@ -266,27 +266,27 @@ export default function DoctorAppointmentScreen() {
     return `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Patient';
   };
 
-  // Vérification si un rendez-vous peut être reprogrammé (jusqu'à J-1)
+  // Check if an appointment can be rescheduled (up to 1 day before)
   const canRescheduleAppointment = (appointmentDate: string) => {
     try {
-      // Convertir la date du rendez-vous en objet Date
+      // Convert the appointment date to a Date object
       const appDate = new Date(appointmentDate);
-      // Date limite de reprogrammation = date du rendez-vous - 1 jour
+      // Rescheduling deadline = appointment date - 1 day
       const rescheduleDeadline = new Date(appDate);
       rescheduleDeadline.setDate(appDate.getDate() - 1);
       
-      // Comparer avec la date actuelle
+      // Compare with current date
       const now = new Date();
       
-      // On peut reprogrammer si la date actuelle est avant la deadline de reprogrammation
+      // Can reschedule if current date is before the rescheduling deadline
       return now <= rescheduleDeadline;
     } catch (error) {
-      console.error('Erreur lors de la vérification de la date de reprogrammation:', error);
+      console.error('Error checking reschedule date:', error);
       return false;
     }
   };
 
-  // Update appointment status (utilisé uniquement pour reprogrammation et autres changements de statut)
+  // Update appointment status (used only for rescheduling and other status changes)
   const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'cancelled') => {
     try {
       await doctorAPI.updateAppointmentStatus(appointmentId, { status: newStatus });
@@ -301,9 +301,9 @@ export default function DoctorAppointmentScreen() {
     }
   };
   
-  // Les rendez-vous sont automatiquement confirmés après paiement
+  // Appointments are automatically confirmed after payment
 
-  // Vérifier si un rendez-vous est passé (slot de fin est dépassé)
+  // Check if an appointment is past (end slot is passed)
   const isAppointmentPast = (appointment: Appointment) => {
     try {
       const now = new Date();
@@ -314,7 +314,7 @@ export default function DoctorAppointmentScreen() {
       
       return now > appointmentDate;
     } catch (error) {
-      console.error('Erreur lors de la vérification de la date du rendez-vous:', error);
+      console.error('Error checking appointment date:', error);
       return false;
     }
   };
@@ -345,25 +345,25 @@ export default function DoctorAppointmentScreen() {
   const navigateToReschedule = (appointment: Appointment) => {
     if (!canRescheduleAppointment(appointment.availability.date)) {
       Alert.alert(
-        "Impossible de reprogrammer",
-        "Ce rendez-vous ne peut plus être reprogrammé car il est prévu dans moins de 24 heures."
+        "Unable to Reschedule",
+        "This appointment cannot be rescheduled as it is scheduled in less than 24 hours."
       );
       return;
     }
     
     Alert.alert(
-      "Demander une reprogrammation",
-      `Êtes-vous sûr de vouloir demander au patient de reprogrammer son rendez-vous du ${format(new Date(appointment.availability.date), 'dd/MM/yyyy')} à ${appointment.slotStartTime} ?`,
+      "Request Rescheduling",
+      `Are you sure you want to ask the patient to reschedule their appointment on ${format(new Date(appointment.availability.date), 'dd/MM/yyyy')} at ${appointment.slotStartTime}?`,
       [
-        { text: "Annuler", style: "cancel" },
+        { text: "Cancel", style: "cancel" },
         { 
-          text: "Confirmer", 
+          text: "Confirm", 
           onPress: async () => {
             try {
               setLoading(true);
               await doctorAPI.requestRescheduleAppointment(appointment._id);
               
-              // Mettre à jour le statut du rendez-vous localement
+              // Update the appointment status locally
               setAppointments(prevAppointments => 
                 prevAppointments.map(app => 
                   app._id === appointment._id ? { ...app, status: "reschedule_requested" } : app
@@ -371,14 +371,14 @@ export default function DoctorAppointmentScreen() {
               );
               
               Alert.alert(
-                "Demande envoyée",
-                "Une notification a été envoyée au patient pour lui demander de reprogrammer ce rendez-vous."
+                "Request Sent",
+                "A notification has been sent to the patient asking them to reschedule this appointment."
               );
             } catch (error) {
-              console.error("Erreur lors de la demande de reprogrammation:", error);
+              console.error("Error requesting rescheduling:", error);
               Alert.alert(
-                "Erreur",
-                "Une erreur est survenue lors de la demande de reprogrammation."
+                "Error",
+                "An error occurred while requesting rescheduling."
               );
             } finally {
               setLoading(false);
@@ -473,31 +473,31 @@ export default function DoctorAppointmentScreen() {
       case 'confirmed':
         return {
           color: COLORS.primary,
-          text: 'Confirmé',
+          text: 'Confirmed',
           icon: 'checkmark-circle-outline'
         };
       case 'cancelled':
         return {
           color: COLORS.danger,
-          text: 'Annulé',
+          text: 'Cancelled',
           icon: 'close-circle-outline'
         };
       case 'rescheduled':
         return {
           color: COLORS.purple,
-          text: 'Reprogrammé',
+          text: 'Rescheduled',
           icon: 'calendar-outline'
         };
       case 'reschedule_requested':
         return {
           color: COLORS.warning,
-          text: 'Reprog. demandée',
+          text: 'Reschedule Req.',
           icon: 'time-outline'
         };
       default:
         return {
           color: COLORS.warning,
-          text: 'En attente',
+          text: 'Pending',
           icon: 'time-outline'
         };
     }
@@ -595,21 +595,19 @@ export default function DoctorAppointmentScreen() {
                 {renderPaymentBadge(appointment.paymentStatus)}
               </View>
             </View>
-            
             <View style={styles.actionButtons}>
               {appointment.sessionLink && appointment.status !== 'cancelled' && (
                 <>
-                  {isAppointmentPast(appointment) ? (
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.primaryButton]}
-                      onPress={() => navigateToNotes(appointment)}
-                    >
-                      <Ionicons name="document-text" size={16} color={COLORS.white} />
-                      <ThemedText style={styles.buttonText}>Notes</ThemedText>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.primaryButton]}
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.primaryButton]}
+                    onPress={() => navigateToNotes(appointment)}
+                  >
+                    <Ionicons name="document-text" size={16} color={COLORS.white} />
+                    <ThemedText style={styles.buttonText}>Notes</ThemedText>
+                  </TouchableOpacity>
+                  {!isAppointmentPast(appointment) && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.primaryButton, { marginLeft: 8 }]}
                       onPress={() => openZoomLink(appointment.sessionLink)}
                     >
                       <Ionicons name="videocam" size={16} color={COLORS.white} />
@@ -618,8 +616,7 @@ export default function DoctorAppointmentScreen() {
                   )}
                 </>
               )}
-              
-              {/* Option de reprogrammation disponible jusqu'à J-1 */}
+              {/* Rescheduling option available up to 1 day before */}
               {['confirmed', 'scheduled'].includes(appointment.status) && 
                canRescheduleAppointment(appointment.availability.date) && (
                 <TouchableOpacity 
