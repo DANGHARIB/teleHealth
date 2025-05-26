@@ -331,10 +331,63 @@ async loginAdmin(email, password) {
 
 - **Liste des paiements** : `GET /api/payments`
   - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
-  - Paramètres optionnels : `?doctorId=id&patientId=id&startDate=date&endDate=date&status=status`
+  - Paramètres optionnels : `?doctorId=id&patientId=id&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&status=status&page=1&limit=20&sort=createdAt&order=desc`
+  - Format de réponse :
+    ```json
+    {
+      "payments": [
+        {
+          "_id": "string",
+          "amount": "number",
+          "paymentMethod": "string",
+          "status": "string",
+          "transactionId": "string",
+          "paymentDate": "date",
+          "createdAt": "date",
+          "patient": {
+            "_id": "string",
+            "first_name": "string",
+            "last_name": "string"
+          },
+          "appointment": {
+            "_id": "string",
+            "doctor": {
+              "_id": "string",
+              "first_name": "string",
+              "last_name": "string",
+              "full_name": "string"
+            },
+            "patient": {
+              "_id": "string",
+              "first_name": "string",
+              "last_name": "string"
+            },
+            "availability": {
+              "date": "date",
+              "startTime": "string",
+              "endTime": "string"
+            },
+            "caseDetails": "string"
+          },
+          "patientName": "string",
+          "doctorName": "string",
+          "type": "string",
+          "commission": "number",
+          "net": "number"
+        }
+      ],
+      "pagination": {
+        "total": "number",
+        "page": "number",
+        "pages": "number",
+        "limit": "number"
+      }
+    }
+    ```
 
 - **Détails d'un paiement** : `GET /api/payments/:id`
   - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
+  - Format de réponse : Objet de paiement similaire à celui dans la liste
 
 - **Créer un paiement** : `POST /api/payments`
   - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
@@ -342,20 +395,76 @@ async loginAdmin(email, password) {
     ```json
     {
       "amount": "number",
-      "doctorId": "string",
-      "patientId": "string",
       "appointmentId": "string",
-      "method": "string",
-      "description": "string"
+      "paymentMethod": "string",
+      "status": "string"
     }
     ```
 
-- **Mettre à jour un paiement** : `PUT /api/payments/:id`
+- **Rembourser un paiement** : `POST /api/payments/:id/refund`
   - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
+  - Accessible uniquement aux administrateurs
+  - Aucun corps requis
 
-- **Statistiques de paiements** : `GET /api/payments/stats`
+#### Endpoints spécifiques pour les patients et médecins
+
+- **Paiements d'un patient connecté** : `GET /api/payments/patient`
   - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
-  - Paramètres optionnels : `?period=month`
+  - Accessible uniquement par le patient lui-même
+  
+- **Paiements d'un médecin connecté** : `GET /api/payments/doctor`
+  - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
+  - Accessible uniquement par le médecin lui-même
+
+#### Recherche et filtrage des paiements
+
+Pour l'application d'administration, vous pouvez utiliser les options de filtrage suivantes avec `GET /api/payments` :
+
+1. **Filtrer par médecin** : `?doctorId=5f9d88b9c1b8a22e48d4c8f0`
+2. **Filtrer par patient** : `?patientId=5f9d88b9c1b8a22e48d4c8f1` 
+3. **Filtrer par période** : `?startDate=2023-01-01&endDate=2023-01-31`
+4. **Filtrer par statut** : `?status=completed` (options: completed, refunded, failed)
+5. **Pagination** : `?page=1&limit=20`
+6. **Tri** : `?sort=createdAt&order=desc`
+
+Exemple complet :
+```
+GET /api/payments?doctorId=5f9d88b9c1b8a22e48d4c8f0&startDate=2023-01-01&endDate=2023-01-31&status=completed&page=1&limit=20
+```
+
+#### Transformation des données de paiement
+
+Pour l'interface utilisateur de l'administrateur, les données de paiement peuvent être transformées comme suit :
+
+```javascript
+// Transformation dans paymentsService.js
+const transformPaymentData = (apiPayment) => {
+  return {
+    id: apiPayment._id,
+    amount: apiPayment.amount || 0,
+    date: apiPayment.paymentDate || apiPayment.createdAt,
+    status: apiPayment.status || 'pending',
+    method: apiPayment.paymentMethod,
+    description: apiPayment.type || apiPayment.description || 'Consultation',
+    
+    // Relations
+    doctorId: apiPayment.appointment?.doctor?._id,
+    doctorName: apiPayment.doctorName || `Dr. ${apiPayment.appointment?.doctor?.full_name || 'Inconnu'}`,
+    patientId: apiPayment.patient?._id,
+    patientName: apiPayment.patientName || `${apiPayment.patient?.first_name || ''} ${apiPayment.patient?.last_name || ''}`.trim(),
+    appointmentId: apiPayment.appointment?._id,
+    
+    // Données financières (déjà calculées côté serveur)
+    commission: apiPayment.commission || apiPayment.amount * 0.15,
+    net: apiPayment.net || apiPayment.amount * 0.85,
+    
+    // Métadonnées
+    transactionId: apiPayment.transactionId,
+    createdAt: apiPayment.createdAt,
+    updatedAt: apiPayment.updatedAt
+  };
+};
+```
 
 ### Méthodes de Paiement
 

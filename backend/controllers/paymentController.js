@@ -566,4 +566,127 @@ exports.refundPayment = async (req, res) => {
     console.error('Erreur lors du remboursement:', error);
     res.status(500).json({ message: 'Erreur serveur lors du remboursement' });
   }
+};
+
+// @desc    Obtenir tous les paiements avec filtres (pour l'admin et les rapports)
+// @route   GET /api/payments
+// @access  Private/Admin
+exports.getAllPayments = async (req, res) => {
+  try {
+    // Vérifier les autorisations - seuls les administrateurs peuvent accéder à tous les paiements
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Non autorisé à accéder à tous les paiements' });
+    }
+    
+    // Récupération des paramètres de filtrage
+    const { doctorId, patientId, startDate, endDate, status, page = 1, limit = 20, sort = 'createdAt', order = 'desc' } = req.query;
+    
+    // Construction de la requête
+    const query = {};
+    
+    // Filtrer par docteur si spécifié
+    if (doctorId) {
+      // Trouver d'abord les rendez-vous du médecin
+      const doctorAppointments = await Appointment.find({ doctor: doctorId }).select('_id');
+      const appointmentIds = doctorAppointments.map(appointment => appointment._id);
+      query.appointment = { $in: appointmentIds };
+    }
+    
+    // Filtrer par patient si spécifié
+    if (patientId) {
+      query.patient = patientId;
+    }
+    
+    // Filtrer par statut si spécifié
+    if (status) {
+      query.status = status;
+    }
+    
+    // Filtrer par date
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Ajouter un jour à la date de fin pour inclure tous les paiements de cette journée
+        const endDateObj = new Date(endDate);
+        endDateObj.setDate(endDateObj.getDate() + 1);
+        query.createdAt.$lt = endDateObj;
+      }
+    }
+    
+    // Calculer le nombre total de documents pour la pagination
+    const total = await Payment.countDocuments(query);
+    
+    // Trier et paginer les résultats
+    const sortOptions = {};
+    sortOptions[sort] = order === 'asc' ? 1 : -1;
+    
+    // Récupérer les paiements avec les relations
+    const payments = await Payment.find(query)
+      .populate({
+        path: 'appointment',
+        populate: [
+          {
+            path: 'doctor',
+            select: 'first_name last_name full_name'
+          },
+          {
+            path: 'patient',
+            select: 'first_name last_name'
+          },
+          {
+            path: 'availability',
+            select: 'date startTime endTime'
+          }
+        ]
+      })
+      .populate('patient', 'first_name last_name')
+      .sort(sortOptions)
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+    
+    // Enrichir les données pour l'interface admin avec des informations calculées
+    const enrichedPayments = payments.map(payment => {
+      const paymentObj = payment.toObject();
+      
+      // Calculer la commission (15% du montant)
+      paymentObj.commission = parseFloat((payment.amount * 0.15).toFixed(2));
+      
+      // Calculer le montant net (85% du montant)
+      paymentObj.net = parseFloat((payment.amount * 0.85).toFixed(2));
+      
+      // Informations du patient sous une forme plus accessible
+      if (payment.patient) {
+        paymentObj.patientName = `${payment.patient.first_name || ''} ${payment.patient.last_name || ''}`.trim();
+      }
+      
+      // Informations du médecin sous une forme plus accessible
+      if (payment.appointment && payment.appointment.doctor) {
+        paymentObj.doctorName = payment.appointment.doctor.full_name || 
+          `${payment.appointment.doctor.first_name || ''} ${payment.appointment.doctor.last_name || ''}`.trim();
+      }
+      
+      // Type de consultation basé sur les détails du rendez-vous
+      if (payment.appointment) {
+        paymentObj.type = payment.appointment.caseDetails || 'Consultation standard';
+      }
+      
+      return paymentObj;
+    });
+    
+    res.status(200).json({
+      payments: enrichedPayments,
+      pagination: {
+        total,
+        page: Number(page),
+        pages: Math.ceil(total / limit),
+        limit: Number(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des paiements:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des paiements' });
+  }
 }; 

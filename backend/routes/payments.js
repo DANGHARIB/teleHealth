@@ -6,7 +6,8 @@ const {
   getDoctorPayments,
   getPaymentById,
   refundPayment,
-  createAppointmentWithPayment
+  createAppointmentWithPayment,
+  getAllPayments
 } = require('../controllers/paymentController');
 const { protect, admin, patient, doctor } = require('../middlewares/authMiddleware');
 
@@ -18,10 +19,11 @@ router.get('/patient', protect, patient, getPatientPayments);
 // Routes protégées pour les médecins
 router.get('/doctor', protect, doctor, getDoctorPayments);
 
+// Routes protégées pour les administrateurs
+router.get('/', protect, admin, getAllPayments);
+
 // Routes protégées communes
 router.get('/:id', protect, getPaymentById);
-
-// Routes protégées pour les administrateurs
 router.post('/:id/refund', protect, admin, refundPayment);
 
 module.exports = router; 

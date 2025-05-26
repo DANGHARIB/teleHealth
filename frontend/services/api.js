@@ -4,16 +4,16 @@ import Constants from 'expo-constants';
 import { DOCTOR_TOKEN_KEY, PATIENT_TOKEN_KEY, USER_TYPE_KEY } from '../constants/StorageKeys';
 
 // URL de base de l'API depuis les variables d'environnement
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
+const TIMEOUT = 20000;
 
 // Créer une instance axios
 const api = axios.create({
   baseURL: API_URL,
+  timeout: TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
   },
-  timeout: 30000, // 30 secondes
 });
 
 // Intercepteur pour ajouter le token d'authentification
@@ -199,7 +199,8 @@ export const doctorAPI = {
       const response = await api.get('/payments/doctor');
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Erreur lors de la récupération des paiements du médecin:', error);
+      throw error.response?.data || error;
     }
   },
   
@@ -469,7 +470,8 @@ export const patientAPI = {
       const response = await api.get('/payments/patient');
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Erreur lors de la récupération des paiements du patient:', error);
+      throw error.response?.data || error;
     }
   },
   
@@ -479,7 +481,8 @@ export const patientAPI = {
       const response = await api.get(`/payments/${paymentId}`);
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error(`Erreur lors de la récupération du paiement ${paymentId}:`, error);
+      throw error.response?.data || error;
     }
   },
 
