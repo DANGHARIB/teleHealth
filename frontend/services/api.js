@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { DOCTOR_TOKEN_KEY, PATIENT_TOKEN_KEY, USER_TYPE_KEY } from '../constants/StorageKeys';
 
 // URL de base de l'API depuis les variables d'environnement
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.106:5000/api';
@@ -10,19 +11,59 @@ const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
+  timeout: 30000, // 30 secondes
 });
 
 // Intercepteur pour ajouter le token d'authentification
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('userToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      // Détermine le type d'utilisateur pour choisir la bonne clé de token
+      const userType = await AsyncStorage.getItem(USER_TYPE_KEY);
+      const tokenKey = userType === 'doctor' ? DOCTOR_TOKEN_KEY : PATIENT_TOKEN_KEY;
+      
+      // Récupère le token depuis AsyncStorage
+      const token = await AsyncStorage.getItem(tokenKey);
+      
+      // Si un token est trouvé, l'ajouter aux en-têtes
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      
+      return config;
+    } catch (error) {
+      console.error('Erreur dans l\'intercepteur de requête:', error);
+      return config;
     }
-    return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Intercepteur pour gérer les erreurs de réponse
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response) {
+      // Gestion des erreurs 401 (non authentifié) ou 403 (non autorisé)
+      if (error.response.status === 401 || error.response.status === 403) {
+        console.log('Session expirée ou non autorisée');
+        
+        // On pourrait rediriger vers la page de login ici
+        // ou déclencher un événement pour notifier l'app
+      }
+      
+      // Retourner un message d'erreur plus descriptif si disponible
+      if (error.response.data && error.response.data.message) {
+        error.message = error.response.data.message;
+      }
+    }
+    
+    return Promise.reject(error);
+  }
 );
 
 // Fonctions d'API

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker'; // Import for file picking
 import api from '../../../services/api'; // Path should be correct after move
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DoctorDetailsScreen = () => {
   const router = useRouter();
@@ -101,17 +102,71 @@ const DoctorDetailsScreen = () => {
       });
     });
 
+    console.log('⏳ Envoi des données du profil médecin...');
+    
     try {
-      await api.put('/doctors/profile', dataToSubmit, {
+      const response = await api.put('/doctors/profile', dataToSubmit, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-      // After successful profile update, doctor should login again or be redirected to dashboard if session is now active.
-      // Forcing login to ensure all backend states (like approval status) are re-checked.
-      router.replace('/doctor/auth/login');
+      
+      console.log('✅ Profil médecin mis à jour avec succès:', response.data);
+      
+      // Stocker l'information que le profil a été complété
+      try {
+        await AsyncStorage.setItem('doctorProfileCompleted', 'true');
+      } catch (storageError) {
+        console.warn('Erreur lors du stockage des données locales:', storageError);
+      }
+      
+      // Rediriger vers la page d'attente de vérification
+      router.replace('/doctor/auth/under-review');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update doctor profile. Please try again.');
+      console.error('❌ Erreur lors de la mise à jour du profil médecin:', err);
+      
+      // Journaliser les détails de l'erreur pour un meilleur diagnostic
+      if (err.response) {
+        // La requête a été faite et le serveur a répondu avec un code de statut
+        console.error('Détails de la réponse:', {
+          status: err.response.status,
+          data: err.response.data,
+          headers: err.response.headers
+        });
+        
+        // Messages d'erreur spécifiques basés sur le code HTTP
+        if (err.response.status === 401) {
+          setError('Session expirée. Veuillez vous reconnecter.');
+          // Rediriger vers la page de connexion après un délai
+          setTimeout(() => router.replace('/doctor/auth/login'), 2000);
+          return;
+        } else if (err.response.status === 413) {
+          setError('Les fichiers téléchargés sont trop volumineux. Veuillez réduire leur taille.');
+        } else {
+          setError(err.response.data?.message || 'Erreur lors de la mise à jour du profil. Veuillez réessayer.');
+        }
+      } else if (err.request) {
+        // La requête a été faite mais aucune réponse n'a été reçue
+        console.error('Aucune réponse reçue:', err.request);
+        setError('Problème de connexion au serveur. Veuillez vérifier votre connexion internet.');
+      } else {
+        // Une erreur s'est produite lors de la configuration de la requête
+        console.error('Erreur de configuration:', err.message);
+        setError('Une erreur inattendue s\'est produite. Veuillez réessayer.');
+      }
+      
+      // Malgré l'erreur, si nous recevons un code 2xx ou si la requête semble avoir réussi partiellement
+      // nous pouvons essayer de continuer vers la page suivante
+      if (err.response && err.response.status >= 200 && err.response.status < 300) {
+        console.log('⚠️ Erreur partielle, tentative de continuation...');
+        setTimeout(() => {
+          try {
+            router.replace('/doctor/auth/under-review');
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+          }
+        }, 1000);
+      }
     } finally {
       setIsLoading(false);
     }

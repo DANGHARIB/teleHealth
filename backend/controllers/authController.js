@@ -3,7 +3,7 @@ const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
-const { sendOtpEmail } = require('../services/emailService');
+const { sendOtpEmail, sendDoctorRegistrationNotification } = require('../services/emailService');
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -55,12 +55,25 @@ exports.register = async (req, res) => {
       });
     } else if (role === 'Doctor') {
       logger.info(`Création du profil médecin pour l'utilisateur ${email}`);
+      let doctorProfile;
       try {
-        await Doctor.create({
+        doctorProfile = await Doctor.create({
           user: user._id,
           full_name: fullName,
           specialization: req.body.specializationId || null
         });
+        
+        // Envoyer un email au médecin pour lui indiquer que son compte est en cours de vérification
+        try {
+          await sendDoctorRegistrationNotification({
+            full_name: fullName,
+            user: { email }
+          });
+          logger.info(`Email de notification envoyé au médecin ${email}`);
+        } catch (emailError) {
+          logger.error(`Erreur lors de l'envoi de l'email de notification au médecin: ${emailError.message}`);
+          // On continue même si l'envoi d'email échoue
+        }
       } catch (error) {
         logger.error(`Erreur lors de la création du profil médecin: ${error.message}`);
         // Supprimer l'utilisateur si la création du profil médecin échoue
@@ -154,6 +167,27 @@ exports.login = async (req, res) => {
         profileData = await Patient.findOne({ user: user._id });
       } else if (user.role === 'Doctor') {
         profileData = await Doctor.findOne({ user: user._id }).populate('specialization');
+        
+        // Bloquer l'accès si le médecin n'est pas vérifié (sauf pour l'application d'administration)
+        if (!req.body.isAdminApp && !profileData.verified && profileData.verificationStatus !== 'verified') {
+          logger.warn(`Tentative de connexion refusée: médecin ${email} non vérifié`);
+          return res.status(403).json({ 
+            message: 'Votre compte est en cours de vérification par notre équipe. Vous recevrez une notification dès que votre profil sera validé.',
+            verificationStatus: profileData.verificationStatus,
+            notVerified: true
+          });
+        }
+        
+        // Si le statut est 'rejected', fournir la raison du rejet
+        if (profileData.verificationStatus === 'rejected') {
+          logger.warn(`Tentative de connexion refusée: médecin ${email} rejeté`);
+          return res.status(403).json({
+            message: 'Votre demande a été rejetée.',
+            rejectionReason: profileData.rejectionReason,
+            verificationStatus: 'rejected',
+            rejected: true
+          });
+        }
       }
 
       logger.info(`Connexion réussie pour l'utilisateur ${email}`);

@@ -125,8 +125,116 @@ const sendAppointmentZoomLink = async (appointment, doctorEmail, patientEmail, z
   return results;
 };
 
+/**
+ * Sends a verification approval email to a doctor
+ * @param {Object} doctor - Doctor object with email, name
+ * @returns {Promise} - Email sending result
+ */
+const sendVerificationEmail = async (doctor) => {
+  const email = doctor.email || doctor.user?.email;
+  const name = doctor.full_name || `${doctor.first_name} ${doctor.last_name}`;
+  
+  const subject = 'Votre compte médecin a été approuvé';
+  const text = `Félicitations ${name}, votre compte médecin sur TeleHealth a été vérifié et approuvé. Vous pouvez maintenant vous connecter et commencer à utiliser la plateforme.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #4285f4; color: white; padding: 20px; text-align: center;">
+        <h1>TeleHealth</h1>
+      </div>
+      <div style="padding: 20px; background: white; border: 1px solid #ddd;">
+        <h2>Compte Vérifié</h2>
+        <p>Félicitations ${name},</p>
+        <p>Votre compte médecin sur TeleHealth a été vérifié et approuvé.</p>
+        <p>Vous pouvez maintenant vous connecter et commencer à utiliser la plateforme.</p>
+        <div style="margin: 20px 0;">
+          <a href="${process.env.FRONTEND_URL || 'https://tabeebou.com'}/doctor/auth/login" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Se connecter
+          </a>
+        </div>
+        <p>Merci de faire partie de notre réseau de médecins!</p>
+      </div>
+      <div style="background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+        Email envoyé depuis TeleHealth
+      </div>
+    </div>
+  `;
+  
+  return await sendEmail(email, subject, text, html);
+};
+
+/**
+ * Sends a rejection email to a doctor
+ * @param {Object} doctor - Doctor object with email, name
+ * @param {string} reason - Reason for rejection
+ * @returns {Promise} - Email sending result
+ */
+const sendRejectionEmail = async (doctor, reason) => {
+  const email = doctor.email || doctor.user?.email;
+  const name = doctor.full_name || `${doctor.first_name} ${doctor.last_name}`;
+  
+  const subject = 'Information concernant votre demande de compte médecin';
+  const text = `Cher ${name}, nous avons examiné votre demande de compte médecin sur TeleHealth et nous sommes désolés de vous informer que votre demande n'a pas été approuvée. Raison: ${reason || 'Les informations fournies ne correspondent pas à nos critères de vérification.'}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #4285f4; color: white; padding: 20px; text-align: center;">
+        <h1>TeleHealth</h1>
+      </div>
+      <div style="padding: 20px; background: white; border: 1px solid #ddd;">
+        <h2>Information sur votre demande</h2>
+        <p>Cher ${name},</p>
+        <p>Nous avons examiné votre demande de compte médecin sur TeleHealth.</p>
+        <p>Nous sommes désolés de vous informer que votre demande n'a pas été approuvée.</p>
+        <p><strong>Raison:</strong> ${reason || 'Les informations fournies ne correspondent pas à nos critères de vérification.'}</p>
+        <p>Si vous pensez qu'il s'agit d'une erreur ou si vous souhaitez soumettre une nouvelle demande avec des informations mises à jour, vous pouvez vous inscrire à nouveau via notre application mobile.</p>
+      </div>
+      <div style="background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+        Email envoyé depuis TeleHealth
+      </div>
+    </div>
+  `;
+  
+  return await sendEmail(email, subject, text, html);
+};
+
+/**
+ * Sends a notification email to a doctor after registration
+ * @param {Object} doctor - Doctor object with email, name
+ * @returns {Promise} - Email sending result
+ */
+const sendDoctorRegistrationNotification = async (doctor) => {
+  const email = doctor.email || doctor.user?.email;
+  const name = doctor.full_name || `${doctor.first_name} ${doctor.last_name}`;
+  
+  const subject = 'Votre compte médecin est en cours de vérification';
+  const text = `Bonjour ${name}, votre compte médecin sur TeleHealth a été créé avec succès. Votre compte est actuellement en cours de vérification par notre équipe. Vous recevrez une notification dès que votre profil sera validé.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #4285f4; color: white; padding: 20px; text-align: center;">
+        <h1>TeleHealth</h1>
+      </div>
+      <div style="padding: 20px; background: white; border: 1px solid #ddd;">
+        <h2>Compte en cours de vérification</h2>
+        <p>Bonjour ${name},</p>
+        <p>Votre compte médecin sur TeleHealth a été créé avec succès.</p>
+        <p>Votre compte est actuellement <strong>en cours de vérification</strong> par notre équipe.</p>
+        <p>Ce processus peut prendre jusqu'à 48 heures ouvrables.</p>
+        <p>Vous recevrez une notification dès que votre profil sera validé.</p>
+        <p>Merci de votre patience!</p>
+      </div>
+      <div style="background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+        Email envoyé depuis TeleHealth
+      </div>
+    </div>
+  `;
+  
+  return await sendEmail(email, subject, text, html);
+};
+
 module.exports = {
   sendEmail,
   sendOtpEmail,
-  sendAppointmentZoomLink
+  sendAppointmentZoomLink,
+  sendVerificationEmail,
+  sendRejectionEmail,
+  sendDoctorRegistrationNotification
 }; 

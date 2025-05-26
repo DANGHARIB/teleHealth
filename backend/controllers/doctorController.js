@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Specialization = require('../models/Specialization');
 const logger = require('../config/logger');
 const Patient = require('../models/Patient');
+const emailService = require('../services/emailService');
 
 // @desc    Obtenir tous les médecins
 // @route   GET /api/doctors
@@ -239,25 +240,156 @@ exports.updateDoctorProfile = async (req, res) => {
 };
 
 // @desc    Vérifier un médecin
-// @route   PUT /api/doctors/:id/verify
+// @route   PATCH /api/doctors/:id/verify
 // @access  Private/Admin
 exports.verifyDoctor = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findById(req.params.id).populate('user');
     
     if (!doctor) {
       return res.status(404).json({ message: 'Médecin non trouvé' });
     }
     
+    // Mettre à jour les deux champs pour garantir la cohérence
     doctor.verified = true;
+    doctor.verificationStatus = 'verified';
     const updatedDoctor = await doctor.save();
     
     // Mettre à jour le statut du profil utilisateur
-    await User.findByIdAndUpdate(doctor.user, { profileStatus: 'approved' });
+    if (doctor.user && doctor.user._id) {
+      await User.findByIdAndUpdate(doctor.user._id, { profileStatus: 'approved' });
+    }
     
-    res.json(updatedDoctor);
+    // Envoyer un email de notification au médecin
+    try {
+      await emailService.sendVerificationEmail(doctor);
+      logger.info(`Email de vérification envoyé au médecin ${doctor.full_name}`);
+    } catch (emailError) {
+      logger.error(`Erreur lors de l'envoi de l'email de vérification: ${emailError.message}`, { stack: emailError.stack });
+      // Continue despite email sending failure
+    }
+    
+    return res.status(200).json({ 
+      message: "Médecin vérifié avec succès", 
+      doctor: {
+        _id: updatedDoctor._id,
+        full_name: updatedDoctor.full_name,
+        verificationStatus: updatedDoctor.verificationStatus
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error(`Erreur lors de la vérification du médecin: ${error.message}`, { stack: error.stack });
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Rejeter un médecin
+// @route   PATCH /api/doctors/:id/reject
+// @access  Private/Admin
+exports.rejectDoctor = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    
+    if (!reason) {
+      return res.status(400).json({ message: "Veuillez fournir une raison pour le rejet" });
+    }
+    
+    const doctor = await Doctor.findById(req.params.id).populate('user');
+    if (!doctor) {
+      return res.status(404).json({ message: "Médecin non trouvé" });
+    }
+    
+    // Mettre à jour les deux champs pour garantir la cohérence
+    doctor.verified = false;
+    doctor.verificationStatus = 'rejected';
+    doctor.rejectionReason = reason;
+    await doctor.save();
+    
+    // Mettre à jour le statut du profil utilisateur
+    if (doctor.user && doctor.user._id) {
+      await User.findByIdAndUpdate(doctor.user._id, { profileStatus: 'rejected' });
+    }
+    
+    // Envoyer un email de notification au médecin
+    try {
+      await emailService.sendRejectionEmail(doctor, reason);
+      logger.info(`Email de rejet envoyé au médecin ${doctor.full_name}`);
+    } catch (emailError) {
+      logger.error(`Erreur lors de l'envoi de l'email de rejet: ${emailError.message}`, { stack: emailError.stack });
+      // Continue despite email sending failure
+    }
+    
+    return res.status(200).json({ 
+      message: "Médecin rejeté avec succès", 
+      doctor: {
+        _id: doctor._id,
+        full_name: doctor.full_name,
+        verificationStatus: doctor.verificationStatus,
+        rejectionReason: doctor.rejectionReason
+      } 
+    });
+  } catch (error) {
+    logger.error(`Erreur lors du rejet du médecin: ${error.message}`, { stack: error.stack });
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Obtenir le statut de vérification d'un médecin
+// @route   GET /api/doctors/verification-status ou GET /api/doctors/:id/verification-status
+// @route   GET /api/doctors/public/verification/:userId (route publique)
+// @access  Private (Doctor ou Admin) ou Public pour la route publique
+exports.getVerificationStatus = async (req, res) => {
+  try {
+    let doctorId;
+    
+    // 1. Cas de la route publique avec userId
+    if (req.path.startsWith('/public/verification/') && req.params.userId) {
+      // Rechercher le docteur par son userId
+      const user = await User.findById(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ message: "Utilisateur non trouvé" });
+      }
+      
+      const doctor = await Doctor.findOne({ user: user._id });
+      if (!doctor) {
+        return res.status(404).json({ message: "Profil de médecin non trouvé" });
+      }
+      
+      doctorId = doctor._id;
+    }
+    // 2. Cas de la route avec id du médecin dans l'URL
+    else if (req.params.id) {
+      doctorId = req.params.id;
+    } 
+    // 3. Cas du médecin connecté qui vérifie son propre statut
+    else if (req.doctor && req.doctor._id) {
+      doctorId = req.doctor._id;
+    } 
+    // 4. Cas où on doit rechercher le docteur par l'ID utilisateur dans le token
+    else if (req.user) {
+      const doctor = await Doctor.findOne({ user: req.user.id });
+      if (!doctor) {
+        return res.status(404).json({ message: "Profil de médecin non trouvé pour cet utilisateur" });
+      }
+      doctorId = doctor._id;
+    } 
+    // 5. Cas où aucune information n'est disponible
+    else {
+      return res.status(400).json({ message: "Information insuffisante pour identifier le médecin" });
+    }
+    
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: "Médecin non trouvé" });
+    }
+    
+    return res.status(200).json({
+      status: doctor.verificationStatus || (doctor.verified ? 'verified' : 'pending'),
+      rejectionReason: doctor.rejectionReason || null
+    });
+  } catch (error) {
+    logger.error(`Erreur lors de la récupération du statut de vérification: ${error.message}`, { stack: error.stack });
+    return res.status(500).json({ message: error.message });
   }
 };
 

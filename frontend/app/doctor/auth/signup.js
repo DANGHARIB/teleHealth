@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../../services/api'; // Utilisation de l'instance api globale
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_TYPE_KEY, DOCTOR_TOKEN_KEY, DOCTOR_DATA_KEY } from '../../../constants/StorageKeys';
 
 const DoctorSignupScreen = () => {
   const router = useRouter();
@@ -25,7 +26,7 @@ const DoctorSignupScreen = () => {
     }));
   };
 
-  const handleSignup = async () => {
+  const handleSubmit = async () => {
     if (!formData.fullName || !formData.email || !formData.password || !formData.confirmPassword) {
       setError('Please fill all fields');
       return;
@@ -40,22 +41,21 @@ const DoctorSignupScreen = () => {
     setIsLoading(true);
     
     try {
-      const response = await api.post('/auth/register', { // Utilisation de api
+      const response = await api.post('/auth/register', {
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
         role: 'Doctor'
       });
       
-      if (response.data && response.data.token) {
-        await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
-        router.push('/doctor/auth/under-review'); // Correction du chemin de redirection
-      } else {
-        setError(response.data?.message || 'Registration failed, token not received.');
-      }
-    } catch (error) {
-      setError(error.response?.data?.message || 'Registration failed. Please try again.');
+      await AsyncStorage.setItem(DOCTOR_TOKEN_KEY, response.data.token);
+      await AsyncStorage.setItem(DOCTOR_DATA_KEY, JSON.stringify(response.data));
+      await AsyncStorage.setItem('tempUserId', response.data._id);
+      await AsyncStorage.setItem(USER_TYPE_KEY, 'doctor');
+      router.push('/doctor/auth/details');
+    } catch (err) {
+      console.error('Signup error:', err);
+      setError(err.response?.data?.message || "Une erreur est survenue lors de l'inscription.");
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +129,7 @@ const DoctorSignupScreen = () => {
 
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={handleSignup}
+              onPress={handleSubmit}
               disabled={isLoading}
             >
               {isLoading ? (

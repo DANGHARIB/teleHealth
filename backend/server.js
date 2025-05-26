@@ -26,7 +26,7 @@ const corsOptions = {
     // Ajoutez ici d'autres origines autorisées si nécessaire
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 

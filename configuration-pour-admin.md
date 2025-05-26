@@ -29,11 +29,52 @@ VITE_APP_ENV=production
 
 ## Configuration CORS
 
-Le serveur backend est déjà configuré pour accepter les requêtes depuis les origines suivantes :
+Le serveur backend est configuré pour accepter les requêtes depuis les origines suivantes:
 - `http://localhost:5173` (développement de l'application web admin avec Vite)
 - `https://admin.votre-domaine.com` (production)
 
 Si vous utilisez un autre port ou domaine, modifiez le fichier `backend/server.js` pour ajouter cette origine à la liste des origines autorisées dans la configuration CORS.
+
+### Configuration CORS mise à jour
+
+La configuration CORS a été mise à jour pour inclure explicitement la méthode PATCH qui est nécessaire pour les opérations de vérification des médecins:
+
+```javascript
+// Extrait de server.js
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // URL de développement de l'application web admin (Vite)
+    'https://admin.votre-domaine.com', // URL de production
+    // Ajoutez ici d'autres origines autorisées si nécessaire
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+```
+
+## Authentification spécifique pour l'application admin
+
+Pour l'application web d'administrateur, il est nécessaire de spécifier un paramètre supplémentaire lors de la connexion pour accéder aux fonctionnalités réservées aux administrateurs:
+
+```javascript
+// Dans votre service d'authentification pour l'application admin
+async loginAdmin(email, password) {
+  try {
+    const response = await api.post('/auth/login', { 
+      email, 
+      password, 
+      role: 'Admin',
+      isAdminApp: true // Ce paramètre permet d'identifier les connexions depuis l'application admin
+    });
+    
+    // Traitement de la réponse...
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Erreur lors de la connexion' };
+  }
+}
+```
 
 ## Points d'API disponibles
 
@@ -672,10 +713,27 @@ const login = async (email, password) => {
 };
 ```
 
-## Déploiement
+## Vérification des Médecins
 
-Pour le déploiement en production :
+La plateforme permet aux administrateurs de vérifier ou rejeter les demandes d'inscription des médecins.
 
-1. Configurez les variables d'environnement appropriées
-2. Assurez-vous que l'URL de l'API pointe vers votre serveur de production
-3. Vérifiez que le domaine de votre application web d'administrateur est bien inclus dans la liste des origines CORS autorisées sur le serveur backend 
+### Endpoints API pour la vérification des médecins
+
+- **Vérifier un médecin** : `PATCH /api/doctors/:id/verify`
+  - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
+  - Action : Change le statut de vérification à "verified", active le compte et envoie un email de confirmation
+  - Réponse : 
+    ```json
+    {
+      "message": "Médecin vérifié avec succès",
+      "doctor": {
+        "_id": "string",
+        "full_name": "string",
+        "verificationStatus": "verified"
+      }
+    }
+    ```
+
+- **Rejeter un médecin** : `PATCH /api/doctors/:id/reject`
+  - Headers : `{ Authorization: "Bearer YOUR_TOKEN" }`
+  - Corps : `{ reason: "string" }`
