@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,21 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker'; // Import for file picking
 import api from '../../../services/api'; // Path should be correct after move
 
-const SPECIALIZATIONS = [
-  "Depression/Anxiety",
-  "Child Development",
-  "Emotional Support",
-  "PTSD/Trauma",
-  "Disability Support"
-];
-
 const DoctorDetailsScreen = () => {
   const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: '',
-    // Changed from first_name, last_name to fullName to match Doctor model and signup
-    // Backend controller for PUT /doctors/profile might need to handle splitting fullName if Doctor model stores first/last separately
-    // Or, ensure Doctor model and PUT /doctors/profile consistently use fullName
     dateOfBirth: { day: '', month: '', year: '' },
     specialization: '', 
     selectedFiles: [], 
@@ -31,6 +20,28 @@ const DoctorDetailsScreen = () => {
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false);
+  
+  // État pour stocker les spécialisations récupérées de l'API
+  const [specializations, setSpecializations] = useState([]);
+  const [loadingSpecializations, setLoadingSpecializations] = useState(true);
+
+  // Récupérer les spécialisations au chargement du composant
+  useEffect(() => {
+    const fetchSpecializations = async () => {
+      try {
+        setLoadingSpecializations(true);
+        const response = await api.get('/specializations');
+        setSpecializations(response.data);
+        setLoadingSpecializations(false);
+      } catch (err) {
+        console.error('Failed to fetch specializations:', err);
+        setError('Failed to load specializations. Please try again.');
+        setLoadingSpecializations(false);
+      }
+    };
+
+    fetchSpecializations();
+  }, []);
 
   const updateFormField = (field, value) => {
     setFormData(prev => ({
@@ -62,8 +73,6 @@ const DoctorDetailsScreen = () => {
   };
 
   const handleSubmit = async () => {
-    // Ensure first_name and last_name are derived from fullName if needed by the API
-    // For now, assuming API takes fullName directly based on Doctor model recent changes
     let first_name = formData.fullName.split(' ')[0] || '';
     let last_name = formData.fullName.split(' ').slice(1).join(' ') || '';
     
@@ -78,11 +87,11 @@ const DoctorDetailsScreen = () => {
     setError('');
 
     const dataToSubmit = new FormData();
-    dataToSubmit.append('full_name', formData.fullName); // Changed from fullName to full_name to match model if needed
-    dataToSubmit.append('first_name', first_name); // Sending first_name
-    dataToSubmit.append('last_name', last_name);   // Sending last_name
+    dataToSubmit.append('full_name', formData.fullName);
+    dataToSubmit.append('first_name', first_name);
+    dataToSubmit.append('last_name', last_name);
     dataToSubmit.append('date_of_birth', dob);
-    dataToSubmit.append('specialization', formData.specialization);
+    dataToSubmit.append('specialization', formData.specialization); // Ici on envoie l'ID de spécialisation, pas la chaîne
     
     formData.selectedFiles.forEach((file) => {
       dataToSubmit.append('certificationFiles', {
@@ -100,7 +109,7 @@ const DoctorDetailsScreen = () => {
       });
       // After successful profile update, doctor should login again or be redirected to dashboard if session is now active.
       // Forcing login to ensure all backend states (like approval status) are re-checked.
-      router.replace('/doctor/auth/login'); // Correction du chemin sans parenthèses
+      router.replace('/doctor/auth/login');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update doctor profile. Please try again.');
     } finally {
@@ -118,6 +127,12 @@ const DoctorDetailsScreen = () => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 100 }, (_, i) => String(currentYear - i));
 
+  // Fonction pour obtenir le nom de la spécialisation à partir de son ID
+  const getSpecializationName = (specializationId) => {
+    const specialization = specializations.find(spec => spec._id === specializationId);
+    return specialization ? specialization.name : 'Select Specialization';
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -128,7 +143,7 @@ const DoctorDetailsScreen = () => {
           <TextInput
             style={styles.input}
             placeholder="Dr. Lorem Ipsum"
-            value={formData.fullName} // Using fullName from state
+            value={formData.fullName}
             onChangeText={(text) => updateFormField('fullName', text)}
           />
         </View>
@@ -189,24 +204,35 @@ const DoctorDetailsScreen = () => {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Specialization</Text>
           <TouchableOpacity style={styles.dropdownButton} onPress={() => setShowSpecializationDropdown(!showSpecializationDropdown)}>
-            <Text style={styles.dropdownButtonText}>{formData.specialization || 'Select Specialization'}</Text>
+            <Text style={styles.dropdownButtonText}>
+              {loadingSpecializations 
+                ? 'Loading specializations...' 
+                : formData.specialization 
+                  ? getSpecializationName(formData.specialization) 
+                  : 'Select Specialization'}
+            </Text>
             <Ionicons name="chevron-down" size={18} color="#0A1E42" />
           </TouchableOpacity>
-          {showSpecializationDropdown && (
-            <View style={styles.dropdownMenuFullWidth}><ScrollView nestedScrollEnabled={true} style={{maxHeight: 150}}>
-              {SPECIALIZATIONS.map((spec, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    updateFormField('specialization', spec);
-                    setShowSpecializationDropdown(false);
-                  }}
-                >
-                  <Text style={styles.dropdownItemText}>{spec}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView></View>
+          {showSpecializationDropdown && !loadingSpecializations && (
+            <View style={styles.dropdownMenuFullWidth}>
+              <ScrollView nestedScrollEnabled={true} style={{maxHeight: 150}}>
+                {specializations.map((spec) => (
+                  <TouchableOpacity
+                    key={spec._id}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      updateFormField('specialization', spec._id);
+                      setShowSpecializationDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{spec.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          {loadingSpecializations && (
+            <ActivityIndicator size="small" color="#7BAFD4" style={{marginTop: 10}} />
           )}
         </View>
 

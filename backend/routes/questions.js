@@ -8,16 +8,16 @@ const {
   deleteQuestion,
   submitResponses,
   getUserResponses,
-  getRandomQuestions
+  getAssessmentQuestions
 } = require('../controllers/questionController');
 const { protect, admin, patient } = require('../middlewares/authMiddleware');
 
 // Public routes
 router.get('/', getQuestions);
 
-// Route to get random questions for patients (first-time login)
-// IMPORTANT: This specific route needs to be placed BEFORE the /:id route
-router.get('/random/assessment', protect, patient, getRandomQuestions);
+// Route pour obtenir les questions d'évaluation pour les patients
+// IMPORTANT: Cette route spécifique doit être placée AVANT la route /:id
+router.get('/assessment', protect, patient, getAssessmentQuestions);
 
 // Other public routes
 router.get('/:id', getQuestionById);

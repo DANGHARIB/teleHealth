@@ -73,7 +73,7 @@ export const doctorAPI = {
   // Rechercher des médecins par nom
   searchDoctors: async (query) => {
     try {
-      const response = await api.get(`/doctors?search=${query}`);
+      const response = await api.get(`/doctors/search?search=${encodeURIComponent(query)}`);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -502,7 +502,9 @@ export const patientAPI = {
       const response = await api.get('/patients/recommended-doctors');
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Error getting recommended doctors:', error);
+      // Retourner un tableau vide en cas d'erreur plutôt que de rejeter la promesse
+      return [];
     }
   },
 

@@ -151,18 +151,7 @@ export default function PatientDetailScreen() {
     <>
       <Stack.Screen 
         options={{
-          headerTitle: 'Patient Details',
-          headerShown: true,
-          headerBackTitle: 'Back',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 24,
-            color: COLORS.navyBlue
-          },
-          headerTintColor: COLORS.babyBlue,
+          headerShown: false
         }} 
       />
       

@@ -11,13 +11,15 @@ const {
   deleteDoctor,
   getDoctorAppointments,
   getSavedPatients,
-  searchSavedPatients
+  searchSavedPatients,
+  searchDoctors
 } = require('../controllers/doctorController');
 const { protect, admin, doctor } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
 
 // Routes publiques
 router.get('/', getDoctors);
+router.get('/search', searchDoctors);
 
 // Routes protégées pour les médecins
 router.route('/profile')

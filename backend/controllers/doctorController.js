@@ -115,7 +115,6 @@ exports.updateDoctorProfile = async (req, res) => {
     const {
       first_name,
       last_name,
-      // full_name, // full_name sera construit à partir de first_name et last_name
       date_of_birth, 
       specialization, 
       bio, 
@@ -170,7 +169,20 @@ exports.updateDoctorProfile = async (req, res) => {
     doctor.full_name = user.fullName; 
 
     if (date_of_birth) doctor.dob = date_of_birth; // Map date_of_birth to the dob field in model
-    if (specialization) doctor.specialization = specialization; 
+    
+    // Vérifier si la spécialisation est un ID valide avant de l'assigner
+    if (specialization) {
+      try {
+        const specExists = await Specialization.findById(specialization);
+        if (specExists) {
+          doctor.specialization = specialization;
+        } else {
+          logger.warn(`Spécialisation non trouvée pour l'ID: ${specialization}`);
+        }
+      } catch (error) {
+        logger.warn(`Erreur lors de la validation de la spécialisation: ${error.message}`);
+      }
+    }
     
     // Map bio to about field in model
     if (bio) doctor.about = bio;
@@ -210,6 +222,9 @@ exports.updateDoctorProfile = async (req, res) => {
     // Populate user details pour la réponse complète, similaire à la réponse de login/register
     // Pour que le client (AsyncStorage) ait toutes les infos à jour
     const updatedUser = await User.findById(req.user.id).select('-password'); // Re-fetch user for latest state
+    
+    // Populate the specialization reference
+    await updatedDoctorProfile.populate('specialization');
 
     logger.info(`Profil docteur mis à jour pour: ${user.email}`);
     res.json({
@@ -368,5 +383,33 @@ exports.searchSavedPatients = async (req, res) => {
   } catch (error) {
     logger.error(`Erreur lors de la recherche des patients: ${error.message}`, { stack: error.stack });
     res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
+// Rechercher des médecins par nom
+exports.searchDoctors = async (req, res) => {
+  try {
+    const { search } = req.query;
+    
+    if (!search) {
+      return res.status(400).json({ message: 'Terme de recherche requis' });
+    }
+    
+    let query = {
+      $or: [
+        { full_name: { $regex: search, $options: 'i' } },
+        { first_name: { $regex: search, $options: 'i' } },
+        { last_name: { $regex: search, $options: 'i' } }
+      ]
+    };
+    
+    const doctors = await Doctor.find(query)
+      .populate('user', 'fullName email')
+      .populate('specialization', 'name')
+      .sort({ createdAt: -1 });
+    
+    res.json(doctors);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 }; 

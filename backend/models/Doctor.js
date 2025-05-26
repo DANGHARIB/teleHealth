@@ -17,9 +17,8 @@ const doctorSchema = new mongoose.Schema({
     type: String,
   },
   specialization: {
-    type: String, // Changé en String pour simplifier pour l'instant
-    // ref: 'Specialization', // Commenté car type String maintenant
-    // required: true
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Specialization',
   },
   doctor_image: {
     type: String

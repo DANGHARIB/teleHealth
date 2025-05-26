@@ -54,7 +54,7 @@ type Doctor = {
   last_name?: string;
   doctor_image?: string;
   experience: number;
-  specialization?: string;
+  specialization?: string | { _id: string, name: string };
   rating?: number;
   price?: number;
 };
@@ -171,7 +171,9 @@ export default function SearchScreen() {
           Dr. {getDoctorName(doctor)}
         </ThemedText>
         <ThemedText style={styles.specialization}>
-          {doctor.specialization || 'General Practitioner'}
+          {typeof doctor.specialization === 'object' && doctor.specialization !== null
+            ? doctor.specialization.name
+            : doctor.specialization || 'General Practitioner'}
         </ThemedText>
         {renderRatingStars(doctor.rating)}
         <ThemedText style={styles.doctorExperience}>

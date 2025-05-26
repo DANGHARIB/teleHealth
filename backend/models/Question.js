@@ -11,7 +11,18 @@ const questionSchema = new mongoose.Schema({
     required: true
   },
   options: {
-    type: String
+    type: mongoose.Schema.Types.Mixed,
+    required: function() {
+      return this.type === 'MultiChoice';
+    }
+  },
+  scoring: {
+    type: mongoose.Schema.Types.Mixed,
+    required: true
+  },
+  id: {
+    type: Number,
+    required: true
   },
   specialization: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,7 +31,7 @@ const questionSchema = new mongoose.Schema({
   targetGroup: {
     type: String,
     enum: ['child', 'adult', 'disability', 'all'],
-    required: true
+    default: 'all'
   }
 }, {
   timestamps: true

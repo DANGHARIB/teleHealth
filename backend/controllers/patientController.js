@@ -243,14 +243,46 @@ exports.getSavedDoctors = async (req, res) => {
     // Trouver le patient
     const patient = await Patient.findOne({ user: req.user.id }).populate({
       path: 'savedDoctors',
-      select: '_id full_name first_name last_name doctor_image experience specialization price'
+      select: '_id full_name first_name last_name doctor_image experience specialization price',
+      populate: {
+        path: 'specialization',
+        select: 'name'
+      }
     });
     
     if (!patient) {
       return res.status(404).json({ message: 'Patient non trouvé' });
     }
     
-    res.status(200).json(patient.savedDoctors || []);
+    if (!patient.savedDoctors || patient.savedDoctors.length === 0) {
+      return res.status(200).json([]);
+    }
+    
+    // Traiter les données pour s'assurer que les spécialisations sont correctement formatées
+    const formattedDoctors = patient.savedDoctors.map(doctor => {
+      const doctorObj = doctor.toObject();
+      
+      // Si la spécialisation n'est pas populée correctement, nettoyer les données
+      if (doctorObj.specialization && typeof doctorObj.specialization === 'object' && !doctorObj.specialization.name) {
+        console.log('Saved doctor specialization object without name detected:', doctorObj.specialization);
+        
+        // Essayer de récupérer le nom de la spécialisation si nous avons l'ID
+        if (doctorObj.specialization._id) {
+          doctorObj.specialization = {
+            _id: doctorObj.specialization._id,
+            name: 'Spécialisation'
+          };
+        } else {
+          // Si nous n'avons pas d'ID, utiliser une valeur par défaut
+          doctorObj.specialization = 'General Practitioner';
+        }
+      }
+      
+      return doctorObj;
+    });
+    
+    // Retourner la liste des médecins sauvegardés avec les spécialisations formatées
+    res.status(200).json(formattedDoctors);
     
   } catch (error) {
     console.error('Erreur lors de la récupération des médecins sauvegardés:', error);
@@ -282,92 +314,63 @@ exports.deletePatient = async (req, res) => {
   }
 };
 
-// @desc    Obtenir les médecins recommandés basés sur les réponses d'évaluation
+// @desc    Récupérer la liste des médecins recommandés
 // @route   GET /api/patients/recommended-doctors
 // @access  Private (Patient only)
 exports.getRecommendedDoctors = async (req, res) => {
   try {
-    console.log('=== RECOMMENDED DOCTORS START ===');
-    // 1. Get the patient's assessment responses
-    const patientResponses = await PatientResponse.find({ user: req.user._id })
-      .populate('question');
+    // Trouver le patient avec ses recommandations
+    const patient = await Patient.findOne({ user: req.user.id })
+      .populate({
+        path: 'recommended_doctors',
+        select: '_id full_name first_name last_name doctor_image experience specialization price rating',
+        populate: {
+          path: 'specialization',
+          select: 'name'
+        }
+      });
     
-    console.log(`Found ${patientResponses.length} patient responses`);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient non trouvé' });
+    }
     
-    if (patientResponses.length === 0) {
-      console.log('No responses found for this patient');
+    // Si le patient n'a pas encore fait l'évaluation ou n'a pas de médecins recommandés
+    if (!patient.has_taken_assessment || !patient.recommended_doctors || patient.recommended_doctors.length === 0) {
+      // Si nous n'avons pas de recommandations, retourner une liste vide
       return res.status(200).json([]);
     }
-    
-    // 2. Count specializations from the responses
-    const specializationScores = {};
-    
-    // Track the questions that have specializations
-    let questionsWithSpecialization = 0;
-    
-    for (const response of patientResponses) {
-      console.log(`Processing response: ${response._id}, question: ${response.question?._id}`);
+
+    // Traiter les données pour s'assurer que les spécialisations sont correctement formatées
+    const formattedDoctors = patient.recommended_doctors.map(doctor => {
+      const doctorObj = doctor.toObject();
       
-      if (response.question && response.question.specialization) {
-        questionsWithSpecialization++;
-        const specId = response.question.specialization.toString();
-        console.log(`Found specialization: ${specId} for question ${response.question._id}`);
+      // Si la spécialisation n'est pas populée correctement, nettoyer les données
+      if (doctorObj.specialization && typeof doctorObj.specialization === 'object' && !doctorObj.specialization.name) {
+        console.log('Specialization object without name detected:', doctorObj.specialization);
         
-        // Increase score based on response type
-        let score = 1;
-        if (response.question.type === 'YesNo' && response.response === 'Yes') {
-          score = 3;
-        }
-        
-        if (specializationScores[specId]) {
-          specializationScores[specId] += score;
+        // Essayer de récupérer le nom de la spécialisation si nous avons l'ID
+        if (doctorObj.specialization._id) {
+          // Dans une version réelle, nous pourrions faire une requête à la base de données ici
+          // pour récupérer le nom de la spécialisation, mais pour simplifier, nous allons utiliser
+          // un placeholder
+          doctorObj.specialization = {
+            _id: doctorObj.specialization._id,
+            name: 'Spécialisation'
+          };
         } else {
-          specializationScores[specId] = score;
+          // Si nous n'avons pas d'ID, utiliser une valeur par défaut
+          doctorObj.specialization = 'General Practitioner';
         }
-      } else {
-        console.log(`No specialization for question ${response.question?._id || 'unknown'}`);
       }
-    }
-    
-    console.log(`Found ${questionsWithSpecialization} questions with specializations`);
-    console.log('Specialization scores:', specializationScores);
-    
-    // 3. Get top 2-3 specializations
-    const sortedSpecializations = Object.entries(specializationScores)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(entry => entry[0]);
-    
-    console.log('Top specializations:', sortedSpecializations);
-    
-    let doctors = [];
-    
-    // If we have specializations, try to find doctors with those specializations
-    if (sortedSpecializations.length > 0) {
-      doctors = await Doctor.find({
-        'specializations': { $in: sortedSpecializations }
-      })
-      .limit(5)
-      .select('_id full_name first_name last_name doctor_image experience specialization price');
       
-      console.log(`Found ${doctors.length} doctors with matching specializations`);
-    }
+      return doctorObj;
+    });
     
-    // If no doctors found by specialization, return some random doctors
-    if (doctors.length === 0) {
-      console.log('No doctors found with matching specializations, returning random doctors');
-      doctors = await Doctor.find({})
-        .limit(3)
-        .select('_id full_name first_name last_name doctor_image experience specialization price');
-      
-      console.log(`Found ${doctors.length} random doctors`);
-    }
-    
-    console.log('=== RECOMMENDED DOCTORS END ===');
-    res.status(200).json(doctors);
+    // Retourner la liste des médecins recommandés avec les spécialisations formatées
+    res.status(200).json(formattedDoctors);
     
   } catch (error) {
-    console.error('Error getting recommended doctors:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Erreur lors de la récupération des médecins recommandés:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des recommandations' });
   }
 }; 

@@ -13,14 +13,21 @@ const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/ap
 // Interfaces pour les types de données
 interface Question {
   _id: string;
+  id: number;
   questionText: string;
   type: 'YesNo' | 'MultiChoice' | 'Text';
-  options?: string; // Pour MultiChoice, les options seront une chaîne séparée par des virgules
+  options: any; // Format varies based on type
+  scoring: Record<string, string>;
 }
 
 interface PatientResponseItem {
   questionId: string;
   response: string | string[];
+}
+
+interface MultiChoiceOption {
+  key: string;
+  label: string;
 }
 
 const AssessmentScreen = () => {
@@ -29,11 +36,11 @@ const AssessmentScreen = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [responses, setResponses] = useState<PatientResponseItem[]>([]);
   const [currentTextResponse, setCurrentTextResponse] = useState('');
-  const [currentMultiChoiceResponse, setCurrentMultiChoiceResponse] = useState<string[]>([]);
+  const [currentMultiChoiceResponse, setCurrentMultiChoiceResponse] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRandomQuestions = async () => {
+  const fetchAssessmentQuestions = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -44,8 +51,8 @@ const AssessmentScreen = () => {
         return;
       }
 
-      console.log("Fetching random assessment questions...");
-      const response = await axios.get(`${API_URL}/questions/random/assessment`, {
+      console.log("Fetching assessment questions...");
+      const response = await axios.get(`${API_URL}/questions/assessment`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -55,7 +62,7 @@ const AssessmentScreen = () => {
 
       if (response.data.hasAnswered) {
         console.log("User has already answered assessment questions");
-        router.replace('/(tabs)/profile');
+        router.replace('/(patient)/(tabs)');
         return;
       }
       
@@ -163,12 +170,12 @@ const AssessmentScreen = () => {
   };
 
   useEffect(() => {
-    fetchRandomQuestions();
+    fetchAssessmentQuestions();
   }, []);
 
   const handleNextQuestion = () => {
     const currentQuestion = questions[currentQuestionIndex];
-    let responseValue: string | string[];
+    let responseValue: string;
 
     if (currentQuestion.type === 'Text') {
       responseValue = currentTextResponse;
@@ -192,7 +199,7 @@ const AssessmentScreen = () => {
     setResponses(updatedResponses);
 
     setCurrentTextResponse('');
-    setCurrentMultiChoiceResponse([]);
+    setCurrentMultiChoiceResponse('');
 
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
@@ -218,10 +225,57 @@ const AssessmentScreen = () => {
     setCurrentTextResponse(response); 
   };
 
-  const toggleMultiChoiceResponse = (option: string) => {
-    setCurrentMultiChoiceResponse(prev =>
-      prev.includes(option) ? prev.filter(item => item !== option) : [...prev, option]
-    );
+  const handleMultiChoiceResponse = (key: string) => {
+    setCurrentMultiChoiceResponse(key);
+  };
+
+  // Fonction pour afficher les options MultiChoice
+  const renderMultiChoiceOptions = (question: Question) => {
+    // Si options est un tableau d'objets avec key et label
+    if (Array.isArray(question.options) && question.options.length > 0 && typeof question.options[0] === 'object') {
+      return question.options.map((option: MultiChoiceOption) => (
+        <TouchableOpacity
+          key={option.key}
+          style={[
+            styles.choiceButton, 
+            currentMultiChoiceResponse === option.key && styles.choiceButtonSelected
+          ]}
+          onPress={() => handleMultiChoiceResponse(option.key)}
+        >
+          <Text style={[
+            styles.choiceButtonText, 
+            currentMultiChoiceResponse === option.key && styles.choiceButtonTextSelected
+          ]}>
+            {option.label}
+          </Text>
+        </TouchableOpacity>
+      ));
+    } 
+    // Si options est une chaîne séparée par des virgules (ancien format)
+    else if (typeof question.options === 'string') {
+      return question.options.split(',').map((option, index) => {
+        const trimmedOption = option.trim();
+        return (
+          <TouchableOpacity
+            key={index}
+            style={[
+              styles.choiceButton, 
+              currentMultiChoiceResponse === trimmedOption && styles.choiceButtonSelected
+            ]}
+            onPress={() => handleMultiChoiceResponse(trimmedOption)}
+          >
+            <Text style={[
+              styles.choiceButtonText, 
+              currentMultiChoiceResponse === trimmedOption && styles.choiceButtonTextSelected
+            ]}>
+              {trimmedOption}
+            </Text>
+          </TouchableOpacity>
+        );
+      });
+    }
+    // Si nous n'avons pas d'options
+    return <Text style={styles.errorText}>No options available for this question</Text>;
   };
 
   if (loading && questions.length === 0) {
@@ -240,7 +294,7 @@ const AssessmentScreen = () => {
       <SafeAreaView style={styles.wrapper}>
         <View style={styles.centeredContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.actionButton} onPress={fetchRandomQuestions}>
+          <TouchableOpacity style={styles.actionButton} onPress={fetchAssessmentQuestions}>
             <Text style={styles.actionButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -264,11 +318,21 @@ const AssessmentScreen = () => {
   const currentQuestion = questions[currentQuestionIndex];
   const progress = `${currentQuestionIndex + 1}/${questions.length}`;
 
+  const isNextButtonDisabled = () => {
+    if (loading) return true;
+    
+    if (currentQuestion.type === 'Text' && !currentTextResponse) return true;
+    if (currentQuestion.type === 'YesNo' && !currentTextResponse) return true;
+    if (currentQuestion.type === 'MultiChoice' && !currentMultiChoiceResponse) return true;
+    
+    return false;
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <SafeAreaView style={styles.wrapper}>
         <View style={styles.contentContainer}>
-          <Text style={styles.mainTitle}>Basic Assesment{"\n"}to match you with{"\n"}the Best Doctor{"\n"}and Create your Profile</Text>
+          <Text style={styles.mainTitle}>Basic Assessment{"\n"}to match you with{"\n"}the Best Doctor{"\n"}and Create your Profile</Text>
           <Text style={styles.progressText}>Question {progress}</Text>
           
           <View style={styles.questionWrapper}>
@@ -300,25 +364,17 @@ const AssessmentScreen = () => {
               </View>
             )}
 
-            {currentQuestion.type === 'MultiChoice' && currentQuestion.options && (
+            {currentQuestion.type === 'MultiChoice' && (
               <View style={styles.multiChoiceContainer}>
-                {currentQuestion.options.split(',').map(option => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[styles.choiceButton, currentMultiChoiceResponse.includes(option) && styles.choiceButtonSelected]}
-                    onPress={() => toggleMultiChoiceResponse(option.trim())}
-                  >
-                    <Text style={[styles.choiceButtonText, currentMultiChoiceResponse.includes(option) && styles.choiceButtonTextSelected]}>{option.trim()}</Text>
-                  </TouchableOpacity>
-                ))}
+                {renderMultiChoiceOptions(currentQuestion)}
               </View>
             )}
           </View>
 
           <TouchableOpacity
-            style={[styles.actionButton, (loading || (currentQuestion.type === 'Text' && !currentTextResponse && currentQuestionIndex < questions.length) || (currentQuestion.type === 'YesNo' && !currentTextResponse && currentQuestionIndex < questions.length) ) && styles.actionButtonDisabled]}
+            style={[styles.actionButton, isNextButtonDisabled() && styles.actionButtonDisabled]}
             onPress={handleNextQuestion}
-            disabled={loading || (currentQuestion.type === 'Text' && !currentTextResponse && !currentMultiChoiceResponse.length && currentQuestionIndex < questions.length) || (currentQuestion.type === 'YesNo' && !currentTextResponse && currentQuestionIndex < questions.length) }
+            disabled={isNextButtonDisabled()}
           >
             {loading ? 
               <ActivityIndicator color="#FFFFFF" /> : 

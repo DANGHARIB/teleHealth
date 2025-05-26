@@ -57,7 +57,7 @@ type Doctor = {
   last_name?: string;
   doctor_image?: string;
   experience: number;
-  specialization?: string;
+  specialization?: string | { _id: string, name: string };
   about?: string;
   education?: string;
   price?: number;
@@ -197,18 +197,7 @@ export default function DoctorDetailScreen() {
     <>
       <Stack.Screen 
         options={{
-          headerTitle: 'Doctor Details',
-          headerShown: true,
-          headerBackTitle: 'Back',
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 24,
-            color: COLORS.navyBlue
-          },
-          headerTintColor: COLORS.babyBlue,
+          headerShown: false
         }} 
       />
       
@@ -240,7 +229,9 @@ export default function DoctorDetailScreen() {
                   </ThemedText>
                   {renderRatingStars(doctor.rating)}
                   <ThemedText style={styles.specialization}>
-                    {doctor.specialization || 'General Practitioner'}
+                    {typeof doctor.specialization === 'object' && doctor.specialization !== null
+                      ? doctor.specialization.name
+                      : doctor.specialization || 'General Practitioner'}
                   </ThemedText>
                   <ThemedText style={styles.priceText}>
                     ${doctor.price ? doctor.price.toFixed(2) : '28.00'}/hr

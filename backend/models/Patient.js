@@ -23,6 +23,25 @@ const patientSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  assessment_results: {
+    specializations: [{
+      specializationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Specialization'
+      },
+      score: {
+        type: Number,
+        default: 0
+      }
+    }],
+    completed_at: {
+      type: Date
+    }
+  },
+  recommended_doctors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Doctor'
+  }],
   savedDoctors: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Doctor'

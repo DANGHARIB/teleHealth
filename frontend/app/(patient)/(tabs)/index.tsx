@@ -54,7 +54,7 @@ type Doctor = {
   last_name?: string;
   doctor_image?: string;
   experience: number;
-  specialization?: string;
+  specialization?: string | { _id: string, name: string };
   price?: number;
   rating?: number;
 };
@@ -86,6 +86,12 @@ export default function PatientHomeScreen() {
       setRecommendedLoading(true);
       const data = await patientAPI.getRecommendedDoctors();
       console.log('Recommended doctors data:', data);
+      
+      // Debugging each doctor's specialization
+      data.forEach((doctor: Doctor, index: number) => {
+        console.log(`Doctor ${index} specialization:`, JSON.stringify(doctor.specialization, null, 2));
+      });
+      
       setRecommendedDoctors(data);
       setRecommendedLoading(false);
     } catch (err) {
@@ -168,16 +174,20 @@ export default function PatientHomeScreen() {
           Dr. {getDoctorName(item)}
         </ThemedText>
         <ThemedText style={styles.specialization}>
-          {item.specialization || 'General Practitioner'}
+          {typeof item.specialization === 'object' && item.specialization !== null 
+            ? item.specialization.name 
+            : typeof item.specialization === 'string' && item.specialization 
+              ? item.specialization 
+              : 'Médecin généraliste'}
         </ThemedText>
         {renderRatingStars(item.rating)}
         <ThemedText style={styles.doctorExperience}>
-          {item.experience} Years experience
+          {item.experience} {item.experience > 1 ? 'Années' : 'Année'} d&apos;expérience
         </ThemedText>
         <View style={styles.priceContainer}>
           <Ionicons name="wallet-outline" size={14} color={COLORS.primary} style={styles.priceIcon} />
           <ThemedText style={styles.priceText}>
-            {item.price && item.price > 0 ? `$${item.price.toFixed(0)}/hr` : 'Price unavailable'}
+            {item.price && item.price > 0 ? `${item.price.toFixed(0)}€/hr` : 'Prix non disponible'}
           </ThemedText>
         </View>
       </View>
@@ -185,7 +195,7 @@ export default function PatientHomeScreen() {
         style={styles.exploreButton}
         onPress={() => handleExploreDoctor(item._id)}
       >
-        <ThemedText style={styles.exploreButtonText}>Explore</ThemedText>
+        <ThemedText style={styles.exploreButtonText}>Explorer</ThemedText>
       </TouchableOpacity>
     </TouchableOpacity>
   )};
@@ -200,8 +210,8 @@ export default function PatientHomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title" style={styles.title}>Find Doctors</ThemedText>
-        <ThemedText style={styles.subtitle}>Your health care specialists</ThemedText>
+        <ThemedText type="title" style={styles.title}>Trouver un Médecin</ThemedText>
+        <ThemedText style={styles.subtitle}>Vos spécialistes de santé</ThemedText>
       </View>
       
       <ScrollView 
@@ -212,7 +222,7 @@ export default function PatientHomeScreen() {
         {/* Recommended Doctors Section */}
         <View style={styles.sectionContainer}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Recommended for you
+            Recommandés pour vous
           </ThemedText>
           
           {recommendedLoading ? (
@@ -222,14 +232,14 @@ export default function PatientHomeScreen() {
               <Ionicons name="alert-circle" size={48} color={COLORS.error} />
               <ThemedText style={styles.errorText}>{recommendedError}</ThemedText>
               <TouchableOpacity style={styles.retryButton} onPress={fetchRecommendedDoctors}>
-                <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+                <ThemedText style={styles.retryButtonText}>Réessayer</ThemedText>
               </TouchableOpacity>
             </View>
           ) : recommendedDoctors.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="clipboard-outline" size={48} color={COLORS.textLight} />
-              <ThemedText style={styles.noResults}>No recommendations yet</ThemedText>
-              <ThemedText style={styles.noResultsHint}>Complete your assessment to get personalized recommendations</ThemedText>
+              <ThemedText style={styles.noResults}>Pas encore de recommandations</ThemedText>
+              <ThemedText style={styles.noResultsHint}>Complétez votre évaluation pour obtenir des recommandations personnalisées</ThemedText>
             </View>
           ) : (
             recommendedDoctors.map((doctor) => renderDoctorItem(doctor))
@@ -239,7 +249,7 @@ export default function PatientHomeScreen() {
         {/* Favorite Doctors Section */}
         <View style={styles.sectionContainer}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Your favorite doctors
+            Vos médecins favoris
           </ThemedText>
           
           {loading ? (
@@ -249,14 +259,14 @@ export default function PatientHomeScreen() {
               <Ionicons name="alert-circle" size={48} color={COLORS.error} />
               <ThemedText style={styles.errorText}>{error}</ThemedText>
               <TouchableOpacity style={styles.retryButton} onPress={fetchSavedDoctors}>
-                <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+                <ThemedText style={styles.retryButtonText}>Réessayer</ThemedText>
               </TouchableOpacity>
             </View>
           ) : savedDoctors.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="heart-outline" size={48} color={COLORS.textLight} />
-              <ThemedText style={styles.noResults}>No favorites yet</ThemedText>
-              <ThemedText style={styles.noResultsHint}>Save doctors to find them here</ThemedText>
+              <ThemedText style={styles.noResults}>Pas encore de favoris</ThemedText>
+              <ThemedText style={styles.noResultsHint}>Enregistrez des médecins pour les retrouver ici</ThemedText>
             </View>
           ) : (
             savedDoctors.map((doctor) => renderDoctorItem(doctor))

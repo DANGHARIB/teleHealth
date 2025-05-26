@@ -2,6 +2,8 @@ const Question = require('../models/Question');
 const PatientResponse = require('../models/PatientResponse');
 const User = require('../models/User');
 const Patient = require('../models/Patient');
+const Doctor = require('../models/Doctor');
+const { assessmentQuestions, recommendSpecializations } = require('../services/assessmentService');
 
 // @desc    Obtenir toutes les questions
 // @route   GET /api/questions
@@ -20,20 +22,19 @@ exports.getQuestions = async (req, res) => {
       query.specialization = specialization;
     }
     
-    const questions = await Question.find(query).populate('specialization', 'name');
+    const questions = await Question.find(query);
     res.json(questions);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get 6 random questions for patient assessment
-// @route   GET /api/questions/random/assessment
+// @desc    Get assessment questions for patient
+// @route   GET /api/questions/assessment
 // @access  Private/Patient
-exports.getRandomQuestions = async (req, res) => {
+exports.getAssessmentQuestions = async (req, res) => {
   try {
     // First check if the user has already completed the assessment
-    // Check both PatientResponse and Patient.has_taken_assessment
     const existingResponses = await PatientResponse.find({ user: req.user._id });
     const patient = await Patient.findOne({ user: req.user._id });
     
@@ -47,18 +48,16 @@ exports.getRandomQuestions = async (req, res) => {
       return res.json({ hasAnswered: true, questions: [] });
     }
 
-    // Get 6 random questions if no responses
-    console.log(`Fetching random questions for user ${req.user._id}`);
-    const questions = await Question.aggregate([
-      { $sample: { size: 6 } }
-    ]);
+    // Get questions from database
+    console.log(`Fetching assessment questions for user ${req.user._id}`);
+    const questions = await Question.find().sort({ id: 1 });
     
     // Log the number of questions returned
-    console.log(`Returning ${questions.length} random questions`);
+    console.log(`Returning ${questions.length} assessment questions`);
     
     res.json({ hasAnswered: false, questions });
   } catch (error) {
-    console.error('Error fetching random questions:', error);
+    console.error('Error fetching assessment questions:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -68,8 +67,7 @@ exports.getRandomQuestions = async (req, res) => {
 // @access  Public
 exports.getQuestionById = async (req, res) => {
   try {
-    const question = await Question.findById(req.params.id)
-      .populate('specialization', 'name');
+    const question = await Question.findById(req.params.id);
     
     if (!question) {
       return res.status(404).json({ message: 'Question non trouvée' });
@@ -90,7 +88,8 @@ exports.createQuestion = async (req, res) => {
       questionText, 
       type, 
       options, 
-      specializationId, 
+      scoring,
+      id,
       targetGroup 
     } = req.body;
     
@@ -98,7 +97,8 @@ exports.createQuestion = async (req, res) => {
       questionText,
       type,
       options,
-      specialization: specializationId,
+      scoring,
+      id,
       targetGroup
     });
     
@@ -117,7 +117,8 @@ exports.updateQuestion = async (req, res) => {
       questionText, 
       type, 
       options, 
-      specializationId, 
+      scoring,
+      id,
       targetGroup 
     } = req.body;
     
@@ -130,7 +131,8 @@ exports.updateQuestion = async (req, res) => {
     question.questionText = questionText || question.questionText;
     question.type = type || question.type;
     question.options = options || question.options;
-    question.specialization = specializationId || question.specialization;
+    question.scoring = scoring || question.scoring;
+    question.id = id || question.id;
     question.targetGroup = targetGroup || question.targetGroup;
     
     const updatedQuestion = await question.save();
@@ -160,7 +162,7 @@ exports.deleteQuestion = async (req, res) => {
   }
 };
 
-// @desc    Soumettre des réponses aux questions
+// @desc    Soumettre des réponses aux questions et générer des recommandations
 // @route   POST /api/questions/submit-responses
 // @access  Private/Patient
 exports.submitResponses = async (req, res) => {
@@ -179,6 +181,9 @@ exports.submitResponses = async (req, res) => {
     console.log(`Processing ${responses.length} responses...`);
     const savedResponses = [];
     
+    // Transformer les réponses dans un format adapté au scoring
+    const formattedResponses = {};
+    
     for (const item of responses) {
       const { questionId, response } = item;
       
@@ -189,7 +194,17 @@ exports.submitResponses = async (req, res) => {
       
       console.log(`Processing response for question ${questionId}: ${JSON.stringify(response)}`);
       
-      // Ensure the response is a string
+      // Trouver la question complète pour obtenir l'ID numérique
+      const question = await Question.findById(questionId);
+      if (!question) {
+        console.error(`Question with ID ${questionId} not found`);
+        continue;
+      }
+      
+      // Pour le calcul du score, on utilise l'id numérique (1, 2, 3...)
+      formattedResponses[question.id] = response;
+      
+      // Ensure the response is a string for database storage
       const responseString = Array.isArray(response) ? response.join(', ') : response.toString();
       
       try {
@@ -224,26 +239,55 @@ exports.submitResponses = async (req, res) => {
     
     console.log(`Successfully saved ${savedResponses.length} out of ${responses.length} responses`);
 
-    // Update assessment status in User model
-    await User.findByIdAndUpdate(req.user._id, { hasCompletedAssessment: true });
-    console.log('User hasCompletedAssessment updated to true');
+    // Calculer les recommandations de spécialisations
+    console.log("Calculating specialization recommendations...");
+    console.log("Formatted responses:", formattedResponses);
+    const specializationRecommendations = recommendSpecializations(formattedResponses);
+    console.log("Specialization recommendations:", specializationRecommendations);
     
-    // Update has_taken_assessment in Patient model
+    // Rechercher les médecins avec les spécialisations recommandées
+    const recommendedDoctorIds = [];
+    if (specializationRecommendations.length > 0) {
+      // Obtenir les 3 meilleures spécialisations
+      const topSpecializations = specializationRecommendations.slice(0, 3).map(r => r.specializationId);
+      console.log("Top specializations:", topSpecializations);
+      
+      // Trouver les médecins correspondant à ces spécialisations
+      const recommendedDoctors = await Doctor.find({
+        specialization: { $in: topSpecializations }
+      }).limit(5);
+      
+      console.log(`Found ${recommendedDoctors.length} recommended doctors`);
+      recommendedDoctorIds.push(...recommendedDoctors.map(d => d._id));
+    }
+
+    // Mettre à jour le profil du patient avec les résultats
     const patient = await Patient.findOne({ user: req.user._id });
     if (patient) {
       patient.has_taken_assessment = true;
+      patient.assessment_results = {
+        specializations: specializationRecommendations,
+        completed_at: new Date()
+      };
+      patient.recommended_doctors = recommendedDoctorIds;
       await patient.save();
-      console.log('Patient has_taken_assessment updated to true');
+      console.log('Patient assessment results and recommendations updated');
     } else {
       console.log('Patient not found for user ID:', req.user._id);
     }
+    
+    // Update assessment status in User model
+    await User.findByIdAndUpdate(req.user._id, { hasCompletedAssessment: true });
+    console.log('User hasCompletedAssessment updated to true');
     
     console.log('=== SUBMIT RESPONSES END ===');
     
     res.status(201).json({
       message: 'Responses submitted successfully',
       count: savedResponses.length,
-      responses: savedResponses
+      responses: savedResponses,
+      recommendations: specializationRecommendations,
+      recommendedDoctors: recommendedDoctorIds
     });
   } catch (error) {
     console.error('Error in submitResponses:', error);
