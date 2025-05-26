@@ -386,7 +386,9 @@ exports.searchSavedPatients = async (req, res) => {
   }
 };
 
-// Rechercher des médecins par nom
+// @desc    Rechercher des médecins par nom
+// @route   GET /api/doctors/search
+// @access  Public
 exports.searchDoctors = async (req, res) => {
   try {
     const { search } = req.query;
@@ -411,5 +413,33 @@ exports.searchDoctors = async (req, res) => {
     res.json(doctors);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Obtenir le nombre de patients associés à un médecin
+// @route   GET /api/doctors/:id/patients/count
+// @access  Private/Admin
+exports.getDoctorPatientCount = async (req, res) => {
+  try {
+    const doctorId = req.params.id;
+    
+    // Vérifier que le médecin existe
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Médecin non trouvé' });
+    }
+    
+    // Compter les patients qui ont ce médecin dans leur liste de médecins sauvegardés
+    const patientCount = await Patient.countDocuments({ savedDoctors: doctorId });
+    
+    // Renvoyer les statistiques
+    res.json({
+      doctorId,
+      patientCount,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error(`Erreur lors du comptage des patients pour le médecin: ${error.message}`, { stack: error.stack });
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 }; 

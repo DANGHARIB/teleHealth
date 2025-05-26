@@ -12,7 +12,8 @@ const {
   getDoctorAppointments,
   getSavedPatients,
   searchSavedPatients,
-  searchDoctors
+  searchDoctors,
+  getDoctorPatientCount
 } = require('../controllers/doctorController');
 const { protect, admin, doctor } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
@@ -31,6 +32,7 @@ router.get('/saved-patients', protect, doctor, getSavedPatients);
 router.get('/search-patients', protect, doctor, searchSavedPatients);
 
 router.get('/:id', getDoctorById);
+router.get('/:id/patients/count', protect, getDoctorPatientCount);
 
 router.put(
   '/upload-image', 
